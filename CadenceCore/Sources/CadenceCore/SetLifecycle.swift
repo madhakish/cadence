@@ -63,6 +63,18 @@ public enum SetLifecycle {
         }
     }
 
+    /// The one auto-rest rule applied after a verdict, wherever the verdict
+    /// came from — the logger's status control, the hold timer, or a Lock
+    /// Screen command: a NEW completion, with auto-start on and no rest
+    /// already running, arms the exercise's rest; a warmup rests a minute;
+    /// anything else arms nothing. Mirrors web `restAfterCompleting`.
+    public static func restAfterCompleting(previous: SetStatus, status: SetStatus, isWarmup: Bool,
+                                           restSeconds: Int, autoStart: Bool, restRunning: Bool) -> Int? {
+        guard status == .completed, previous != .completed, autoStart, !restRunning else { return nil }
+        let seconds = isWarmup ? 60 : restSeconds
+        return seconds > 0 ? seconds : nil
+    }
+
     /// Reps left in reserve, coarse on purpose.
     ///
     /// A number entry invites false precision — RIR accuracy is a trainable
@@ -155,5 +167,56 @@ public enum SetLifecycle {
         if let rir, rirValues.contains(rir) { result.append(rir) }
         if stoppedEarly { result.append("stopped early") }
         return result
+    }
+}
+
+/// A set-status change requested from outside the logger — today the Lock
+/// Screen and Dynamic Island. The set is named structurally (session id,
+/// authored exercise position, authored set position) rather than by an
+/// object identity, so the app re-derives whether that set is still the one
+/// to act on at the moment the command runs: a stale button must never
+/// complete the following set. Native-only surface today; kept here so the
+/// vocabulary is one definition across the app and its extension.
+public enum WorkoutCommand: Codable, Hashable, Sendable {
+    case completeSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
+    case skipSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
+    case undoSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
+}
+
+/// What a Lock Screen face knows about the set the lifter is on: enough to
+/// name it and to issue a command that identifies it. Built by the app from
+/// the same focus rules the logger uses; never a second source of truth.
+public struct CurrentSetProjection: Codable, Hashable, Sendable {
+    public var exerciseIndex: Int
+    public var setIndex: Int
+    public var ordinal: Int
+    public var total: Int
+    public var isWarmup: Bool
+    public var reps: Int
+    public var loadLb: Double
+    public var exerciseName: String
+
+    public init(exerciseIndex: Int, setIndex: Int, ordinal: Int, total: Int,
+                isWarmup: Bool, reps: Int, loadLb: Double, exerciseName: String) {
+        self.exerciseIndex = exerciseIndex
+        self.setIndex = setIndex
+        self.ordinal = ordinal
+        self.total = total
+        self.isWarmup = isWarmup
+        self.reps = reps
+        self.loadLb = loadLb
+        self.exerciseName = exerciseName
+    }
+
+    /// "Set 2 of 3" / "Warmup 1 of 2".
+    public var positionLabel: String {
+        "\(isWarmup ? "Warmup" : "Set") \(ordinal) of \(total)"
+    }
+
+    /// "6 reps · 138.7 lb / 62.9 kg" — pounds first, kilograms after, or
+    /// bodyweight when the set carries no load.
+    public var prescriptionLabel: String {
+        let load = loadLb > 0 ? Weight.both(lb: loadLb) : "bodyweight"
+        return "\(reps) reps · \(load)"
     }
 }

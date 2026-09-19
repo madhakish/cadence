@@ -19,6 +19,7 @@ struct ActiveSessionView: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
 
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
     @State private var confirmDiscard = false
@@ -82,7 +83,8 @@ struct ActiveSessionView: View {
     private func startWorkout() {
         workoutClock.begin(for: session,
                            currentLift: currentOrFirst?.exercise?.name ?? "",
-                           defaultRestSeconds: currentRestSeconds)
+                           defaultRestSeconds: currentRestSeconds,
+                           currentSet: currentProjection)
     }
 
     /// Names the cost of discarding. A session started by mistake has nothing
@@ -96,6 +98,11 @@ struct ActiveSessionView: View {
 
     private var currentRestSeconds: Int {
         smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
+    }
+    /// What the Lock Screen shows as the set you're on — the same focus rule
+    /// this screen draws, published whenever it changes.
+    private var currentProjection: CurrentSetProjection? {
+        WorkoutCommandService.projection(for: session, focus: currentOrFirst)
     }
 
     var body: some View {
@@ -171,7 +178,8 @@ struct ActiveSessionView: View {
             // after a cold start); starting is an explicit act.
             workoutClock.resumeIfTracking(for: session,
                                           currentLift: currentOrFirst?.exercise?.name ?? "",
-                                          defaultRestSeconds: currentRestSeconds)
+                                          defaultRestSeconds: currentRestSeconds,
+                                          currentSet: currentProjection)
         }
         // Keep the activity's elapsed face and its quick-rest default honest.
         // Watch the derived VALUES, not the entry's identity: swapping the
@@ -179,6 +187,18 @@ struct ActiveSessionView: View {
         // name / default rest without changing which SessionExercise is current.
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
+        // A set may have been completed from the Lock Screen while this screen
+        // was in the background: the record is already saved, so only the
+        // remembered focus can be stale. Drop it when its exercise has no
+        // planned work left (the derived fallback then picks the right one)
+        // and republish the face.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            if let entry = currentEntry, !entry.orderedSets.contains(where: { $0.status == .planned }) {
+                currentEntry = nil
+            }
+            pushActivityContext()
+        }
         .navigationTitle(workoutName)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
@@ -513,7 +533,8 @@ struct ActiveSessionView: View {
         let nextName = nextRestExerciseName(after: currentOrFirst)
         restTimer.updateExerciseName(nextName)
         workoutClock.updateContext(currentLift: nextName,
-                                   defaultRestSeconds: currentRestSeconds)
+                                   defaultRestSeconds: currentRestSeconds,
+                                   currentSet: currentProjection)
     }
 
     private func bankSession() {
@@ -681,16 +702,6 @@ struct ActiveSessionView: View {
         entry.notes += (entry.notes.isEmpty ? "" : " ") + "Dropped to \(settingsList.unitDisplay.format(lb: top)) — \(reason.rawValue)."
         PersistenceErrorCenter.shared.save(context, operation: "Dropping the load")
     }
-}
-
-/// Smart per-exercise rest via the shared CadenceCore precedence (per-exercise
-/// rest → program role → movementGroup bucket); no exercise → accessory bucket.
-func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
-    let config = settings?.restConfig ?? .standard
-    guard let ex = exercise else { return config.accessorySeconds }
-    return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: role,
-                                config: config,
-                                exerciseDefaultRest: ex.defaultRestSeconds)
 }
 
 /// Compact "how long ago" for the last-session recall line.
@@ -1089,13 +1100,16 @@ private struct ExerciseSection: View {
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onStatusChange: { previous, status in
                         if status == .planned { onWork(entry) }
                         else { onResolve(entry) }
-                        // Auto-start only for a new completed verdict when the
-                        // user opted in (manual is the default), and never
-                        // restart a countdown already running.
-                        if status == .completed, previous != .completed,
-                           settings?.autoStartRest == true, !restTimer.isRunning {
-                            restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
-                                            exerciseName: restTargetName())
+                        // What follows a verdict is the same decision the
+                        // Lock Screen's commands make: a new completion with
+                        // auto-start on and no rest running arms the rest.
+                        guard let session = entry.session else { return }
+                        let decision = WorkoutCommandService.decision(
+                            after: previous, status: status, set: set, entry: entry, session: session,
+                            settings: settings, restRunning: restTimer.isRunning
+                        )
+                        if let seconds = decision.restSeconds {
+                            restTimer.start(seconds: seconds, exerciseName: restTargetName())
                         }
                     }, onRemove: { removeSet(set) })
                     // Discloses where the first working set's ad-hoc history
@@ -2088,12 +2102,18 @@ private struct SetVerdictControl: View {
         return parts.joined(separator: ", ")
     }
 
+    /// The one mutation path — shared with the Lock Screen's commands — then
+    /// the section decides what follows.
     private func apply(_ status: SetStatus) {
         let previous = set.status
         guard previous != status else { return }
-        set.status = status
+        do {
+            try WorkoutCommandService.setStatus(status, of: set, context: context)
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Changing the set verdict", context: context)
+            return
+        }
         onStatusChange(previous, status)
-        save()
     }
 
     private func save() { PersistenceErrorCenter.shared.save(context, operation: "Changing the set verdict") }

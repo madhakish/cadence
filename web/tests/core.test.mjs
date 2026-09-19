@@ -3106,6 +3106,22 @@ eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid
 
 // Focused logger presentation: resolved ramp rows collapse, but planned
 // warmups stay ahead of the current work set. Mirrors SetLifecycleTests.
+// The one auto-rest rule both the logger and native's Lock Screen apply
+// after a verdict. Mirrors CadenceCore SetLifecycle.restAfterCompleting.
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), 180,
+  "a new completion with auto-start on arms the exercise's rest");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: true, restSeconds: 180, autoStart: true, restRunning: false }), 60,
+  "a warmup rests a minute");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: false, restRunning: false }), null,
+  "auto-start off arms nothing");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: true }), null,
+  "a running rest is never restarted");
+eq(C.restAfterCompleting({ previous: "completed", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), null,
+  "re-applying an existing completion is not a new one");
+eq(C.restAfterCompleting({ previous: "planned", status: "skipped", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), null,
+  "a skip arms nothing");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 0, autoStart: true, restRunning: false }), null,
+  "conditioning has no rest to arm");
 eq(C.focusedSetIndices([
   { isWarmup: true, status: "completed" },
   { isWarmup: true, status: "planned" },

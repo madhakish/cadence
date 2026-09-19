@@ -63,6 +63,14 @@ lifts appear under "Next up" with their own suggestions.
   pause/resume controls appear on the Live Activity's workout face, so an
   abandoned session's stopwatch can always be stopped from the Lock
   Screen.
+- **Log sets from the Lock Screen** (iOS): the Live Activity's workout
+  face names the set you're on — lift, set position, reps and load — with
+  **Complete set** and **Skip**. Completing it logs exactly that set,
+  arms your rest when auto-start is on, and moves the face to the next
+  set; the rest face then says what's next. If the workout has moved on
+  since the face was drawn (you logged in the app meanwhile), the button
+  says so instead of logging a different set. Ending the activity never
+  banks the workout — **Bank it** stays in the app.
 - **Done with a session you never wanted?** **Discard session** removes
   it outright, from inside the session or from the Today card. The
   confirmation says exactly how many logged sets would be lost; your

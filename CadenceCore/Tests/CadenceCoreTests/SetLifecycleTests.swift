@@ -2,6 +2,28 @@ import XCTest
 @testable import CadenceCore
 
 final class SetLifecycleTests: XCTestCase {
+    /// The one auto-rest rule both the logger and the Lock Screen apply
+    /// after a verdict: a NEW completion, with auto-start on and no rest
+    /// already running, arms the exercise's rest — a minute after a warmup.
+    func testRestAfterCompletingFollowsTheAutoStartRule() {
+        XCTAssertEqual(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                        restSeconds: 180, autoStart: true, restRunning: false), 180)
+        XCTAssertEqual(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: true,
+                                                        restSeconds: 180, autoStart: true, restRunning: false), 60)
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: false, restRunning: false))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: true))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .completed, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: false),
+                     "re-applying an existing completion is not a new one")
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .skipped, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: false))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 0, autoStart: true, restRunning: false),
+                     "conditioning has no rest to arm")
+    }
+
     func testRestTargetsOnlyUnfinishedExercises() {
         XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed, .planned], [.planned]], after: 0), 0)
         XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed], [.skipped], [.planned]], after: 0), 2)

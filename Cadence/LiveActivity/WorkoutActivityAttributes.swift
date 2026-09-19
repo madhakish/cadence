@@ -30,6 +30,11 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         /// Set while the workout clock is paused; the widget freezes the
         /// elapsed face at (pausedAt − origin).
         var stopwatchPausedAt: Date? = nil
+        /// The set the lifter is on, projected by the app from the same focus
+        /// rules the logger uses: enough for the Lock Screen to name it and to
+        /// issue a command that identifies it structurally. nil until a
+        /// session screen has published one (ad-hoc rests never have one).
+        var currentSet: CurrentSetProjection? = nil
     }
 
     /// Session stopwatch origin. Fixed for the activity's life.

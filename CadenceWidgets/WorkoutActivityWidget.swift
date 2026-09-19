@@ -49,13 +49,18 @@ struct WorkoutActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    if !context.state.currentLift.isEmpty {
+                    if let set = context.state.currentSet {
+                        Text("\(set.exerciseName) · \(set.positionLabel)")
+                            .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    } else if !context.state.currentLift.isEmpty {
                         Text(context.state.currentLift).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     if let rest = context.state.rest {
                         restControls(rest)
+                    } else if let set = context.state.currentSet, let sessionID = context.state.sessionID {
+                        setControls(set, sessionID: sessionID)
                     } else {
                         workoutControls(context.state)
                     }
@@ -103,7 +108,10 @@ private struct WorkoutLockScreenView: View {
                     restTimerText(rest, font: .title.monospacedDigit().bold())
                         .foregroundStyle(restAccent)
                 }
-                if !context.state.currentLift.isEmpty {
+                if let set = context.state.currentSet {
+                    Text("Next · \(set.exerciseName) · \(set.positionLabel) · \(set.prescriptionLabel)")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                } else if !context.state.currentLift.isEmpty {
                     Text(context.state.currentLift).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 restControls(rest)
@@ -114,7 +122,10 @@ private struct WorkoutLockScreenView: View {
                     Spacer()
                     elapsedText(context, font: .title.monospacedDigit().bold())
                 }
-                if !context.state.currentLift.isEmpty {
+                if let set = context.state.currentSet, let sessionID = context.state.sessionID {
+                    currentSetFace(set)
+                    setControls(set, sessionID: sessionID)
+                } else if !context.state.currentLift.isEmpty {
                     Text(context.state.currentLift).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 workoutControls(context.state)
@@ -140,6 +151,41 @@ private func elapsedText(_ context: ActivityViewContext<WorkoutActivityAttribute
             .monospacedDigit()
             .multilineTextAlignment(.trailing)
     }
+}
+
+/// The set the lifter is on: name, position, and the prescription — the same
+/// three facts the logger's hero states, so the Lock Screen and the screen
+/// never disagree about what "complete" would log.
+@ViewBuilder
+private func currentSetFace(_ set: CurrentSetProjection) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline) {
+            Text(set.exerciseName).font(.headline).lineLimit(1)
+            Spacer()
+            Text(set.positionLabel.uppercased())
+                .font(.caption2.bold())
+                .foregroundStyle(restAccent)
+        }
+        Text(set.prescriptionLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+    }
+}
+
+/// Complete or skip the set the face names. Each button carries the set's
+/// structural identity; the app refuses it if the workout has moved on.
+@ViewBuilder
+private func setControls(_ set: CurrentSetProjection, sessionID: String) -> some View {
+    HStack(spacing: 10) {
+        Button(intent: CompleteSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex)) {
+            Label("Complete set", systemImage: "checkmark")
+        }
+        .tint(restAccent)
+        Button(intent: SkipSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex)) {
+            Label("Skip", systemImage: "forward.end")
+        }
+        .tint(.secondary)
+    }
+    .font(.caption.bold())
+    .buttonStyle(.bordered)
 }
 
 /// The Pause/Resume · +0:30 · End button row, shared by the Lock Screen and the
