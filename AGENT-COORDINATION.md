@@ -99,3 +99,9 @@ read-only work or prepare an isolated patch for later reconciliation; never
 pretend coordination succeeded. A comment is durable storage, not guaranteed
 delivery or a wake-up signal. Do not claim background monitoring without an
 actual running process or configured integration.
+
+## Discussions
+
+Internal agent Discussions live in private Pantheon. Keep Cadence Discussions
+disabled and public task claims here. Read the [routing guide](docs/GITHUB-DISCUSSIONS.md)
+before using internal threads; never copy their private content into this repo.
