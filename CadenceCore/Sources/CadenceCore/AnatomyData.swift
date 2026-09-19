@@ -37,6 +37,25 @@ public enum AnatomyData {
     ]
 
     /// Neutral Vitruvian silhouette (both views), coordinate space 210×224.
+    /// Head-to-toe order for legends and keyboard traversal, shared with web
+    /// `ANATOMICAL_ORDER`. The muscle map lists movers by importance; a legend
+    /// walks the body instead, so traversal reads as anatomy.
+    public static let anatomicalOrder: [String] = [
+        "traps", "delts", "reardelts", "chest", "lats", "biceps", "triceps", "forearms",
+        "abs", "obliques", "lowerback", "glutes", "adductors", "quads", "hamstrings", "calves",
+    ]
+
+    /// Stable: ids the order does not know keep their relative order after
+    /// the known ones. Mirrors web `anatomicalSort`.
+    public static func anatomicalSort(_ ids: [String]) -> [String] {
+        let rank = Dictionary(uniqueKeysWithValues: anatomicalOrder.enumerated().map { ($1, $0) })
+        return ids.enumerated().sorted { a, b in
+            let ra = rank[a.element] ?? anatomicalOrder.count
+            let rb = rank[b.element] ?? anatomicalOrder.count
+            return ra == rb ? a.offset < b.offset : ra < rb
+        }.map(\.element)
+    }
+
     /// Arms and legs reach the construction circle; the renderer rounds these
     /// control loops into continuous anatomical contours.
     public static let body: [[[Double]]] = [

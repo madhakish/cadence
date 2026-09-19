@@ -17,6 +17,22 @@ export const MUSCLE_NAMES = {
   adductors: "Adductors", reardelts: "Rear delts",
 };
 
+// Head-to-toe order for legends and keyboard traversal, shared with
+// CadenceCore AnatomyData.anatomicalOrder. The muscle map lists movers by
+// importance; a legend walks the body instead, so traversal reads as anatomy.
+export const ANATOMICAL_ORDER = [
+  "traps", "delts", "reardelts", "chest", "lats", "biceps", "triceps", "forearms",
+  "abs", "obliques", "lowerback", "glutes", "adductors", "quads", "hamstrings", "calves",
+];
+// Stable: unknown ids keep their relative order after the known ones.
+export const anatomicalSort = (ids) => {
+  const rank = new Map(ANATOMICAL_ORDER.map((id, index) => [id, index]));
+  const known = (id) => rank.has(id) ? rank.get(id) : ANATOMICAL_ORDER.length;
+  return ids.map((id, index) => ({ id, index }))
+    .sort((a, b) => (known(a.id) - known(b.id)) || (a.index - b.index))
+    .map((entry) => entry.id);
+};
+
 const mirror = (points) => points.map(([x, y]) => [x === 105 ? 105 : 210 - x, y]);
 
 // Figure geometry, coordinate space 210×224 per view. Arms and legs reach the
@@ -383,6 +399,12 @@ export function muscleLegend(profile, figure = null) {
   if (!profile) return wrap;
   let locked = null;
   const buttons = [];
+  // Announces what a click did; native carries the same fact as the button's
+  // accessibility value.
+  const status = document.createElement("p");
+  status.className = "muscle-key-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
   const paint = (id) => {
     if (figure) {
       for (const region of figure.querySelectorAll("[data-muscle]")) {
@@ -406,13 +428,14 @@ export function muscleLegend(profile, figure = null) {
     label.textContent = role === "primary" ? "Primary movers" : "Supporting";
     const choices = document.createElement("div");
     choices.className = "muscle-key-choices";
-    for (const id of ids) {
+    for (const id of anatomicalSort(ids)) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `muscle-key ${role}`;
       button.dataset.muscle = id;
       button.setAttribute("aria-pressed", "false");
-      button.setAttribute("aria-label", `${MUSCLE_NAMES[id] || id}, ${role === "primary" ? "primary mover" : "supporting muscle"}`);
+      // The one spoken name on both clients: "Quads, primary muscle".
+      button.setAttribute("aria-label", `${MUSCLE_NAMES[id] || id}, ${role === "primary" ? "primary muscle" : "supporting muscle"}`);
       const dot = document.createElement("i"); dot.setAttribute("aria-hidden", "true");
       const name = document.createElement("span"); name.textContent = MUSCLE_NAMES[id] || id;
       button.append(dot, name);
@@ -420,7 +443,10 @@ export function muscleLegend(profile, figure = null) {
       button.addEventListener("pointerleave", () => paint(locked));
       button.addEventListener("focus", () => paint(id));
       button.addEventListener("blur", () => paint(locked));
-      button.addEventListener("click", () => { locked = locked === id ? null : id; paint(locked); });
+      button.addEventListener("click", () => {
+        locked = locked === id ? null : id; paint(locked);
+        status.textContent = locked ? `${MUSCLE_NAMES[locked] || locked} selected` : "Selection cleared";
+      });
       buttons.push(button); choices.append(button);
     }
     line.append(label, choices);
@@ -428,5 +454,6 @@ export function muscleLegend(profile, figure = null) {
   };
   wrap.append(row("primary", profile.primary));
   if (profile.secondary.length) wrap.append(row("supporting", profile.secondary));
+  wrap.append(status);
   return wrap;
 }

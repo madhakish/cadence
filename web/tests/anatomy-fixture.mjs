@@ -5,6 +5,7 @@ export async function normalizedAnatomy() {
   const A = await import("../app/js/anatomy.js");
   return {
     names: A.MUSCLE_NAMES,
+    order: A.ANATOMICAL_ORDER,
     body: A.ANATOMY_BODY,
     regions: A.ANATOMY_REGIONS,
     map: A.MUSCLE_MAP,

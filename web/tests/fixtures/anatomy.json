@@ -17,6 +17,24 @@
     "adductors": "Adductors",
     "reardelts": "Rear delts"
   },
+  "order": [
+    "traps",
+    "delts",
+    "reardelts",
+    "chest",
+    "lats",
+    "biceps",
+    "triceps",
+    "forearms",
+    "abs",
+    "obliques",
+    "lowerback",
+    "glutes",
+    "adductors",
+    "quads",
+    "hamstrings",
+    "calves"
+  ],
   "body": [
     [
       [

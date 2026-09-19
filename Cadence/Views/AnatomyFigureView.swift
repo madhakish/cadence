@@ -81,7 +81,8 @@ struct AnatomyFigureView: View {
                     .foregroundStyle(.secondary)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 6)], alignment: .leading, spacing: 6) {
-                ForEach(ids, id: \.self) { id in
+                // Legend and VoiceOver walk the body head to toe (shared order).
+                ForEach(AnatomyData.anatomicalSort(ids), id: \.self) { id in
                     let isSelected = selectedMuscle == id
                     Button {
                         selectedMuscle = isSelected ? nil : id
