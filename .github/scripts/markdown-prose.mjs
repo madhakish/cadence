@@ -10,6 +10,13 @@ export function prose(text) {
       lines.push('');
       continue;
     }
+    // Fence info is literal text; its comment markers must not change state.
+    const open = !comment && line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
+      fence = open[1];
+      lines.push('');
+      continue;
+    }
     let visible = '';
     while (line) {
       if (comment) {
@@ -24,9 +31,7 @@ export function prose(text) {
       line = line.slice(start + 4);
       comment = true;
     }
-    const open = visible.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (open && !(open[1][0] === '`' && open[2].includes('`'))) fence = open[1];
-    lines.push(fence ? '' : visible);
+    lines.push(visible);
   }
   return lines.join('\n');
 }

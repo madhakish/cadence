@@ -43,6 +43,13 @@ test('Conventional Commit titles and authenticated Dependabot identity', () => {
   assert.ok(validate({ body: '', user: { login: 'dependabot[bot]', type: 'User' } }).errors.length);
 });
 
+test('comment markers in fence info do not hide following metadata', () => {
+  for (const fence of ['```', '~~~']) {
+    const body = `${fence}html <!-- example\n<div>example</div>\n${fence}\n${pr.body}`;
+    assert.deepEqual(validate({ body }).errors, []);
+  }
+});
+
 test('issue validation rejects PR references and inaccessible tasks', async () => {
   const task = { repository: 'owner/repo', number: 12 };
   await checkTask(task, 'test-token', async (url) => {
@@ -87,9 +94,15 @@ test('instruction limits count both bytes and lines', () => {
 });
 
 test('missing files, missing anchors, traversal and cycles fail', () => {
-  for (const text of ['[broken](absent.md)', '[broken](CLAUDE.md#absent)', '[escape](../../outside)', '@CLAUDE.md\n']) {
-    const root = fixture({ 'AGENTS.md': text });
-    try { assert.ok(validateInstructions(root).errors.length, text); }
+  const cases = [
+    ['[broken](absent.md)', /missing or outside repository: absent\.md/],
+    ['[broken](CLAUDE.md#absent)', /missing anchor CLAUDE\.md#absent/],
+    ['[escape](../../outside)', /missing or outside repository: \.\.\/\.\.\/outside/],
+    ['@CLAUDE.md\n', /Import cycle at/],
+  ];
+  for (const [text, expected] of cases) {
+    const root = fixture({ 'AGENTS.md': rootGuide + text });
+    try { assert.ok(validateInstructions(root).errors.some(error => expected.test(error)), text); }
     finally { rmSync(root, { recursive: true }); }
   }
 });
