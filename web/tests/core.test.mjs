@@ -664,7 +664,7 @@ eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
   eq(C.canResumeSession(2, 2, 3, 2, 1, 3, plan, plan), false, "stale week → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, [], plan), false, "pre-snapshot session (no plan names) → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan), true,
-    "same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
+    "[INV-RESUME-BY-COMPOSITION] same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Dips", "Overhead Press"], plan), false,
     "plan names compare as a multiset, not a set — duplicates must match");
 }
@@ -1701,7 +1701,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const blocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   ok(!!blocked && blocked.change.type === "hold",
-    "an unmet volume floor with no eligible day is surfaced, not silently dropped");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] an unmet volume floor with no eligible day is surfaced, not silently dropped");
   ok(blocked.explanation.includes("no eligible day (technique/explosive)"),
     "the blocked evidence names why the floor cannot be raised");
 
@@ -1715,11 +1715,11 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   report = C.evaluateCoaching(constrainedProgram, sessions);
   const constrainedPlan = report.recommendations.find((r) => r.change.type === "capacityPlan");
   ok(!!constrainedPlan && !constrainedPlan.change.additions.some((a) => a.pattern === "verticalPull"),
-    "a pattern with no policy-compatible exercise is never proposed");
+    "[INV-COACH-PROPOSES-ONLY-APPLIABLE] a pattern with no policy-compatible exercise is never proposed");
   const constrainedBlocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   ok(!!constrainedBlocked && constrainedBlocked.explanation.includes("no compatible exercise available"),
-    "the impossible pattern is reported as blocked instead of re-proposed forever");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] the impossible pattern is reported as blocked instead of re-proposed forever");
 
   // Permanently blocked floors report even when this rotation's budget is
   // already spent — only fillable-but-unbudgeted floors wait silently.
@@ -1731,7 +1731,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const spentBlocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   eq((spentBlocked?.explanation.match(/no compatible exercise available/g) || []).length, 2,
-    "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
@@ -1805,7 +1805,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!suggestion && suggestion.change.slotID === "squat",
     "a completed max-effort exposure proposes a weekly special-exercise rotation");
   ok(suggestion.id.endsWith("-squat") && !suggestion.id.includes(latestSquat.id),
-    "the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
 
   report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
   ok(!report.recommendations.some((candidate) =>
@@ -1832,7 +1832,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     maxEffortSessions);
   ok(!report.recommendations.some((candidate) =>
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
-  "an unresolvable max-effort rotation is never proposed");
+  "[INV-COACH-PROPOSES-ONLY-APPLIABLE] an unresolvable max-effort rotation is never proposed");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
@@ -1871,6 +1871,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(stage.change.expectedBaseWeightLb, 90, "the stage change records the base it evaluated");
   eq(stage.ruleID, "program.slot.linear-triples.v1", "the adaptive stage has an independent rule version");
   ok(stage.explanation.includes("100 to 90 lb"), "the strategy transition explains the observed rebuild");
+  ok(stage.id.endsWith("-press-a") && !linearSessions.some((session) => stage.id.includes(session.id)),
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] the stage id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
+  // A backup restore re-mints every session id (an IndexedDB autoincrement
+  // here); the same logbook must yield the same recommendation id.
+  const restoredStage = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), linearSessions.map((session, index) => ({ ...session, id: index + 1 })))
+    .recommendations.find((candidate) => candidate.change.type === "useLinearTriples");
+  eq(restoredStage?.id, stage.id,
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] identical data yields an identical id after a restore re-mints the session ids");
 
   report = C.evaluateCoaching(withSlot("press-a", {
     prescriptionStyle: "linearFives", baseWeightLb: 100, workingSets: 3, workingReps: 5,
