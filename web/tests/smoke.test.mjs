@@ -5479,10 +5479,6 @@ await withCleanup(async (keep) => {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
-
-
 // ---- Stage 6: corrections rebuild what is replayable (epic #155) ----
 // PR milestones are regenerated deterministically from the corrected
 // canonical sessions — never appended to — and the rebuild is idempotent.
