@@ -103,6 +103,48 @@ final class VisualProofUITests: XCTestCase {
         capture("barbell-bumper-exploded-iphone")
     }
 
+    /// #196: the floating plate button must never sit on top of a control.
+    /// Every tab root is scrolled to its end, then every hittable control's
+    /// frame is checked against the button's. The reserved band
+    /// (plateCalculatorClearance on each root list) is what makes this hold
+    /// at large text too. The active session is a cover with its own bottom
+    /// bar and no floating button, which the test states rather than
+    /// measures. Failures accumulate so one run reports every surface.
+    func test08PlateButtonNeverCoversContent() {
+        continueAfterFailure = true
+        let plate = app.buttons["Plate calculator"]
+        XCTAssertTrue(plate.waitForExistence(timeout: 5))
+        for tab in ["Settings", "History", "Program", "Body", "Today"] {
+            app.tabBars.buttons[tab].tap()
+            assertScrolledEndClearsPlateButton(tab.lowercased(), button: plate)
+        }
+        // Today was just scrolled to its end; bring the resume card back.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertTrue(resume.isHittable)
+        resume.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        for _ in 0..<6 { app.swipeUp() }
+        capture("after-11-session-end-clears-plate-button-iphone")
+        XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
+    }
+
+    private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
+        for _ in 0..<6 { app.swipeUp() }
+        // Capture BEFORE asserting so the artifact shows the state that was
+        // judged, pass or fail.
+        capture("after-11-\(surface)-end-clears-plate-button-iphone")
+        let button = plate.frame
+        let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
+        for query in queries {
+            for control in query.allElementsBoundByIndex
+            where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
+                XCTAssertFalse(control.frame.intersects(button),
+                               "\(surface): '\(control.label)' \(control.frame) sits under the plate calculator button \(button)")
+            }
+        }
+    }
+
     func test09WorkoutPreviewInspection() {
         let preview = app.buttons["preview-program-day"]
         for _ in 0..<10 where !preview.isHittable { app.swipeUp() }

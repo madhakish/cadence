@@ -109,6 +109,7 @@ struct BodyView: View {
                 healthSection
             }
             .navigationTitle("Body")
+            .plateCalculatorClearance()
             .sheet(isPresented: $showWeightEntry) {
                 BodyweightEntrySheet()
                     .presentationDetents([.medium])

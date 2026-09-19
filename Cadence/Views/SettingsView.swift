@@ -319,6 +319,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .accessibilityIdentifier("settings-screen")
+        .plateCalculatorClearance()
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in

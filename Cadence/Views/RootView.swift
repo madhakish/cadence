@@ -38,7 +38,10 @@ struct RootView: View {
                     .tag(4)
             }
 
-            // Plate math is one tap from anywhere. Non-negotiable.
+            // Plate math is one tap from anywhere. Non-negotiable. The button
+            // floats in a band each tab's root list and the active session
+            // reserve (see plateCalculatorClearance), so it never covers a
+            // control.
             Button {
                 showPlateCalc = true
             } label: {
@@ -51,6 +54,7 @@ struct RootView: View {
             .padding(.trailing, 16)
             .padding(.bottom, 64)
             .accessibilityLabel("Plate calculator")
+            .accessibilityIdentifier("plate-calculator-button")
         }
         .sheet(isPresented: $showPlateCalc) {
             NavigationStack { PlateCalculatorView() }
@@ -106,5 +110,20 @@ struct RootView: View {
         guard defaults.double(forKey: Self.gymTagLastAutoDayKey) != day else { return }
         defaults.set(day, forKey: Self.gymTagLastAutoDayKey)
         showGymTag = true
+    }
+}
+
+extension View {
+    /// Reserve the band the floating plate-calculator button occupies, so a
+    /// list or form scrolls clear of it. Apply it to the scroll content
+    /// inside a NavigationStack: the same inset placed on the tab root,
+    /// outside the stack, never reached the Settings form on device
+    /// (#196), because the UIKit-backed stack manages its own safe area.
+    func plateCalculatorClearance() -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: Theme.plateButtonClearance)
+                .allowsHitTesting(false)
+        }
     }
 }
