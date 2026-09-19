@@ -8,6 +8,7 @@ import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BA
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
+import { historySetPresentationForTest } from "./history.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
@@ -380,61 +381,16 @@ function gymEditor(g) {
   });
 }
 
-// One picker surface for every selection workflow (issues #63/#66): search
-// (always available), equipment filter chips, shelved marking, and a detail
-// preview (ⓘ) that opens OVER the picker — the search text and active filter
-// survive the inspection, so picking after reading never restarts the hunt.
-// Shared by the program editor's slot pickers and the logger's add-exercise
-// sheet.
-export function exercisePickerList(all, onPick, { availableOnly = false } = {}) {
-  const wrap = ui.h("div");
-  const search = ui.h("input", { type: "search", placeholder: "Exercise, movement, or equipment" });
-  const chips = ui.h("div", { class: "btn-row", style: { flexWrap: "wrap", gap: "6px", margin: "8px 0" }, role: "group", "aria-label": "Filter by equipment" });
-  const results = ui.h("div");
-  let typeFilter = null;
-  const paint = () => {
-    ui.clear(chips);
-    for (const type of [null, ...EX_TYPES]) {
-      chips.append(ui.h("button", {
-        class: `btn sm ${typeFilter === type ? "primary" : "ghost"}`,
-        text: type === null ? "All" : type,
-        "aria-pressed": String(typeFilter === type),
-        onClick: () => { typeFilter = typeFilter === type ? null : type; paint(); },
-      }));
-    }
-    ui.clear(results);
-    // Raw query in: the shared matcher owns normalization and returns true on
-    // empty, so no pre-trim/lowercase or empty-branch here.
-    const pool = availableOnly ? all.filter(C.exerciseIsAvailableForProgramming) : all;
-    const visible = pool.filter((exercise) => (typeFilter === null || exercise.type === typeFilter)
-      && C.exerciseMatchesSearch(exercise, search.value));
-    for (const cat of CATEGORIES) {
-      const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-      if (!inCat.length) continue;
-      results.append(ui.h("div", { class: "section-title", text: cat }));
-      for (const e of inCat) {
-        results.append(ui.h("div", { class: "row", style: { borderBottom: "0", gap: "6px", padding: "3px 0" } },
-          ui.h("button", { class: "btn wide ghost", style: { flex: "1", justifyContent: "space-between" },
-            onClick: () => onPick(e) },
-          ui.h("span", { text: e.name }),
-          e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : ui.h("span")),
-          ui.h("button", { class: "btn sm ghost", text: "ⓘ",
-            "aria-label": `${e.name} — muscles, history, and settings`,
-            onClick: () => exerciseDetail(e) })));
-      }
-    }
-    if (!visible.length) results.append(ui.h("div", { class: "muted", text: "No exercises match." }));
-  };
-  search.addEventListener("input", paint);
-  wrap.append(search, chips, results);
-  paint();
-  return wrap;
+// Every picker is the library browser with a selection closure (issue #63).
+// Kept as the sheet callers' entry point; the browser owns the surface.
+export function exercisePickerList(all, onPick, { availableOnly = false, equipmentPolicy = "any" } = {}) {
+  return exerciseBrowser(all, { onSelect: onPick, availableOnly, equipmentPolicy });
 }
 
 function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   Exercises.all().then((all) => {
     ui.sheet({ title: "Pick exercise", build: (c, api) => {
-      c.append(exercisePickerList(all.filter((exercise) => C.equipmentPolicyAllows(equipmentPolicy, exercise.type)), (e) => { api.close(); onPick(e); }, { availableOnly: true }));
+      c.append(exercisePickerList(all, (e) => { api.close(); onPick(e); }, { availableOnly: true, equipmentPolicy }));
     } });
   });
 }
@@ -1117,75 +1073,130 @@ function intervalEditor(interval) {
 export function exerciseLibrary(exercises) {
   ui.pushScreen({
     title: "Exercise library",
-    build: (body) => {
-      // Search first, then two composable filters, then the categories as
-      // collapsed groups that state their counts — nobody scrolls the whole
-      // catalog to find one lift. A filter reveals only the groups with
-      // matches, opened; clearing it returns every group, collapsed, except
-      // the ones the user opened themselves. Mirrors native LibraryView.
-      const search = ui.h("input", { type: "search", placeholder: "Name, equipment or movement", "aria-label": "Search exercises" });
-      const movement = ui.h("select", { "aria-label": "Movement" },
-        ui.h("option", { value: "", text: "All movements" }),
-        ...C.MOVEMENT_PATTERNS.map((p) => ui.h("option", { value: p, text: C.movementPatternName(p) })));
-      const equipment = ui.h("select", { "aria-label": "Equipment" },
-        ui.h("option", { value: "", text: "All equipment" }),
-        ...BACKUP_ENUMS.exerciseTypes.map((t) => ui.h("option", { value: t, text: t })));
-      const clear = ui.h("button", { class: "btn ghost sm library-clear", text: "Clear filters",
-        onClick: () => { search.value = ""; movement.value = ""; equipment.value = ""; paint(); } });
-      const results = ui.h("div", { class: "library-groups" });
-      const opened = new Map();
-      const filtering = () => search.value.trim() !== "" || movement.value !== "" || equipment.value !== "";
-      const paint = () => {
-        ui.clear(results);
-        clear.hidden = !filtering();
-        // Raw query in: the shared matcher owns normalization and returns
-        // true on empty, so no pre-trim/lowercase or empty-branch here.
-        const visible = exercises.filter((e) => C.exerciseMatchesSearch(e, search.value)
-          && C.exerciseMatchesMovement(e, movement.value)
-          && (!equipment.value || e.type === equipment.value));
-        for (const cat of CATEGORIES) {
-          const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
-          if (filtering() && !inCat.length) continue;
-          const group = ui.h("details", { class: "library-group" },
-            ui.h("summary", {},
-              ui.h("span", { class: "title", text: cat }),
-              ui.h("span", { class: "count mono", text: String(inCat.length) })));
-          group.open = filtering() ? true : (opened.get(cat) ?? false);
-          // Only a toggle the user makes on a live, unfiltered group is a
-          // preference; the programmatic opens above are not.
-          group.addEventListener("toggle", () => { if (group.isConnected && !filtering()) opened.set(cat, group.open); });
-          const card = ui.h("div", { class: "card list" });
-          for (const e of inCat) {
-            const meta = [C.movementPatternName(e.movementPattern), e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)),
-              e.isUnilateral ? "per side" : null, e.gateStatus && e.gateStatus !== "open" ? e.gateStatus : null]
-              .filter(Boolean).join(" · ");
-            card.append(ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
-              ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
-                ui.h("span", { class: "sub", text: meta })),
-              ui.h("span", { class: "chev" })));
-          }
-          group.append(card);
-          results.append(group);
-        }
-      };
-      search.addEventListener("input", paint);
-      movement.addEventListener("change", paint);
-      equipment.addEventListener("change", paint);
-      body.append(
-        ui.h("header", { class: "library-hero" },
-          ui.h("span", { class: "eyebrow accent", text: "Exercise library" }),
-          ui.h("h3", { class: "display", text: "Find your lift." })),
-        search,
-        ui.h("div", { class: "library-filters" },
-          ui.h("label", {}, ui.h("span", { text: "Movement" }), movement),
-          ui.h("label", {}, ui.h("span", { text: "Equipment" }), equipment)),
-        ui.h("div", { class: "library-toolbar" },
-          ui.h("button", { class: "btn ghost sm", text: "+ New exercise", onClick: () => newExerciseSheet(exercises, () => paint()) }),
-          clear),
-        results);
-      paint();
-    },
+    build: (body) => { body.append(exerciseBrowser(exercises, { hero: true })); },
   });
+}
+
+// The one exercise-finding surface (issue #63). Search first, then two
+// composable filters, then a compact Recent group, then the categories as
+// collapsed groups that state their counts — nobody scrolls the whole
+// catalog to find one lift. A filter reveals only the groups with matches,
+// opened; clearing it returns every group, collapsed, except the ones the
+// user opened themselves. Shelved lifts stay visible — with their badge — so
+// coming back to them is a decision, not an accident, unless the caller asks
+// for programmable exercises only (`availableOnly`).
+//
+// Without `onSelect` a row opens the exercise's detail (the library). With
+// it a row selects, and ⓘ opens the detail OVER the browser so the search
+// text and active filters survive the inspection — picking after reading
+// never restarts the hunt. Every picker is this browser plus a selection
+// closure; nothing else. Mirrors native ExerciseBrowser.
+export function exerciseBrowser(exercises, { onSelect = null, availableOnly = false, equipmentPolicy = "any", hero = false } = {}) {
+  const wrap = ui.h("div", { class: "exercise-browser" });
+  const search = ui.h("input", { type: "search", placeholder: "Name, equipment or movement", "aria-label": "Search exercises" });
+  const movement = ui.h("select", { "aria-label": "Movement" },
+    ui.h("option", { value: "", text: "All movements" }),
+    ...C.MOVEMENT_PATTERNS.map((p) => ui.h("option", { value: p, text: C.movementPatternName(p) })));
+  const equipment = ui.h("select", { "aria-label": "Equipment" },
+    ui.h("option", { value: "", text: "All equipment" }),
+    ...BACKUP_ENUMS.exerciseTypes.map((t) => ui.h("option", { value: t, text: t })));
+  const filtering = () => search.value.trim() !== "" || movement.value !== "" || equipment.value !== "";
+  const clearFilters = () => { search.value = ""; movement.value = ""; equipment.value = ""; paint(); };
+  const addExercise = () => newExerciseSheet(exercises, () => paint());
+  const clear = ui.h("button", { class: "btn ghost sm library-clear", text: "Clear filters", onClick: clearFilters });
+  const toolbar = ui.h("div", { class: "library-toolbar" },
+    ui.h("button", { class: "btn ghost sm", text: "+ New exercise", onClick: addExercise }),
+    clear);
+  const results = ui.h("div", { class: "library-groups" });
+  const opened = new Map();
+  let recentNames = [];
+  const row = (e) => {
+    if (!onSelect) {
+      const meta = [C.movementPatternName(e.movementPattern), e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)),
+        e.isUnilateral ? "per side" : null, e.gateStatus && e.gateStatus !== "open" ? e.gateStatus : null]
+        .filter(Boolean).join(" · ");
+      return ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
+        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
+          ui.h("span", { class: "sub", text: meta })),
+        ui.h("span", { class: "chev" }));
+    }
+    // The name is the whole button — nothing else rides inside it — so the
+    // badge and the detail preview stay separately reachable.
+    return ui.h("div", { class: "row", style: { borderBottom: "0", gap: "6px", padding: "3px 0" } },
+      ui.h("button", { class: "btn wide ghost", style: { flex: "1", justifyContent: "flex-start" },
+        text: e.name, onClick: () => onSelect(e) }),
+      e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null,
+      ui.h("button", { class: "btn sm ghost", text: "ⓘ",
+        "aria-label": `${e.name} — muscles, history, and settings`,
+        onClick: () => exerciseDetail(e) }));
+  };
+  const paint = () => {
+    ui.clear(results);
+    clear.hidden = !filtering();
+    // Raw query in: the shared matcher owns normalization and returns true
+    // on empty, so no pre-trim/lowercase or empty-branch here.
+    const visible = exercises.filter((e) => C.equipmentPolicyAllows(equipmentPolicy, e.type)
+      && (!availableOnly || C.exerciseIsAvailableForProgramming(e))
+      && C.exerciseMatchesSearch(e, search.value)
+      && C.exerciseMatchesMovement(e, movement.value)
+      && (!equipment.value || e.type === equipment.value));
+    // The empty state says how to widen the hunt, with both ways out beside
+    // it; the toolbar's copies step aside so each action appears once.
+    toolbar.hidden = !visible.length;
+    if (!visible.length) {
+      results.append(ui.h("div", { class: "library-empty" },
+        ui.h("p", { class: "muted", text: COPY.noExercisesMatch }),
+        ui.h("div", { class: "btn-row" },
+          filtering() ? ui.h("button", { class: "btn ghost sm", text: "Clear filters", onClick: clearFilters }) : null,
+          ui.h("button", { class: "btn ghost sm", text: "+ New exercise", onClick: addExercise }))));
+      return;
+    }
+    // Recent is an entry point above the categories, not a category: the
+    // same search, filters, policy, and availability apply to it.
+    const recent = recentNames.map((name) => visible.find((e) => e.name === name)).filter(Boolean);
+    if (recent.length) {
+      results.append(ui.h("section", { class: "library-recent" },
+        ui.h("div", { class: "section-title", text: "Recent" }),
+        ui.h("div", { class: "card list" }, ...recent.map(row))));
+    }
+    for (const cat of CATEGORIES) {
+      const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
+      if (filtering() && !inCat.length) continue;
+      const group = ui.h("details", { class: "library-group" },
+        ui.h("summary", {},
+          ui.h("span", { class: "title", text: cat }),
+          ui.h("span", { class: "count mono", text: String(inCat.length) })));
+      group.open = filtering() ? true : (opened.get(cat) ?? false);
+      // Only a toggle the user makes on a live, unfiltered group is a
+      // preference; the programmatic opens above are not.
+      group.addEventListener("toggle", () => { if (group.isConnected && !filtering()) opened.set(cat, group.open); });
+      group.append(ui.h("div", { class: "card list" }, ...inCat.map(row)));
+      results.append(group);
+    }
+  };
+  search.addEventListener("input", paint);
+  movement.addEventListener("change", paint);
+  equipment.addEventListener("change", paint);
+  Sessions.completed().then((sessions) => {
+    recentNames = C.recentExerciseNames(sessions.map((s) => [...(s.exercises || [])]
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((entry) => entry.exerciseName)));
+    if (recentNames.length) paint();
+  });
+  // The hero names the Library screen; a picker sheet has its own title.
+  if (hero) {
+    wrap.append(ui.h("header", { class: "library-hero" },
+      ui.h("span", { class: "eyebrow accent", text: "Exercise library" }),
+      ui.h("h3", { class: "display", text: "Find your lift." })));
+  }
+  wrap.append(
+    search,
+    ui.h("div", { class: "library-filters" },
+      ui.h("label", {}, ui.h("span", { text: "Movement" }), movement),
+      ui.h("label", {}, ui.h("span", { text: "Equipment" }), equipment)),
+    toolbar,
+    results);
+  paint();
+  return wrap;
 }
 
 function newExerciseSheet(exercises, onSaved) {
@@ -1259,7 +1270,7 @@ async function exerciseInsight(wrap, e) {
     const prog = s.programTag
       ? (s.programTag.programName || programs.find((p) => p.id === s.programTag.programId)?.name || "a program")
       : null;
-    hist.push({ date: s.date, top, longestSeconds, prog });
+    hist.push({ date: s.date, top, longestSeconds, prog, sets: w });
   }
   const card = ui.h("div", { class: "card" });
   const last = hist[0];
@@ -1271,8 +1282,23 @@ async function exerciseInsight(wrap, e) {
     ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));
   if (e.type !== "timed" && hist.length >= 2) {
     const series = [...hist].reverse().slice(-24).map((h) => h.top.weightLb);
-    card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
+    card.append(ui.h("div", { class: "row" },
       ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
+  }
+  // #66: the last five sessions' working sets exactly as stored, newest
+  // first — the History row's performed label per set plus the RIR flag
+  // under the name History gives it. A projection; nothing the engine
+  // resolved is recomputed. Warmups and skipped sets were filtered above.
+  card.append(ui.h("div", { class: "section-title", text: "Recent sessions" }));
+  if (!hist.length) card.append(ui.h("div", { class: "row set-history-row" }, ui.h("span", { class: "sub", text: "No sessions yet." })));
+  for (const h of hist.slice(0, 5)) {
+    card.append(ui.h("div", { class: "row set-history-row" },
+      ui.h("div", { class: "lead" },
+        ui.h("span", { class: "title", text: `${ui.fmtDate(h.date)}${h.prog ? ` · ${h.prog}` : ""}` }),
+        ui.h("span", { class: "sub mono", text: h.sets.map((set) => {
+          const rir = C.setRIR(set.flags || []);
+          return historySetPresentationForTest(set, e.type).actual + (rir ? ` · ${C.SET_RIR_LABELS[rir]}` : "");
+        }).join(", ") }))));
   }
   wrap.append(card);
 
@@ -1328,9 +1354,15 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
           ui.h("h2", { text: e.name }),
           e.notes ? ui.h("p", { class: "sub", text: e.notes }) : null));
 
-        // When opened between sets, the work in hand wins the hierarchy.
-        // This is the same stored entry and solver path the logger records;
-        // the pane does not invent a presentation-only prescription.
+        // The complementary/main relationship and its originating focus, as
+        // the engine labelled it. Tier 3 context, never re-derived here.
+        const relationship = sessionEntry?.programRole ? [
+          sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
+          sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
+        ].filter(Boolean).join(" · ") : null;
+        // Tier 1: when opened between sets, the work in hand wins the
+        // hierarchy. This is the same stored entry and solver path the logger
+        // records; the pane does not invent a presentation-only prescription.
         if (sessionEntry) {
           const working = (sessionEntry.sets || []).filter((set) => !set.isWarmup);
           const current = working.find((set) => set.status === "planned") || working.at(-1) || null;
@@ -1339,16 +1371,10 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             && !(sessionEntry.prescriptionStyle === "automatic" && !sessionProgramFocus)
             ? C.complementaryEffortCue(sessionEntry.programRole, sessionEntry.prescriptionStyle,
               e.movementGroup, sessionProgramFocus || "strength") : null;
-          const relationship = sessionEntry.programRole ? [
-            sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
-            sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
-          ].filter(Boolean).join(" · ") : null;
           const live = ui.h("section", { class: "current-prescription", "aria-label": "Current prescription" },
             ui.h("span", { class: "eyebrow", text: "CURRENT PRESCRIPTION" }),
             ui.h("div", { class: "prescription-line mono", text: current
               ? `${current.weightLb === 0 ? "BW" : C.both(current.weightLb)} × ${current.reps}` : "No working sets" }),
-            relationship ? ui.h("div", { class: "sub training-focus-context", text: relationship,
-              "aria-label": `Training context: ${relationship}` }) : null,
             ui.h("div", { class: "sub", text: current
               ? [`Set ${currentNumber} of ${working.length}`, effortCue,
                 Number.isFinite(restSeconds) ? `${ui.mmss(restSeconds)} rest` : null].filter(Boolean).join(" · ")
@@ -1368,28 +1394,40 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
               onExpand: () => ui.pushScreen({ title: `${e.name} · loaded bar`, build: (screen) => {
                 screen.append(barbellStage(barbellSVG(solution, "full", style), {
                   caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
-                }), loadoutSummary(requestedLb, solution));
+                }), loadoutSummary(requestedLb, solution, { plateStyle: style }));
                 const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
               } }),
-            }), loadoutSummary(requestedLb, solution, { compact: true }));
+            }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle: style }));
             const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
           }
           body.append(live);
         }
 
-        const profile = muscleProfile(e.name, e.movementGroup);
-        if (profile) {
-          const svg = figureSVG(profile);
-          svg.style.maxWidth = "620px"; svg.style.width = "100%";
-          body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
-            ui.h("summary", {}, ui.h("span", { text: "Muscles & anatomy" }),
-              ui.h("span", { class: "sub", text: profile.primary.map((id) => id).join(" · ") })),
-            ui.h("div", { class: "anatomy-card" }, svg, muscleLegend(profile, svg))));
-        }
+        // Tier 2, one expand: previous performance and programming context.
+        // Tier 1 above never moves when this opens.
         const insightWrap = ui.h("div", {});
-        body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
+        body.append(ui.h("details", { class: "card info-disclosure progression-disclosure" },
           ui.h("summary", { text: "Previous performance & programming" }), insightWrap));
         exerciseInsight(insightWrap, e);
+        // Tier 3, one expand: muscles and the training relationship. The
+        // library opens on the anatomy; between sets the pane opens on the
+        // work in hand.
+        const profile = muscleProfile(e.name, e.movementGroup);
+        if (profile || relationship) {
+          const muscles = ui.h("details", { class: "card info-disclosure muscles-disclosure", open: !sessionEntry },
+            ui.h("summary", {}, ui.h("span", { text: "Muscles & relationship" }),
+              ui.h("span", { class: "sub", text: profile ? profile.primary.map((id) => id).join(" · ") : "Training relationship" })));
+          if (relationship) {
+            muscles.append(ui.h("div", { class: "sub training-focus-context", text: relationship,
+              "aria-label": `Training context: ${relationship}` }));
+          }
+          if (profile) {
+            const svg = figureSVG(profile);
+            svg.style.maxWidth = "620px"; svg.style.width = "100%";
+            muscles.append(ui.h("div", { class: "anatomy-card" }, svg, muscleLegend(profile, svg)));
+          }
+          body.append(muscles);
+        }
         const setup = ui.h("div", { class: "disclosure-content" });
         body.append(ui.h("details", { class: "card info-disclosure" },
           ui.h("summary", { text: "Exercise setup" }), setup));

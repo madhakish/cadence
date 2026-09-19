@@ -102,6 +102,11 @@ enum Theme {
 
     /// Minimum touch target for between-sets thumbs.
     static let bigTap: CGFloat = 56
+    /// The band above the tab bar that the floating plate-calculator button
+    /// occupies (its 56-point face plus the 16 points it floats above the
+    /// bar). Every tab root reserves exactly this much so content scrolls
+    /// clear of the button instead of ending underneath it.
+    static let plateButtonClearance: CGFloat = bigTap + 16
 }
 
 extension Color {
@@ -138,6 +143,7 @@ enum Copy {
     static let emptyVolume = "No volume history"
     static let emptyRepPRs = "No rep PRs"
     static let shelved = "Shelved"
+    static let noExercisesMatch = "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise."
 }
 
 extension View {

@@ -43,12 +43,14 @@ enum WorkoutActivityController {
     /// screen, or the clock re-adopting after an app relaunch); otherwise tear
     /// down whatever is up and start fresh. A rest running on the torn-down
     /// activity (quick rest armed before the session opened) carries over.
-    static func beginSession(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) async {
+    static func beginSession(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int,
+                             currentSet: CurrentSetProjection?) async {
         guard isSupported else { return }
         if let a = current, a.content.state.sessionID == sessionID, !a.attributes.isAdHoc {
             var s = a.content.state
             s.currentLift = currentLift
             s.defaultRestSeconds = defaultRestSeconds
+            s.currentSet = currentSet
             await a.update(content(for: s))
             return
         }
@@ -56,7 +58,7 @@ enum WorkoutActivityController {
         await endAllActivities()
         let state = WorkoutActivityAttributes.ContentState(
             sessionID: sessionID, currentLift: currentLift,
-            defaultRestSeconds: defaultRestSeconds, rest: carriedRest
+            defaultRestSeconds: defaultRestSeconds, rest: carriedRest, currentSet: currentSet
         )
         _ = try? Activity.request(
             attributes: WorkoutActivityAttributes(startDate: startDate, isAdHoc: false),
@@ -65,13 +67,15 @@ enum WorkoutActivityController {
         )
     }
 
-    /// The lift being worked changed (or its smart rest did) — keep the
-    /// elapsed face and the quick-rest default honest.
-    static func updateContext(currentLift: String, defaultRestSeconds: Int) async {
+    /// The lift being worked changed (or its smart rest did, or the set the
+    /// lifter is on) — keep the elapsed face, the quick-rest default, and the
+    /// Lock Screen's set face honest.
+    static func updateContext(currentLift: String, defaultRestSeconds: Int, currentSet: CurrentSetProjection?) async {
         guard let a = current else { return }
         var s = a.content.state
         s.currentLift = currentLift
         s.defaultRestSeconds = defaultRestSeconds
+        s.currentSet = currentSet
         await a.update(content(for: s))
     }
 
@@ -208,13 +212,14 @@ enum WorkoutActivityController {
         }
     }
 
-    static func beginSessionDetached(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int) {
-        enqueue { await beginSession(sessionID: sessionID, startDate: startDate,
-                                     currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+    static func beginSessionDetached(sessionID: String, startDate: Date, currentLift: String, defaultRestSeconds: Int,
+                                     currentSet: CurrentSetProjection?) {
+        enqueue { await beginSession(sessionID: sessionID, startDate: startDate, currentLift: currentLift,
+                                     defaultRestSeconds: defaultRestSeconds, currentSet: currentSet) }
     }
 
-    static func updateContextDetached(currentLift: String, defaultRestSeconds: Int) {
-        enqueue { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds) }
+    static func updateContextDetached(currentLift: String, defaultRestSeconds: Int, currentSet: CurrentSetProjection?) {
+        enqueue { await updateContext(currentLift: currentLift, defaultRestSeconds: defaultRestSeconds, currentSet: currentSet) }
     }
 
     static func startRestDetached(_ rest: RestClock.State, exerciseName: String) {
@@ -263,8 +268,20 @@ enum WorkoutActivityController {
         String(format: "%d:%02d", max(0, seconds) / 60, max(0, seconds) % 60)
     }
 
-    /// Mirror of NotificationService.scheduleRestDone (kept in sync so the
-    /// widget extension needn't link the app's service layer).
+    /// The bundled completion tone, named here (and not in the app's service
+    /// layer) because this controller is also compiled into the widget
+    /// extension. `CompletionCue` plays the same file in the foreground.
+    static let completionSoundFile = "completion-cue.wav"
+    /// Device-local preference (UserDefaults, like the Health read opt-in):
+    /// whether the completion cue makes a sound at all. Haptics keep their
+    /// own persisted setting. Defaults on.
+    static let completionSoundPreferenceKey = "completionCueSound"
+    static var completionSoundEnabled: Bool {
+        UserDefaults.standard.object(forKey: completionSoundPreferenceKey) as? Bool ?? true
+    }
+
+    /// The one "Rest over." notification. Scheduled when a rest starts or is
+    /// retargeted, cancelled on skip, pause, and foreground completion.
     private static func scheduleNotification(at endDate: Date, exerciseName: String) {
         let seconds = endDate.timeIntervalSinceNow
         cancelNotification()
@@ -276,8 +293,12 @@ enum WorkoutActivityController {
             let content = UNMutableNotificationContent()
             content.title = "Rest over."
             content.body = exerciseName.isEmpty ? "Rest complete." : "\(exerciseName) — next set."
-            content.sound = .default
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+            content.sound = completionSoundEnabled
+                ? UNNotificationSound(named: UNNotificationSoundName(rawValue: completionSoundFile)) : nil
+            // The foreground tick owns the deadline and cancels this request;
+            // a one-second margin keeps that cancellation ahead of delivery so
+            // the athlete never hears the tone twice.
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds + 1, repeats: false)
             center.add(UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger))
         }
         // Ask only when the athlete starts a feature that needs alerts; first

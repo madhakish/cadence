@@ -2,6 +2,28 @@ import XCTest
 @testable import CadenceCore
 
 final class SetLifecycleTests: XCTestCase {
+    /// The one auto-rest rule both the logger and the Lock Screen apply
+    /// after a verdict: a NEW completion, with auto-start on and no rest
+    /// already running, arms the exercise's rest — a minute after a warmup.
+    func testRestAfterCompletingFollowsTheAutoStartRule() {
+        XCTAssertEqual(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                        restSeconds: 180, autoStart: true, restRunning: false), 180)
+        XCTAssertEqual(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: true,
+                                                        restSeconds: 180, autoStart: true, restRunning: false), 60)
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: false, restRunning: false))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: true))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .completed, status: .completed, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: false),
+                     "re-applying an existing completion is not a new one")
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .skipped, isWarmup: false,
+                                                      restSeconds: 180, autoStart: true, restRunning: false))
+        XCTAssertNil(SetLifecycle.restAfterCompleting(previous: .planned, status: .completed, isWarmup: false,
+                                                      restSeconds: 0, autoStart: true, restRunning: false),
+                     "conditioning has no rest to arm")
+    }
+
     func testRestTargetsOnlyUnfinishedExercises() {
         XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed, .planned], [.planned]], after: 0), 0)
         XCTAssertEqual(SetLifecycle.nextPendingExerciseIndex([[.completed], [.skipped], [.planned]], after: 0), 2)
@@ -139,5 +161,29 @@ final class SetLifecycleTests: XCTestCase {
         XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.planned), .completed)
         XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.completed), .skipped)
         XCTAssertEqual(SetLifecycle.nextCorrectionStatus(.skipped), .planned)
+    }
+
+    /// The Lock Screen face and its commands agree on the session's layout by
+    /// a fingerprint that survives relaunches (never `hashValue`).
+    func testLayoutFingerprintIsDeterministicAndStructural() {
+        let a = SetLifecycle.layoutFingerprint("Back Squat#wss;Deadlift#ss")
+        XCTAssertEqual(a, SetLifecycle.layoutFingerprint("Back Squat#wss;Deadlift#ss"))
+        XCTAssertNotEqual(a, SetLifecycle.layoutFingerprint("Deadlift#ss;Back Squat#wss"), "order matters")
+        XCTAssertNotEqual(a, SetLifecycle.layoutFingerprint("Back Squat#wsss;Deadlift#ss"), "a set added matters")
+        XCTAssertEqual(SetLifecycle.layoutFingerprint(""), "cbf29ce484222325", "FNV-1a offset basis for the empty string")
+    }
+
+    /// Timed and conditioning work reads as a duration on the face, never as
+    /// a rep prescription.
+    func testProjectionLabelsDurationForTimedWork() {
+        let plank = CurrentSetProjection(exerciseIndex: 1, setIndex: 0, ordinal: 1, total: 3, isWarmup: false,
+                                         reps: 1, loadLb: 0, exerciseName: "Plank", durationSeconds: 30)
+        XCTAssertEqual(plank.prescriptionLabel, "0:30")
+        let ruck = CurrentSetProjection(exerciseIndex: 1, setIndex: 0, ordinal: 1, total: 1, isWarmup: false,
+                                        reps: 1, loadLb: 20, exerciseName: "Ruck", durationSeconds: 600)
+        XCTAssertEqual(ruck.prescriptionLabel, "10:00 · 20 lb / 9.1 kg")
+        let squat = CurrentSetProjection(exerciseIndex: 0, setIndex: 1, ordinal: 2, total: 3, isWarmup: false,
+                                         reps: 6, loadLb: 185, exerciseName: "Back Squat")
+        XCTAssertEqual(squat.prescriptionLabel, "6 reps · 185 lb / 83.9 kg")
     }
 }

@@ -52,3 +52,50 @@
 - Plate guide — add the IWF small denominations using shared plate colour metadata. Explain that IPF fixes colours only for 15/20/25 kg; the guide never adds inventory.
 - Compatibility — retain the public SessionPrescription(mainWork:blocks:) initializer; only engine-produced blocks assert a resolved methodology.
 - Scope correction — #199's duration implementation is now included; its native/UI validation is still pending. Approved physical plate geometry, Lock Screen set completion and the headphone cue remain unfinished; the earlier “out of this pass” note is historical scope, not completion evidence.
+- Completion cue — one bundled tone (the web client's 880 Hz half-second) says "done" for rest and holds alike: through an ambient session on screen, so it follows headphones and mixes with music, and on the background notification, so the phone says the same thing face-down. Foreground plays it once and cancels the alert; a background alert is never replayed on return.
+
+- Workout commands — one service changes a set's status and decides what follows (focus, the next rest's lift, whether to arm it), used by the logger's control, the hold timer, and the Lock Screen. A Lock Screen face names its set structurally and the app re-derives, at the moment the tap runs, whether that set is still the one to act on; a stale face is refused, never redirected. Ending the Live Activity remains distinct from banking the workout.
+
+- Plate colours — one token → colour table (fill, edge, ink) lives in the shared core and every renderer on both clients reads it; no plate hex is spelled outside metadata. Each disc has one spoken name built in core.
+- Renderer state — presentation (a set row's compact bar vs the current set's stage) is chosen by the surface; emphasis (current / standard / muted) is a renderer prop that changes only opacity, never geometry, order, or labels.
+
+- Loadout summary — one composition everywhere a bar is explained: "Achieved with bar" in the accent, the load numeral pounds-first with the difference from the request beside it, the bar and the per-side stack on one line, then one cell per plate family (bumpers, steel, change) counting both sleeves, plus a collars cell. The calculator opens on "Know your load." and no longer repeats the stack as a list.
+
+## Session hierarchy, 2026-09-17
+
+- Dominant block — the focused lift owns the top of the session: movement eyebrow, set track, current set (position, reps, load), then its set rows. Nothing above it changes when a set is completed; the iPhone capture suite asserts the set track and current-set hero keep their frames (`test13SetCompletionKeepsDominantBlockStill`).
+- Session progress — "Exercise N of M · S of T work sets · date" is supporting information. It rides as the focused section's footer on native and as the focused card's footer on web, never as a card of its own.
+- One supporting section — the gym picker ("Training at"), "Add exercise", and session notes share one "Session" section beneath the exercises on both clients. For the proof fixture (three lifts, none passed) the session list holds 5 sections where the design-pass baseline held 8.
+- Unchanged — set completion, focus advance, rest, gym-switch bar restamping, notes persistence, and the cycle model. History and program filtering are untouched.
+
+## Exercise pane tiers, 2026-09-17
+
+- Tier 1, always visible — classification eyebrow, current prescription (load × reps, set position, effort cue, rest), the loaded bar, and the achieved-with-bar summary. Nothing in it is recomputed; it is the logger's own entry and solver path.
+- Tier 2, one expand — "Previous performance & programming": last done, the top-set sparkline, program membership, cycle and rotation context, deload phase. Its collapsed face states last-done and the assignment count.
+- Tier 3, one expand — "Muscles & relationship": the complementary/main relationship and its originating focus exactly as the engine labelled it, then the anatomy figure with its primary/supporting legend. The relationship left the prescription block; it is context, not the work in hand.
+- Default state — the library opens on the anatomy; between sets both tiers start collapsed so the work in hand is above the fold. Expanding either tier never moves tier 1; the iPhone suite asserts the prescription's frame after both open.
+- Set history (#66) — below the sparkline, "Recent sessions" lists the last five completed sessions containing the exercise, newest first. Each row is the date (and program name when tagged) over its working sets as stored, comma-separated, each set in the History row's performed form — "225 lb × 5 · 2 left, 225 lb × 4" — with the RIR flag under the same label History uses; timed and conditioning sets show duration/distance, never a synthetic load. Warmups and skipped sets are excluded, units follow the display preference, and an exercise with no completed session says "No sessions yet." Five is the browsable window; the full log stays in History.
+
+## Gorilla integration, 2026-09-17
+
+- Artwork — untouched. Every gorilla source and mask stays byte-identical (the registration test pins the digests); the edge is feathered by a container mask on both clients, never in the raster.
+- Selection — the legend is the region control. The masks are raster images whose hit box is the whole figure, so making them tappable would select whichever mask is painted last wherever the finger lands; tapping the figure is deliberately not offered rather than offered wrong. Hover/focus/tap on a legend entry lights the region; native announces the selected value, web announces it in a live region.
+- Order — legends and VoiceOver walk the body head to toe (`anatomicalOrder` in CadenceCore, `ANATOMICAL_ORDER` on web, fixture-checked), not the map's importance order.
+- Names — one spoken name on both clients: "Quads, primary muscle" / "Traps, supporting muscle".
+- Treatment — primary movers carry the warm tint at higher opacity, supporting work the steel wash at lower opacity, both multiplied over the ink so the figure stays legible. Neither colour is a plate colour. The legend's muted labels keep at least 4.5:1 on the card in every theme (tested from the stylesheet tokens).
+
+## Exercise pickers, 2026-09-17
+
+- One surface — every exercise picker is the library browser with a selection closure: native `ExerciseBrowser` (`onSelect`) and web `exerciseBrowser` (`onSelect`). The logger's "Add exercise" sheet and the program editor's lift/accessory pickers are thin wrappers that add the equipment policy, the programmable-only restriction where it applies, and the sheet's title; the library is the same view with rows that navigate to detail. Search, the Movement and Equipment filters, the collapsed category groups with counts, the filter-reveals-matches rule, the shelved badge, and the ⓘ detail-over-the-picker path are shared, not duplicated.
+- Recent — a compact "Recent" group sits above the categories when non-empty: the distinct exercise names from the most recent completed sessions, newest session first and in performed order within a session, capped at six (`ExerciseSearch.recentNames` / `recentExerciseNames`). It is an entry point, not a category: the same search, filters, policy, and availability apply to it, and it never changes what the category groups hold. Nothing is persisted for it.
+- Empty state — when nothing matches, both clients say exactly: "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise." with the clear-filters and new-exercise actions beside the copy, and the toolbar's copies of those actions step aside so each appears once.
+
+## Review fixes, 2026-09-19
+
+- Lock Screen identity — a set command carries the fingerprint of the session layout its face was built from (`SetLifecycle.layoutFingerprint`, FNV-1a, stable across launches); a command whose layout no longer matches is refused as "moved on" rather than resolved against the new order. Stable per-set ids would need a schema change and were not taken.
+- Face after a verdict — every in-app verdict republishes the current set to the Live Activity, a refused command re-projects the saved state (or ends a banked session's activity), and the expanded island keeps Rest/Pause/End beside Complete/Skip.
+- Timed work on the face — timed and conditioning sets read as a duration ("0:30"), never as reps.
+- One cue — the display timer is suspended while the app is in the background and a rest that expired meanwhile ends quietly on return; the notification fires one second after the deadline so a foreground cancellation always wins.
+- Sound preference — the completion tone has a device-local switch (UserDefaults, like the Health read opt-in); haptics and the announcement are independent of it. The cue releases its audio session when the half second is over.
+- Scaled display sizes — the current-set numeral, the achieved total, and the calculator hero use `@ScaledMetric` so they keep their proportion and still follow Dynamic Type, with a minimum scale factor as the floor.
+- Pushed lists — the library browser, the exercise pane, and the signals timeline reserve the plate-button band like the tab roots.

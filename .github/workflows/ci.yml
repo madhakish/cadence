@@ -192,6 +192,8 @@ jobs:
         run: |
           node .github/scripts/test-release-parser.mjs
           node .github/scripts/test-plan-release.mjs
+      - name: Verify the invariant nudge drafts
+        run: node .github/scripts/test-invariant-nudge.mjs
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
       - name: Fetch release history
@@ -412,11 +414,18 @@ jobs:
           shipped/pr73
           "$RUNNER_TEMP/cadence-shipped-stores"
       - name: Verify shipped-store migrations
+        # xcodebuild forwards only TEST_RUNNER_-prefixed variables into the
+        # test process (it strips the prefix). Plain CADENCE_* here never
+        # reached XCTest, so the four shipped-store lineage tests skipped on
+        # every green run (#213). The REQUIRE flag turns a missing path or
+        # store into a failure on CI while local runs without fixtures still
+        # skip.
         env:
-          CADENCE_V129_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129
-          CADENCE_FAILED_UPGRADES_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129-after-failed-upgrades
-          CADENCE_PR72_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr72
-          CADENCE_PR73_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr73
+          TEST_RUNNER_CADENCE_REQUIRE_SHIPPED_STORES: "1"
+          TEST_RUNNER_CADENCE_V129_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129
+          TEST_RUNNER_CADENCE_FAILED_UPGRADES_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129-after-failed-upgrades
+          TEST_RUNNER_CADENCE_PR72_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr72
+          TEST_RUNNER_CADENCE_PR73_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr73
         run: >-
           xcodebuild test
           -project Cadence.xcodeproj

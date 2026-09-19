@@ -122,6 +122,18 @@ committed under `docs/design-pass/before/`; the proof-only patch and baseline
 job have been removed. The remaining visual workflow is manual-only so routine
 pull requests retain the repository's single gated iOS build.
 
-Web verification runs from `web` with `npm test`. Native core, migration, device
-build, and visual proof run in GitHub Actions because the repository's local
-Linux workspace has no Xcode runtime.
+Web captures come from `web/tools/capture-web-proof.mjs`, which serves this
+checkout inside the `zenika/alpine-chrome:with-puppeteer` image, seeds a
+fictional program and mid-workout session through the app's own modules, and
+screenshots Today, the session, the exercise pane, the calculator and its
+inspection, the library, Settings, and History at 390×844 and 1280×800. The
+header comment carries the `podman run` line.
+
+Web verification runs from `web` with `npm test`. That chain ends with an
+axe-core audit (`tests/axe.test.mjs`) over every rendered tab and pushed screen,
+so an unnamed control fails the suite instead of waiting for a VoiceOver pass.
+The iPhone workflow's `test12AccessibilityAudit` runs Xcode's accessibility
+audit over Today, Settings, the active session, and the calculator and reports
+every issue on a surface together. Native core, migration, device build, and
+visual proof run in GitHub Actions because the repository's local Linux
+workspace has no Xcode runtime.

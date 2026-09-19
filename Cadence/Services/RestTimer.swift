@@ -11,7 +11,10 @@ import UIKit
 /// class just ticks the display and delegates the "Rest over." notification
 /// and the workout Live Activity's rest face to `WorkoutActivityController`,
 /// so the phone can sit face-down on the chalk bucket and still be driven
-/// from the Lock Screen; buzzes on finish when haptics are enabled.
+/// from the Lock Screen. A foreground finish plays the one CompletionCue
+/// (tone through the active route, haptic when enabled, VoiceOver); a
+/// background finish is the notification carrying the same tone, and
+/// `reconcileFromActivity` never replays it on return.
 @Observable
 final class RestTimer {
     private(set) var remaining: TimeInterval = 0
@@ -21,6 +24,28 @@ final class RestTimer {
     var hapticsEnabled = true
     private var clock: RestClock.State?
     private var timer: Timer?
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        #if canImport(UIKit)
+        // While suspended the display timer cannot run and the notification
+        // owns the deadline; on return, a rest that expired meanwhile ends
+        // quietly instead of playing the cue the notification already played.
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.invalidate()
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.resumeAfterForeground()
+            },
+        ]
+        #endif
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     var isPaused: Bool { clock?.paused ?? false }
     var total: TimeInterval { clock?.total ?? 0 }
@@ -152,6 +177,20 @@ final class RestTimer {
         timer = nil
     }
 
+    /// Back in the foreground with the display timer suspended: resume the
+    /// countdown, or finish a rest whose deadline passed while away without
+    /// a second cue.
+    private func resumeAfterForeground() {
+        guard let state = clock, !state.paused, timer == nil, isRunning else { return }
+        remaining = RestClock.remaining(state, now: now)
+        if remaining <= 0 {
+            stopLocalOnly()
+            WorkoutActivityController.applyRestDetached(nil, exerciseName: exerciseName)
+        } else {
+            startTicking()
+        }
+    }
+
     /// Clear local state without touching the activity/notification (they were
     /// already handled elsewhere).
     private func stopLocalOnly() {
@@ -168,13 +207,13 @@ final class RestTimer {
             invalidate()
             isRunning = false
             clock = nil
-            // Swap the activity back to its elapsed face (ends an ad-hoc one).
+            // Swap the activity back to its elapsed face (ends an ad-hoc one)
+            // — that also cancels the pending notification, so the cue below
+            // is the only one the athlete hears.
             WorkoutActivityController.applyRestDetached(nil, exerciseName: exerciseName)
-            if hapticsEnabled {
-                #if canImport(UIKit)
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                #endif
-            }
+            #if canImport(UIKit)
+            CompletionCue.play(haptics: hapticsEnabled, announcement: "Rest over")
+            #endif
         }
     }
 }

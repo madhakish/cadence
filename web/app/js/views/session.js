@@ -32,6 +32,15 @@ const loadOptions = (exercise) => ({
   loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
   exerciseType: exercise?.type,
 });
+// What each entry has already lifted, in the shape C.priorWorkLb reads:
+// completed working loads only — planned and skipped sets, and warmups,
+// prepared nobody. Mirrors ActiveSessionView's sessionWork.
+const sessionWork = (exercises, exMap) => exercises.map((entry) => {
+  const ex = exMap.get(entry.exerciseName);
+  return { order: entry.order, movementGroup: ex?.movementGroup || "", exerciseType: ex?.type || "",
+    completedWorkLbs: (entry.sets || []).filter((set) => !set.isWarmup && set.status === "completed")
+      .map((set) => set.weightLb) };
+});
 
 const availablePlates = (gym, exercise = null) => {
   const rack = !gym || !Array.isArray(gym.plateToggles) || !gym.plateToggles.length
@@ -294,14 +303,21 @@ export async function openSession(id) {
     const working = (se.sets || []).filter((set) => !set.isWarmup).sort((a, b) => a.order - b.order);
     const workingLb = overrideWorkingLb ?? se.plannedWeightLb ?? working[0]?.weightLb;
     if (!ex || !(workingLb > 0)) return;
+    const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
+    // Work already COMPLETED earlier in the session on this movement with
+    // this implement trims the ramp below it (issue #64) — but only while
+    // every warmup here is still planned: once one is resolved the ramp is
+    // the lifter's record and only its weights refresh. Mirrors native.
+    const priorWorkLb = existing.some((set) => (set.status || "planned") !== "planned")
+      ? null
+      : C.priorWorkLb(se.order, ex.movementGroup, ex.type, sessionWork(session.exercises, exMap));
     const fullRamp = ex.type === "barbell"
       ? achievableWarmups(
-        C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name)),
+        C.warmupRamp(workingLb, C.barLb(bar), 5, includesEmptyBarWarmup(ex.name), priorWorkLb),
         workingLb, bar, gymState.value, ex,
       )
       : (ex.type === "dumbbell" && se.programRole === "main" ? C.dumbbellWarmupRamp(workingLb, 5) : null);
     if (!fullRamp) return;
-    const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
     // A programmed entry was built under a resolved warmup policy — full ramp,
     // two bridging sets for a complementary lift, or none — possibly refined
     // by the user's own row edits. Resync refreshes the warmup WEIGHTS for the
@@ -456,13 +472,26 @@ export async function openSession(id) {
       earlier.forEach((entry) => prior.append(exerciseCard(entry, body, false)));
       body.append(prior);
     }
+    // Session progress is supporting information: it rides as the footer of
+    // the dominant block (or of the session card once every lift is done),
+    // never as a card of its own. Mirrors the native focused-section footer.
+    const progress = ui.h("div", { class: "session-progress" },
+      ui.h("span", { class: "mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
+      ui.h("span", { class: "sub", text: ` · ${ui.fmtDate(session.date)}` }));
     if (current) {
-      body.append(exerciseCard(current, body, true));
+      const focused = exerciseCard(current, body, true);
+      focused.append(progress);
+      body.append(focused);
     }
-    body.append(ui.h("div", { class: "session-progress" },
-      ui.h("div", { class: "eyebrow", text: workoutName }),
-      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
-      ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
+    session.exercises.slice(currentIndex + 1)
+      .forEach((se) => body.append(exerciseCard(se, body, false)));
+
+    // One supporting card for the session itself: where it is happening,
+    // adding a lift, and notes. Mirrors the native "Session" section beneath
+    // the exercises.
+    const support = ui.h("section", { class: "card session-support", "aria-label": "Session" },
+      ui.h("div", { class: "section-title", text: "Session" }));
+    if (!current) support.append(progress);
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));
       gymSelect.addEventListener("change", () => {
@@ -487,16 +516,13 @@ export async function openSession(id) {
         }
         save(); renderBody(body);
       });
-      body.append(ui.field("Training at", gymSelect));
+      support.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.slice(currentIndex + 1)
-      .forEach((se) => body.append(exerciseCard(se, body, false)));
-
-    body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
-
-    const notes = ui.h("textarea", { rows: 2, placeholder: "Session notes", value: session.notes || "" });
+    support.append(ui.h("button", { class: "btn ghost wide", text: "+ Add exercise", onClick: () => pickExercise(body) }));
+    const notes = ui.h("textarea", { rows: 2, placeholder: "Optional", value: session.notes || "" });
     notes.addEventListener("input", () => { session.notes = notes.value; save(); });
-    body.append(ui.h("div", { class: "section-title", text: "Session notes" }), notes);
+    support.append(ui.field("Session notes", notes));
+    body.append(support);
 
     body.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "16px", minHeight: "52px", fontSize: "18px" }, text: COPY.sessionDone, onClick: () => finish() }));
     body.append(ui.h("button", { class: "btn ghost danger wide", style: { marginTop: "8px" },
@@ -677,7 +703,7 @@ export async function openSession(id) {
   }
 
   function barSelect(se, body) {
-    const sel = ui.h("select", { class: "bar-select" },
+    const sel = ui.h("select", { class: "bar-select", "aria-label": `Bar for ${se.exerciseName}` },
       ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === C.barId(barFor(se)) })));
     sel.addEventListener("change", () => {
       se.barId = sel.value;
@@ -740,10 +766,12 @@ export async function openSession(id) {
       "aria-label": `Set status: ${s.status}`,
       title: "Tap to complete or undo; hold for more set options",
       onClick: () => {
-        const newlyCompleted = s.status !== "completed";
-        s.status = newlyCompleted ? "completed" : "planned";
+        const previous = s.status;
+        s.status = previous !== "completed" ? "completed" : "planned";
         focusAfterVerdict(se, s.status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
+        const seconds = C.restAfterCompleting({ previous, status: s.status, isWarmup: !!s.isWarmup,
+          restSeconds: restFor(exMap.get(se.exerciseName), se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+        if (seconds) armRest(seconds);
         save(); renderBody(body);
       },
       onContextMenu: (event) => { event.preventDefault(); chooseStatus(se, s, body); },
@@ -788,7 +816,9 @@ export async function openSession(id) {
               try { await save(); }
               catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
               focusAfterVerdict(se, s.status);
-              if (settings.autoStartRest && !rest.running) armRest(restFor(ex, se.programRole));
+              const restToArm = C.restAfterCompleting({ previous: previousStatus, status: s.status, isWarmup: !!s.isWarmup,
+                restSeconds: restFor(ex, se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+              if (restToArm) armRest(restToArm);
               renderBody(body); paintBar();
             },
           }),
@@ -808,7 +838,10 @@ export async function openSession(id) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
       const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
-      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle);
+      // Presentation by surface (the current set's stage vs a set row);
+      // emphasis by state. State never changes geometry.
+      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle,
+        { emphasis: isCurrent ? "current" : "muted" });
       const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
       const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
       if (isCurrent) {
@@ -821,11 +854,11 @@ export async function openSession(id) {
             ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
               const expanded = barbellSVG(solution, "full", plateStyle);
               screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
-                loadoutSummary(requestedLb, solution));
+                loadoutSummary(requestedLb, solution, { plateStyle }));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
           },
-        }), loadoutSummary(requestedLb, solution, { compact: true }));
+        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
         wrap.append(rendered.svg);
@@ -853,10 +886,12 @@ export async function openSession(id) {
     ui.actionSheet("Set status", ["planned", "completed", "skipped"].map((status) => ({
       label: status[0].toUpperCase() + status.slice(1),
       onClick: () => {
-        const newlyCompleted = status === "completed" && s.status !== "completed";
+        const previous = s.status;
         s.status = status;
         focusAfterVerdict(se, status);
-        if (newlyCompleted && settings.autoStartRest && !rest.running) armRest(restFor(exMap.get(se.exerciseName), se.programRole));
+        const seconds = C.restAfterCompleting({ previous, status, isWarmup: !!s.isWarmup,
+          restSeconds: restFor(exMap.get(se.exerciseName), se.programRole), autoStart: !!settings.autoStartRest, restRunning: rest.running });
+        if (seconds) armRest(seconds);
         save(); renderBody(body);
       },
     })));
@@ -1237,12 +1272,13 @@ export async function openSession(id) {
         // The shared picker surface (issues #63/#66): search, equipment
         // filters, and a detail preview that opens over the sheet so the
         // search/filter state survives the inspection.
-        c.append(exercisePickerList(all.filter((exercise) => C.equipmentPolicyAllows(sessionProgram?.equipmentPolicy, exercise.type)), (e) => {
+        c.append(exercisePickerList(all, (e) => {
+          exMap.set(e.name, e);
           session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
             barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
             plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
           api.close(); save(); renderBody(body);
-        }));
+        }, { equipmentPolicy: sessionProgram?.equipmentPolicy }));
       },
     });
   }

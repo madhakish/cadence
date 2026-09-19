@@ -9,6 +9,9 @@ struct SettingsView: View {
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
     @Query private var settingsList: [AppSettings]
+    /// Device-local, never in the store or a backup (it mirrors this phone's
+    /// audio preference the way the Health read opt-in mirrors an OS grant).
+    @AppStorage(WorkoutActivityController.completionSoundPreferenceKey) private var completionCueSound = true
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
     @Query(sort: \TrainingInterval.startDate, order: .reverse)
@@ -127,6 +130,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                             Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                             Toggle("Haptics", isOn: bindable.haptics)
+                            Toggle("Completion sound", isOn: $completionCueSound)
                             Toggle("Show gym tag on first launch of the day",
                                    isOn: bindable.gymTagFirstLaunchOfDay)
                             Text("Profile & Health").font(.headline)
@@ -319,6 +323,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .accessibilityIdentifier("settings-screen")
+        .plateCalculatorClearance()
         .saveChangesOnDisappear(context, operation: "Saving settings")
         .navigationTitle("Settings")
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
@@ -1812,66 +1817,21 @@ private struct ProgramAccessoryRow: View {
     }
 }
 
-/// Exercise picker used by the program day editor.
+/// Exercise picker used by the program day editor: the library browser with
+/// a selection closure (issue #63), restricted to programmable exercises.
 private struct ExercisePickerSheetView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @State private var search = ""
-    @State private var typeFilter: ExerciseType?
-    @State private var detailExercise: Exercise?
     var equipmentPolicy: EquipmentPolicy = .any
     let onPick: (String) -> Void
 
-    private var visible: [Exercise] {
-        // The shared search rule (diacritic-insensitive POSIX folding), not a
-        // hand-rolled locale-collation predicate — this was the one picker
-        // left off the canonical matcher, so "degage" found an accented
-        // exercise everywhere except here.
-        let available = exercises.filter { $0.isAvailableForProgramming && equipmentPolicy.allows(exerciseType: $0.typeRaw) }
-        let pool = typeFilter.map { filter in available.filter { $0.type == filter } } ?? available
-        guard !search.isEmpty else { return pool }
-        let term = ExerciseSearch.preparedTerm(search)
-        return pool.filter { $0.matchesSearch(preparedTerm: term) }
-    }
-
     var body: some View {
         NavigationStack {
-            List {
-                // Equipment filter + detail preview: the same picker surface
-                // as the logger's add-exercise sheet (issues #63/#66).
-                Section {
-                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
-                }
-                ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                    let inCategory = visible.filter { $0.category == category }
-                    if !inCategory.isEmpty {
-                        Section(category.rawValue) {
-                            ForEach(inCategory) { exercise in
-                                HStack {
-                                    Button(exercise.name) { onPick(exercise.name); dismiss() }
-                                    Spacer()
-                                    Button {
-                                        detailExercise = exercise
-                                    } label: {
-                                        Image(systemName: "info.circle")
-                                            .foregroundStyle(Theme.accent)
-                                    }
-                                    .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                    }
-                }
+            ExerciseBrowser(equipmentPolicy: equipmentPolicy, availableOnly: true) { exercise in
+                onPick(exercise.name)
+                dismiss()
             }
             .navigationTitle("Pick exercise")
-            .searchable(text: $search, prompt: "Exercise, movement, or equipment")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .sheet(item: $detailExercise) { exercise in
-                NavigationStack {
-                    ExerciseDetailView(exercise: exercise)
-                }
-            }
         }
     }
 }

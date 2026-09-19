@@ -170,11 +170,14 @@ struct HomeView: View {
                         Button { activeSession = open } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 Label("Resume workout", systemImage: "play.fill").font(.title3.bold())
-                                Text(openSessionLabel(open)).font(.caption).foregroundStyle(.secondary)
+                                // Everything on the accent fill reads in the
+                                // on-accent ink: system secondary and the
+                                // accent itself both vanish against it (#61).
+                                Text(openSessionLabel(open)).font(.caption).foregroundStyle(Theme.onAccent.opacity(0.85))
                                 if workoutClock.isTracking(sessionID: open.id), let start = workoutClock.startDate {
                                     TimelineView(.periodic(from: start, by: 1)) { timeline in
                                         Text(workoutElapsedLabel(from: start, to: workoutClock.pausedAt ?? timeline.date))
-                                            .font(.title2.bold().monospacedDigit()).foregroundStyle(Theme.accent)
+                                            .font(.title2.bold().monospacedDigit()).foregroundStyle(Theme.onAccent)
                                     }
                                 }
                             }
@@ -493,6 +496,7 @@ struct HomeView: View {
             .listStyle(.plain)
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
+            .plateCalculatorClearance()
             .sheet(isPresented: $showProgramSwitcher) {
                 NavigationStack {
                     ProgramSwitcherView(onError: { switcherError = $0 })

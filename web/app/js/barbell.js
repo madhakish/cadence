@@ -1,11 +1,9 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, plateTintGains } from "./barbell-scene.js";
+import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintGains } from "./barbell-scene.js";
 
 const NS = "http://www.w3.org/2000/svg";
-const FILL = { red: "#d23b3b", blue: "#2f6fed", green: "#1faa52", yellow: "#e8b008", white: "#ededed", black: "#1c1d22" };
-const STROKE = { red: "#7a1f1f", blue: "#1b3f8f", green: "#10632f", yellow: "#8a6a04", white: "#9a9a9a", black: "#3a3b42" };
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 
 
@@ -14,13 +12,13 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // imply physically impossible plate thickness. Decorative: callers provide
 // the adjacent denomination label. Mirrors PlateFaceBadge.
 export function plateBadgeSVG(plate, style = "steel") {
-  const token = C.plateColorToken(plate, style);
-  const foreground = ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff";
+  const colour = C.plateColour(C.plateColorToken(plate, style));
+  const foreground = colour.ink;
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
     "aria-hidden": "true", focusable: "false" });
   svg.append(
-    el("circle", { cx: 26, cy: 26, r: 24, fill: FILL[token] || "#888",
-      stroke: STROKE[token] || "#333", "stroke-width": 2 }),
+    el("circle", { cx: 26, cy: 26, r: 24, fill: colour.fill,
+      stroke: colour.edge, "stroke-width": 2 }),
     el("circle", { cx: 26, cy: 26, r: 17, fill: "none", stroke: foreground,
       "stroke-width": 1, opacity: .34 }),
   );
@@ -64,11 +62,15 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, s
 }
 
 // Render the exact domain solution through one scene in both presentations.
-export function barbellSVG(solution, presentation = "compact", plateStyle = "steel") {
+// `presentation` is chosen by the SURFACE (a set row vs the current set's
+// stage); `emphasis` is the state (current / standard / muted) and changes
+// only opacity — never geometry, order, or labels.
+export function barbellSVG(solution, presentation = "compact", plateStyle = "steel", { emphasis = "standard" } = {}) {
   if (!solution?.bar || !Array.isArray(solution?.perSide)) {
     throw new TypeError("barbellSVG requires a complete plate solution");
   }
   const rendered = realisticBarbellSVG(solution, plateStyle);
+  rendered.svg.classList.add(`emphasis-${emphasis}`);
   if (presentation !== "full") {
     rendered.svg.classList.remove("full");
     rendered.svg.classList.add("compact");
@@ -93,7 +95,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     metal.append(el('stop', { offset, 'stop-color': color }));
   defs.append(metal);
   const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
-  for (const token of Object.keys(FILL)) {
+  for (const token of Object.keys(C.PLATE_COLOURS)) {
     const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
     // Tint the approved photographic texture; the hub is redrawn unfiltered.
     const gain = plateTintGains(token);
@@ -125,15 +127,16 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   }
   for (const d of scene.discs) {
     const token = C.plateColorToken(d.plate, style);
+    const colour = C.plateColour(token);
     const side = d.side < 0 ? 'left' : 'right';
     const group = el('g', { class:'barbell-plate-body', tabindex:0, role:'img',
       'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
       'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
-      'aria-label':`${C.plateLabel(d.plate)} plate, ${d.index+1} from inside, ${side} side` });
+      'aria-label':discAccessibilityLabel(d) });
     const x = d.x + d.depth/2;
     // Extruded edge and recessed photographic face share the same diameter.
-    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:STROKE[token] }),
-      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:STROKE[token] }));
+    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:colour.edge }),
+      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:colour.edge }));
     const face = el('image', { class:'barbell-plate-face', href:art, x:x-d.faceRadius, y:d.y-d.radius,
       width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', filter:`url(#${id}-${token})` });
     group.append(face);
@@ -146,7 +149,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     const labelSize = exploded ? 14 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
-      fill:['white','yellow','green'].includes(token) ? '#17191c' : '#fff',
+      fill:colour.ink,
       'data-plate-denomination':C.plateLabel(d.plate) });
     label.textContent = C.trim(d.plate.value, 2);
     group.append(label);
@@ -189,24 +192,29 @@ export function barbellStage(rendered, {
   };
   paint();
   stage.append(track);
-  // The complete-bar overview scales to fit. Its loading key remains real
-  // HTML text; never make someone read shrunken stamping to load the bar.
-  if (!inspection) stage.append(uiText("div", "barbell-loading-key mono",
-    rendered.solution.perSide.length ? `Per side: ${C.perSideLabel(rendered.solution.perSide)}`
-      : rendered.solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
   if (inspection) {
-    const toggle = uiText("button", "btn ghost sm barbell-explode", "Assemble bar");
+    // One quiet line says which view this is and what a tap does; the same
+    // control is the accessible toggle. Tapping the artwork toggles too.
+    const toggle = uiText("button", "btn ghost sm barbell-explode", "38° inspection · tap to collapse");
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "true");
-    toggle.addEventListener("click", () => {
+    toggle.setAttribute("aria-label", `${toggle.textContent}. Assemble bar`);
+    const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    const flip = () => {
       exploded = !exploded;
       paint();
-      toggle.textContent = exploded ? "Assemble bar" : "Explode plates";
+      toggle.textContent = exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect";
+      toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
-    });
-    footer.append(toggle, uiText("span", "sub", "Swipe across · inside → outside"));
+      swipe.hidden = !exploded;
+    };
+    toggle.addEventListener("click", flip);
+    // A plate is focusable so its name can be read; activating it must not
+    // flip the view under a screen-reader user.
+    track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
+    footer.append(toggle, swipe);
   } else if (onExpand) {
-    const button = uiText("button", "btn ghost sm barbell-expand", "Inspect plates");
+    const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";
     button.setAttribute("aria-label", "Inspect loaded bar and explode plates");
     button.addEventListener("click", onExpand);
@@ -214,7 +222,9 @@ export function barbellStage(rendered, {
     track.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onExpand(); }
     });
-    footer.append(uiText("span", "sub", caption), button);
+    footer.append(uiText("span", "sub", caption || "Tap to inspect"), button);
+  } else {
+    footer.append(uiText("span", "sub", caption));
   }
   stage.append(footer);
   if (inspection) {
@@ -252,15 +262,20 @@ const summaryRow = (label, value, warning = false) => {
   return row;
 };
 
-// One totals block for the calculator and every in-session plate preview.
-// Pounds are intentionally first regardless of the entry unit; `solution`
-// is the exact object handed to the renderer, so the numbers and steel can
-// never drift through a second calculation in the view.
-export function loadoutSummary(requestedLb, solution, { compact = false } = {}) {
+// The one totals composition used anywhere Cadence explains a solved or
+// entered bar — the calculator, the current set, the exercise pane, the
+// workout preview. What was achieved, pounds first, kilograms after; how far
+// from what was asked; which bar and what is on each side; and one cell per
+// plate family so the rack is readable at a glance. `solution` is the exact
+// object handed to the renderer, so the numbers and steel can never drift
+// through a second calculation in the view. Mirrors native LoadoutSummaryView.
+export function loadoutSummary(requestedLb, solution, { compact = false, plateStyle = "steel" } = {}) {
   const difference = requestedLb == null ? null : solution.totalLb - requestedLb;
   const sign = difference > .005 ? "+" : "";
   const summary = dom("div", `card load-summary${compact ? " compact" : ""}`);
-  summary.append(dom("span", "eyebrow", "ACHIEVED · BAR INCLUDED"));
+  const hero = dom("div", "loadout-hero");
+  const achieved = dom("div", "loadout-achieved");
+  achieved.append(dom("span", "eyebrow accent", "Achieved with bar"));
   const weights = dom("div", "dual-weight mono");
   weights.setAttribute("role", "group");
   weights.setAttribute("aria-label", `Achieved total, bar included, ${C.both(solution.totalLb)}`);
@@ -272,16 +287,39 @@ export function loadoutSummary(requestedLb, solution, { compact = false } = {}) 
     measure.append(dom("span", primary ? "weight-value load-numeral" : "weight-value", C.trim(value)), dom("span", "weight-unit", unit));
     weights.append(measure);
   }
-  summary.append(weights);
-  const grid = dom("div", "load-summary-grid");
-  if (requestedLb != null) grid.append(summaryRow("Requested", C.both(requestedLb)));
-  grid.append(summaryRow("Bar", C.both(C.barLb(solution.bar))),
-    summaryRow("Plates / side", C.perSideLabel(solution.perSide)));
-  if (solution.collarLb > 0) grid.append(summaryRow("Collars", C.both(solution.collarLb)));
-  if (difference != null) grid.append(summaryRow("Difference",
-    `${sign}${C.trim(difference, 2)} lb / ${sign}${C.trim(C.kgFromLb(difference), 2)} kg`,
-    Math.abs(difference) > .01));
-  summary.append(grid);
+  achieved.append(weights);
+  hero.append(achieved);
+  if (difference != null) {
+    const delta = dom("div", `loadout-delta mono${Math.abs(difference) > .01 ? " warn" : ""}`);
+    delta.append(dom("strong", "", `${sign}${C.trim(difference, 2)} lb`), dom("span", "sub", `from ${C.trim(requestedLb)} lb`));
+    hero.append(delta);
+  }
+  summary.append(hero);
+  const line = dom("div", "loadout-line");
+  line.append(dom("span", "sub", C.barLabel(solution.bar)),
+    dom("strong", "mono", solution.perSide.length ? `${C.perSideLabel(solution.perSide)} / side`
+      : solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
+  summary.append(line);
+  const cells = dom("div", "loadout-cells");
+  cells.setAttribute("role", "list");
+  for (const count of solution.perSide) {
+    const cell = dom("div", "loadout-cell");
+    cell.setAttribute("role", "listitem");
+    const text = dom("div", "loadout-cell-text");
+    text.append(dom("strong", "mono", `${count.count * 2} × ${C.plateLabel(count.plate)}`),
+      dom("span", "sub", plateFamilyLabel(plateFamily(count.plate, plateStyle))));
+    cell.append(plateBadgeSVG(count.plate, plateStyle), text);
+    cells.append(cell);
+  }
+  if (solution.collarLb > 0) {
+    const cell = dom("div", "loadout-cell");
+    cell.setAttribute("role", "listitem");
+    const text = dom("div", "loadout-cell-text");
+    text.append(dom("strong", "mono", "2 collars"), dom("span", "sub", "Outermost"));
+    cell.append(text);
+    cells.append(cell);
+  }
+  if (cells.childElementCount) summary.append(cells);
   return summary;
 }
 

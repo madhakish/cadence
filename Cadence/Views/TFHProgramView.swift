@@ -73,6 +73,7 @@ private struct TFHAnchorEditor: View {
                 TextField("lb", value: $anchor.weightLb, format: .number)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .disabled(anchor.loadBasis == .bodyweight)
+                    .accessibilityLabel("Starting load in pounds")
             }
             Text("\(anchor.loadBasis.rawValue) · \(anchor.implementCount) implement(s)\(anchor.isPerSide ? " · reps per side" : "")")
                 .font(.caption).foregroundStyle(.secondary)
@@ -88,6 +89,7 @@ private struct TFHAnchorEditor: View {
                 Text("Smallest available step (lb)")
                 TextField("lb", value: $anchor.incrementLb, format: .number)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    .accessibilityLabel("Smallest available step in pounds")
             }
             Picker("Purpose", selection: $anchor.intent) {
                 Text("Develop").tag(TFHIntent.develop)
@@ -111,6 +113,7 @@ struct TFHEvidenceView: View {
                 get: { session.tfhContext ?? "" },
                 set: { session.tfhContext = $0.isEmpty ? nil : String($0.prefix(500)) }
             ))
+            .accessibilityLabel("Comparison conditions")
             Text("Use the same description only when conditions are comparable. Missing conditions or benchmark evidence leaves capacity unassessed.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Completed, unflagged work felt clean") {
@@ -151,6 +154,7 @@ private struct TFHBenchmarkEditor: View {
                 Text("Actual rest before this set (seconds)")
                 TextField("Unknown", value: $result.restSeconds, format: .number)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    .accessibilityLabel("Actual rest before this set in seconds")
             }
             if let error { Text(error).foregroundStyle(.red) }
             Button("Record benchmark context") {

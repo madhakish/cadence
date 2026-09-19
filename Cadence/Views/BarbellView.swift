@@ -25,20 +25,12 @@ func authoritativePlateSolution(
     )
 }
 
-private enum PlatePalette {
-    static let fill: [String: Color] = [
-        "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
-        "yellow": Color(hex: 0xE8B008), "white": Color(hex: 0xEDEDED), "black": Color(hex: 0x1C1D22),
-    ]
-    static let stroke: [String: Color] = [
-        "red": Color(hex: 0x7A1F1F), "blue": Color(hex: 0x1B3F8F), "green": Color(hex: 0x10632F),
-        "yellow": Color(hex: 0x8A6A04), "white": Color(hex: 0x9A9A9A), "black": Color(hex: 0x3A3B42),
-    ]
-
-    static func labelColor(for token: String) -> Color {
-        token == "white" || token == "yellow" || token == "green"
-            ? Color(hex: 0x24262A) : .white
-    }
+/// Plate colours come from the one table in CadenceCore (`PlatePalette`);
+/// this only turns its hex into SwiftUI colours.
+private extension PlateColour {
+    var fillColor: Color { Color(hex: fill) }
+    var edgeColor: Color { Color(hex: edge) }
+    var inkColor: Color { Color(hex: ink) }
 }
 
 /// A readable, face-on denomination key for a plate in the calculator. The
@@ -49,15 +41,15 @@ struct PlateFaceBadge: View {
     let plate: Plate
     let style: PlateVisualStyle
 
-    private var token: String { plate.colorToken(for: style) }
+    private var colour: PlateColour { PlatePalette.colour(for: plate.colorToken(for: style)) }
 
     var body: some View {
-        let foreground = PlatePalette.labelColor(for: token)
+        let foreground = colour.inkColor
         ZStack {
             Circle()
-                .fill(PlatePalette.fill[token] ?? Color(hex: 0x888888))
+                .fill(colour.fillColor)
             Circle()
-                .stroke(PlatePalette.stroke[token] ?? .black.opacity(0.3), lineWidth: 2)
+                .stroke(colour.edgeColor, lineWidth: 2)
             Circle()
                 .stroke(foreground.opacity(0.34), lineWidth: 1)
                 .padding(7)
@@ -75,12 +67,17 @@ struct PlateFaceBadge: View {
 }
 
 /// Renders the solver's exact stack with the approved photographic plate faces.
+/// `presentation` is chosen by the SURFACE (a set row vs the current set's
+/// stage); `emphasis` is the state and changes only opacity — never geometry,
+/// order, or labels.
 struct BarbellView: View {
     enum Presentation: Equatable { case compactSide, fullBar }
+    enum Emphasis: Equatable { case current, standard, muted }
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
     var presentation: Presentation = .compactSide
     var exploded = false
+    var emphasis: Emphasis = .standard
 
     static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle) -> CGFloat {
         CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 0.55))
@@ -126,7 +123,8 @@ struct BarbellView: View {
             let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
             for disc in scene.discs {
                 let token = disc.plate.colorToken(for: plateStyle)
-                let edge = PlatePalette.stroke[token] ?? .gray
+                let colour = PlatePalette.colour(for: token)
+                let edge = colour.edgeColor
                 let x = disc.x + disc.depth / 2
                 let face = CGRect(x: x - disc.faceRadius, y: disc.y - disc.radius,
                     width: disc.faceRadius * 2, height: disc.radius * 2)
@@ -150,7 +148,7 @@ struct BarbellView: View {
                 }
                 let label = Text(Weight.trim(disc.plate.value, decimals: 2))
                     .font(.system(size: exploded ? 14 : 10, weight: .heavy))
-                    .foregroundColor(PlatePalette.labelColor(for: token))
+                    .foregroundColor(colour.inkColor)
                 context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
             }
             if solution.loadout.collarLb > 0 {
@@ -164,11 +162,12 @@ struct BarbellView: View {
             }
         }
         .frame(height: presentation == .compactSide ? 84 : nil)
+        .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
         .accessibilityChildren {
             ForEach([-1, 1], id: \.self) { side in
                 ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
-                    Text("\(side < 0 ? "Left" : "Right") plate \(disc.index + 1) from inside, \(disc.plate.label)")
+                    Text(disc.accessibilityLabel)
                         .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
                 }
             }
@@ -196,23 +195,25 @@ struct BarbellStageView: View {
                     .frame(height: 170)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onExpand)
-                Button(action: onExpand) {
-                        Label("Inspect plates", systemImage: "arrow.up.left.and.arrow.down.right")
+                HStack {
+                    Text("Tap to inspect").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(action: onExpand) {
+                        Label("Larger view", systemImage: "arrow.up.right")
+                            .labelStyle(.titleAndIcon)
                             .font(.callout.bold())
                             .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("Inspect loaded bar and explode plates")
+                    .accessibilityIdentifier("expand-loaded-bar")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Inspect loaded bar and explode plates")
-                .accessibilityIdentifier("expand-loaded-bar")
             } else {
                 BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
                     .frame(height: 170)
+                Text(caption).font(.caption).foregroundStyle(.secondary)
             }
-            Text(solution.loadout.perSide.isEmpty
-                 ? (solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
-                 : "Per side: \(solution.loadout.perSideLabel)")
-                .font(.body.monospacedDigit())
-            Text(caption).font(.caption).foregroundStyle(.secondary)
             if abs(solution.deviationLb) > 0.01 {
                 Text("Difference: \(solution.deviationLb > 0 ? "+" : "")\(Weight.trim(solution.deviationLb, decimals: 2)) lb")
                     .font(.caption.bold()).foregroundStyle(Theme.warn)
@@ -233,23 +234,33 @@ struct BarbellInspectionView: View {
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
         VStack(alignment: .leading, spacing: 12) {
-            Button(exploded ? "Assemble bar" : "Explode plates") {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { exploded.toggle() }
-            }
-            .buttonStyle(.bordered)
-            .frame(minHeight: 44)
-            .accessibilityValue(exploded ? "Exploded" : "Assembled")
-            .accessibilityIdentifier("barbell-explode-toggle")
-            Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
             GeometryReader { proxy in
                 ScrollView(.horizontal, showsIndicators: true) {
                     BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
                         .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
                                height: exploded ? scene.height : 230)
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggle() }
                 }
             }
             .frame(height: exploded ? scene.height + 20 : 250)
             .accessibilityIdentifier("barbell-inspection-artwork")
+            // One quiet line says which view this is and what a tap does; the
+            // same control is the accessible toggle.
+            HStack {
+                Button(exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect") { toggle() }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel(exploded ? "Assemble bar" : "Explode plates")
+                    .accessibilityValue(exploded ? "Exploded" : "Assembled")
+                    .accessibilityIdentifier("barbell-explode-toggle")
+                Spacer()
+                if exploded {
+                    Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Text("Plates per side").font(.headline)
             ForEach(Array(solution.loadout.perSide.enumerated()), id: \.offset) { _, count in
                 HStack(spacing: 12) {
@@ -270,82 +281,157 @@ struct BarbellInspectionView: View {
         }
         .padding(.horizontal)
     }
+
+    private func toggle() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
+    }
 }
 
+/// The one totals composition used anywhere Cadence explains a solved or
+/// entered bar — the calculator, the current set, the exercise pane, the
+/// workout preview. What was achieved, pounds first, kilograms after; how far
+/// from what was asked; which bar and what is on each side; and one cell per
+/// plate family so the rack is readable at a glance. Web twin:
+/// `loadoutSummary` in barbell.js.
 struct LoadoutSummaryView: View {
     let requestedLb: Double?
     let loadout: Loadout
+    var plateStyle: PlateVisualStyle = .steel
+    /// The achieved total keeps its display proportion and follows Dynamic Type.
+    @ScaledMetric(relativeTo: .largeTitle) private var totalSize: CGFloat = 40
 
     private var differenceLb: Double? {
         requestedLb.map { loadout.totalLb - $0 }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("ACHIEVED — BAR INCLUDED")
-                .font(.caption.bold())
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
+    private var perSideText: String {
+        loadout.perSide.isEmpty
+            ? (loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+            : "\(loadout.perSideLabel) / side"
+    }
 
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                weight(Weight.trim(loadout.totalLb), unit: "lb", prominent: true)
-                Text("/")
-                    .font(.title3.weight(.light))
-                    .foregroundStyle(.tertiary)
-                weight(Weight.trim(Weight.kg(fromLb: loadout.totalLb)), unit: "kg", prominent: false)
+    private struct Cell: Identifiable {
+        let id: String
+        let plate: Plate?
+        let count: String
+        let kind: String
+    }
+
+    /// One cell per denomination, counting both sleeves, then the collars.
+    private var cells: [Cell] {
+        var result = loadout.perSide.map { count in
+            Cell(id: count.plate.id,
+                 plate: count.plate,
+                 count: "\(count.count * 2) × \(count.plate.label)",
+                 kind: PlateGeometry.familyLabel(PlateGeometry.family(count.plate, style: plateStyle)))
+        }
+        if loadout.collarLb > 0 {
+            result.append(Cell(id: "collars", plate: nil, count: "2 collars", kind: "Outermost"))
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ACHIEVED WITH BAR")
+                        .font(.caption.bold())
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.accent)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(Weight.trim(loadout.totalLb))
+                            .font(.system(size: totalSize, weight: .black, design: .rounded).monospacedDigit())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                        Text("lb")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                        Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
+                            .font(.title2.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 4)
+                        Text("kg")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                if let requestedLb, let differenceLb {
+                    let sign = differenceLb > 0.005 ? "+" : ""
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb")
+                            .font(.callout.bold().monospacedDigit())
+                            .foregroundStyle(abs(differenceLb) > 0.01 ? Theme.warn : .secondary)
+                        Text("from \(Weight.trim(requestedLb)) lb")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Achieved total, bar included, \(Weight.both(lb: loadout.totalLb))")
+            .accessibilityLabel(accessibilitySummary)
 
             Divider()
 
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                if let requestedLb {
-                    summaryRow("Requested", Weight.both(lb: requestedLb))
-                }
-                summaryRow("Bar", Weight.both(lb: loadout.bar.lb))
-                summaryRow("Plates / side", loadout.perSideLabel)
-                if loadout.collarLb > 0 {
-                    summaryRow("Collars", Weight.both(lb: loadout.collarLb))
-                }
-                if let differenceLb {
-                    let sign = differenceLb > 0.005 ? "+" : ""
-                    summaryRow(
-                        "Difference",
-                        "\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb / "
-                            + "\(sign)\(Weight.trim(Weight.kg(fromLb: differenceLb), decimals: 2)) kg",
-                        warning: abs(differenceLb) > 0.01
-                    )
+            HStack(alignment: .firstTextBaseline) {
+                Text(loadout.bar.label)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(perSideText)
+                    .font(.body.bold().monospacedDigit())
+                    .multilineTextAlignment(.trailing)
+            }
+            .accessibilityElement(children: .combine)
+
+            if !cells.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                    ForEach(cells) { cell in
+                        LoadoutCell(cell: cell, style: plateStyle)
+                    }
                 }
             }
         }
     }
 
-    private func weight(_ value: String, unit: String, prominent: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(value)
-                .font(.system(size: prominent ? 36 : 27, weight: .black, design: .rounded))
-                .monospacedDigit()
-                .minimumScaleFactor(0.65)
-                .lineLimit(1)
-            Text(unit)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
+    private var accessibilitySummary: String {
+        var parts = ["Achieved total, bar included, \(Weight.both(lb: loadout.totalLb))"]
+        if let requestedLb, let differenceLb {
+            let sign = differenceLb > 0.005 ? "plus " : (differenceLb < -0.005 ? "minus " : "")
+            parts.append("from \(Weight.trim(requestedLb)) lb, \(sign)\(Weight.trim(abs(differenceLb), decimals: 2)) lb")
         }
+        return parts.joined(separator: ", ")
     }
 
-    private func summaryRow(_ label: String, _ value: String, warning: Bool = false) -> some View {
-        GridRow {
-            Text(label)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.weight(.semibold).monospacedDigit())
-                .foregroundStyle(warning ? Theme.warn : .primary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .multilineTextAlignment(.trailing)
+    private struct LoadoutCell: View {
+        let cell: Cell
+        let style: PlateVisualStyle
+
+        var body: some View {
+            HStack(spacing: 8) {
+                if let plate = cell.plate {
+                    PlateFaceBadge(plate: plate, style: style)
+                        .scaleEffect(0.5)
+                        .frame(width: 26, height: 26)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cell.count)
+                        .font(.callout.bold().monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(cell.kind)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.hairline, lineWidth: 0.5))
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 }
-// Plate colours use the shared Color(hex:) from Theme.swift.
+// Colour(hex:) comes from Theme.swift; the plate hex values come from CadenceCore.

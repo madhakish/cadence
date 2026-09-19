@@ -1,28 +1,14 @@
 import Foundation
 import UserNotifications
 
-/// Local notifications only: rest timer done + next-morning knee check-in.
+/// Local notifications only: hold complete + next-morning knee check-in. The
+/// rest notification is owned by WorkoutActivityController, which also
+/// drives the Live Activity's rest face; both use CompletionCue's tone.
 enum NotificationService {
 
     static func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
         return (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
-    }
-
-    /// Fires when the rest period ends. Terse, like everything else.
-    static func scheduleRestDone(in seconds: TimeInterval, exerciseName: String) {
-        guard seconds > 0 else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Rest over."
-        content.body = "\(exerciseName) — next set."
-        content.sound = .default
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
-        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
-    }
-
-    static func cancelRestDone() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
     }
 
     @MainActor private static var holdRequestID: String?
@@ -46,7 +32,7 @@ enum NotificationService {
         let content = UNMutableNotificationContent()
         content.title = "Hold complete."
         content.body = "\(exerciseName) — target time reached."
-        content.sound = .default
+        content.sound = CompletionCue.notificationSound
         let request = UNNotificationRequest(identifier: id, content: content,
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false))
         holdRequestTask = Task {

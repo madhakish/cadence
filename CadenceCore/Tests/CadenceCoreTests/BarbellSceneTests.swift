@@ -35,6 +35,78 @@ final class BarbellSceneTests: XCTestCase {
         }
     }
 
+    /// DP-3's renderer fixtures F1–F8, mirrored from web/tests/plate-renderer.test.mjs:
+    /// the scene carries every entered plate mirrored once, names each with
+    /// its exact denomination, keeps entered order, and keeps steel and
+    /// bumper geometry distinct.
+    func testRendererFixturesMirrorWeb() {
+        func solve(_ lb: Double, _ bar: Bar, _ plates: [Plate], collar: Double = 0,
+                   policy: LoadingPolicy = .closest) -> PlateSolution {
+            PlateMath.solveLoad(weightLb: lb, bar: bar, plates: plates, collarLb: collar, policy: policy)
+        }
+        let entered = Loadout(bar: .bar45lb, perSide: [45, 10, 25, 2.5].map {
+            PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)
+        }, preservesOrder: true)
+        let fixtures: [(String, Loadout, PlateVisualStyle)] = [
+            ("F1", solve(Weight.lb(fromKg: 100), .bar20kg, Plate.standardKg).loadout, .steel),
+            ("F2", solve(225, .bar45lb, Plate.standardLb).loadout, .steel),
+            ("F3", solve(139, .bar45lb, Plate.standardKg).loadout, .steel),
+            ("F4", solve(Weight.lb(fromKg: 22.5), .bar20kg, Plate.standardKg).loadout, .steel),
+            ("F5", entered, .steel),
+            ("F6", solve(200, .bar45lb, [Plate(value: 45, unit: .lb)], policy: .exact).loadout, .steel),
+            ("F7", solve(195, .bar45lb, Plate.standardLb).loadout, .bumper),
+            ("F8", solve(50, .bar45lb, Plate.standardLb, collar: 5).loadout, .steel),
+        ]
+        for (name, loadout, style) in fixtures {
+            let scene = BarbellScene(loadout: loadout, style: style, exploded: false)
+            let entered = loadout.perSide.reduce(0) { $0 + max(0, $1.count) }
+            XCTAssertEqual(scene.discs.count, entered * 2, "\(name): every entered plate is mirrored exactly once")
+            for disc in scene.discs {
+                XCTAssertFalse(disc.plate.label.isEmpty, "\(name): every plate carries its denomination")
+                XCTAssertTrue(disc.accessibilityLabel.contains(disc.plate.label),
+                              "\(name): the spoken name carries the exact denomination")
+            }
+        }
+        let f4 = fixtures[3].1.perSide.flatMap { Array(repeating: $0.plate, count: $0.count) }
+        XCTAssertTrue(f4.contains { $0.label == "1.25 kg" }, "F4: a 1.25 kg plate remains 1.25 kg")
+        let f5 = BarbellScene(loadout: entered, style: .steel, exploded: false)
+        XCTAssertEqual(f5.discs.filter { $0.side == 1 }.sorted { $0.index < $1.index }.map { $0.plate.value },
+                       [45, 10, 25, 2.5], "F5: reverse mode preserves entered collar-to-sleeve order")
+        let f7 = fixtures[6].1
+        // Mirrors the web check: the first two plates (45 + 25) differ in
+        // calibrated steel and share one competition diameter as bumpers; the
+        // 5 lb change plate is legitimately smaller in both families.
+        let steelRadii = BarbellScene(loadout: f7, style: .steel, exploded: false).discs
+            .filter { $0.side == 1 }.sorted { $0.index < $1.index }.map(\.radius)
+        let bumperRadii = BarbellScene(loadout: f7, style: .bumper, exploded: false).discs
+            .filter { $0.side == 1 }.sorted { $0.index < $1.index }.map(\.radius)
+        XCTAssertNotEqual(steelRadii[0], steelRadii[1], "F7: calibrated steel steps down with denomination")
+        XCTAssertEqual(bumperRadii[0], bumperRadii[1], "F7: bumpers keep one competition diameter")
+        XCTAssertGreaterThan(fixtures[7].1.collarLb, 0, "F8: configured collars are part of the loadout")
+        XCTAssertEqual(BarbellScene.Disc(plate: Plate(value: 20, unit: .kg), side: -1, index: 0,
+                                         x: 0, y: 0, radius: 1, faceRadius: 1, depth: 1).accessibilityLabel,
+                       "20 kg plate, 1 from inside, left side", "one spoken name on both clients")
+    }
+
+    func testPlatePaletteIsTheOneColourTable() {
+        XCTAssertEqual(PlatePalette.colour(for: "yellow").ink, 0x24262A)
+        XCTAssertEqual(PlatePalette.colour(for: "red").ink, 0xFFFFFF)
+        XCTAssertEqual(PlatePalette.hex(PlatePalette.colour(for: "blue").fill), "#2f6fed")
+        XCTAssertEqual(PlatePalette.colour(for: "chartreuse"), PlatePalette.fallback)
+        XCTAssertEqual(PlateFaceTint(token: "black").red, 1, "black iron is the untinted texture")
+    }
+
+    func testPlateFamilyNamesTheSummaryCell() {
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .kg), style: .bumper), "bumper",
+                       "a full-size 5 kg training bumper is a bumper")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .kg), style: .steel), "steel")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 2.5, unit: .kg), style: .bumper), "change")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 45, unit: .lb), style: .steel), "steel")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .lb), style: .bumper), "change")
+        XCTAssertEqual(PlateGeometry.familyLabel("bumper"), "Bumpers")
+        XCTAssertEqual(PlateGeometry.familyLabel("change"), "Change")
+    }
+
     func testFiveKilogramBumperDoesNotBecomeAChangePlate() {
         let plate = Plate(value: 5, unit: .kg)
         XCTAssertEqual(PlateGeometry.reference(plate, style: .bumper).diameter, 450)

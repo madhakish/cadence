@@ -5,10 +5,10 @@ import Foundation
 public struct PlateFaceTint: Equatable, Sendable {
     public let red, green, blue: Double
 
+    /// Black iron is the untinted texture; every other token tints the face
+    /// with its palette fill.
     public init(token: String) {
-        let colors = ["red": 0xD23B3B, "blue": 0x2F6FED, "green": 0x1FAA52,
-                      "yellow": 0xE8B008, "white": 0xEDEDED]
-        if let hex = colors[token] {
+        if token != "black", let hex = PlatePalette.colours[token]?.fill {
             red = Double((hex >> 16) & 255) / 255 * 3.2
             green = Double((hex >> 8) & 255) / 255 * 3.2
             blue = Double(hex & 255) / 255 * 3.2
@@ -31,27 +31,47 @@ public struct PlateGeometry: Equatable, Sendable {
         self.thickness = thickness
     }
 
+    private static let bumperTable: [String: [Double]] = [
+        "25-kg": [450, 70], "20-kg": [450, 60], "15-kg": [450, 48],
+        "10-kg": [450, 35], "5-kg": [450, 25],
+        "55-lb": [450, 75], "45-lb": [450, 65], "35-lb": [450, 52],
+        "25-lb": [450, 40], "10-lb": [450, 25],
+    ]
+    private static let steelTable: [String: [Double]] = [
+        "25-kg": [450, 27], "20-kg": [450, 22], "15-kg": [400, 21],
+        "10-kg": [325, 20], "5-kg": [230, 20],
+        "55-lb": [450, 30], "45-lb": [450, 27], "35-lb": [400, 25],
+        "25-lb": [325, 23], "10-lb": [230, 20],
+    ]
+    private static let changeTable: [String: [Double]] = [
+        "2.5-kg": [210, 19], "2-kg": [190, 19], "1.5-kg": [175, 18],
+        "1.25-kg": [160, 16], "1-kg": [160, 16], "0.5-kg": [135, 12],
+        "5-lb": [190, 19], "2.5-lb": [160, 16], "1.25-lb": [135, 12],
+    ]
+
     public static func reference(_ plate: Plate, style: PlateVisualStyle) -> PlateGeometry {
-        let bumper: [String: [Double]] = [
-            "25-kg": [450, 70], "20-kg": [450, 60], "15-kg": [450, 48],
-            "10-kg": [450, 35], "5-kg": [450, 25],
-            "55-lb": [450, 75], "45-lb": [450, 65], "35-lb": [450, 52],
-            "25-lb": [450, 40], "10-lb": [450, 25],
-        ]
-        let steel: [String: [Double]] = [
-            "25-kg": [450, 27], "20-kg": [450, 22], "15-kg": [400, 21],
-            "10-kg": [325, 20], "5-kg": [230, 20],
-            "55-lb": [450, 30], "45-lb": [450, 27], "35-lb": [400, 25],
-            "25-lb": [325, 23], "10-lb": [230, 20],
-        ]
-        let change: [String: [Double]] = [
-            "2.5-kg": [210, 19], "2-kg": [190, 19], "1.5-kg": [175, 18],
-            "1.25-kg": [160, 16], "1-kg": [160, 16], "0.5-kg": [135, 12],
-            "5-lb": [190, 19], "2.5-lb": [160, 16], "1.25-lb": [135, 12],
-        ]
-        let dimensions = (style == .bumper ? bumper : steel)[plate.id]
-            ?? change[plate.id] ?? [200, 20]
+        let dimensions = (style == .bumper ? bumperTable : steelTable)[plate.id]
+            ?? changeTable[plate.id] ?? [200, 20]
         return PlateGeometry(diameter: dimensions[0], thickness: dimensions[1])
+    }
+
+    /// The physical family a denomination belongs to in a style — a full-size
+    /// bumper, a calibrated steel disc, or a change plate. It names the cell
+    /// in the loadout summary and never changes geometry or mass. Mirrors
+    /// web `plateFamily`.
+    public static func family(_ plate: Plate, style: PlateVisualStyle) -> String {
+        if style == .bumper, bumperTable[plate.id] != nil { return "bumper" }
+        if steelTable[plate.id] != nil { return "steel" }
+        return "change"
+    }
+
+    /// "Bumpers" / "Steel" / "Change" — the cell's second line.
+    public static func familyLabel(_ family: String) -> String {
+        switch family {
+        case "bumper": return "Bumpers"
+        case "steel": return "Steel"
+        default: return "Change"
+        }
     }
 }
 
@@ -68,6 +88,13 @@ public struct BarbellScene: Sendable {
         public let radius: Double
         public let faceRadius: Double
         public let depth: Double
+
+        /// The one spoken name for a plate on the bar, on both clients:
+        /// "20 kg plate, 1 from inside, left side". Mirrors web
+        /// `discAccessibilityLabel`.
+        public var accessibilityLabel: String {
+            "\(plate.label) plate, \(index + 1) from inside, \(side < 0 ? "left" : "right") side"
+        }
     }
 
     public let discs: [Disc]

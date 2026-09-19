@@ -24,6 +24,8 @@ final class UnitsTests: XCTestCase {
         XCTAssertEqual(Weight.trim(232.39), "232.4")
         XCTAssertEqual(Weight.trim(2.5, decimals: 2), "2.5")
         XCTAssertEqual(Weight.trim(1.25, decimals: 2), "1.25")
+        XCTAssertEqual(Weight.trim(45, decimals: 2), "45", "a whole denomination prints whole")
+        XCTAssertEqual(Weight.trim(10.0 / 3, decimals: 2), "3.33", "stored precision rounds, never truncates")
     }
 
     func testBothFormat() {

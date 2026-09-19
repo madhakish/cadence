@@ -117,6 +117,9 @@ struct WorkoutPreviewView: View {
                                 BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style) {
                                     plateDetail = PreviewPlateDetail(solution: solution, style: style, requestedLb: target.weightLb)
                                 }
+                                Text("\(solution.loadout.perSideLabel) / side")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }
@@ -168,7 +171,7 @@ struct WorkoutPreviewView: View {
             NavigationStack {
                 ScrollView {
                     BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
-                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout)
+                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout, plateStyle: detail.style)
                         .padding(.horizontal)
                 }
                 .navigationTitle("Loaded bar")

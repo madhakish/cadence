@@ -59,7 +59,8 @@ const mixed = barbellScene(C.enteredPlateSolution(C.BARS.bar20kg,[{plate:five,co
 assert.equal(mixed.discs[0].radius,230*.18);
 let calls=0;
 const stage = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {onExpand:()=>calls++,containerWidth:390});
-assert.equal(stage.querySelector('.barbell-loading-key').textContent, `Per side: ${C.perSideLabel(solution.perSide)}`);
+assert.equal(stage.querySelector('.barbell-stage-footer .sub').textContent, 'Tap to inspect');
+assert.equal(stage.querySelector('.barbell-expand').textContent, 'Larger view ↗');
 stage.querySelector('.barbell-expand').click();
 assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
@@ -77,6 +78,15 @@ assert.equal(toggle.getAttribute('aria-pressed'),'false');
 toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(JSON.stringify(solution), before);
+// A focusable plate can be activated to hear its name without flipping the
+// view, and the toggle's accessible name carries its visible text.
+{
+  const plate = inspector.querySelector('[tabindex="0"][data-plate-denomination]');
+  plate.dispatchEvent(new plate.ownerDocument.defaultView.Event('click', { bubbles: true }));
+}
+assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true', 'activating a plate does not flip the inspection');
+assert.ok(toggle.getAttribute('aria-label').includes(toggle.textContent), 'the toggle is named by its visible text');
+assert.match(toggle.getAttribute('aria-label'), /Assemble bar/);
 const firstIDs=[...inspector.querySelectorAll('[id]')].map(x=>x.id);
 const secondIDs=[...B.barbellSVG(solution,'full').svg.querySelectorAll('[id]')].map(x=>x.id);
 assert.ok(!secondIDs.some(id=>firstIDs.includes(id)), 'multiple views never collide in SVG paint-server IDs');

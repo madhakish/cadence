@@ -19,6 +19,11 @@ eq(C.trim(232.0), "232", "trim integer");
 eq(C.trim(232.39), "232.4", "trim 1dp");
 eq(C.trim(2.5, 2), "2.5", "trim 2dp trailing zero");
 eq(C.trim(1.25, 2), "1.25", "trim 2dp");
+eq(C.trim(45, 2), "45", "a whole denomination prints whole");
+eq(C.trim(10 / 3, 2), "3.33", "stored precision rounds, never truncates");
+eq(C.plateColour("yellow").ink, "#24262a", "the plate palette is one table (mirrors PlatePalette)");
+eq(C.plateColour("red").ink, "#ffffff", "light ink on a red plate");
+eq(C.plateColour("chartreuse"), C.PLATE_COLOUR_FALLBACK, "an unknown token falls back, never throws");
 eq(C.both(232), "232 lb / 105.2 kg", "both format");
 eq(C.unitFormat("lbPrimary", 232), "232 lb", "lbPrimary");
 eq(C.unitFormat("kgPrimary", 232), "105.2 kg", "kgPrimary");
@@ -183,6 +188,35 @@ r = C.warmupRamp(45);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([45]) && r[0].reps === 10, "ramp 45 bar only");
 r = C.warmupRamp(245, 45, 5, false);
 ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([100, 135, 170, 210]), "ramp can omit empty bar");
+{
+  // Work already completed this session trims the climb below it (issue #64).
+  const weights = (ramp) => JSON.stringify(ramp.map((x) => x.weightLb));
+  const reps = (ramp) => JSON.stringify(ramp.map((x) => x.reps));
+  ok(weights(C.warmupRamp(225)) === JSON.stringify([45, 90, 125, 160, 190]), "ramp 225 weights");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 100)) === JSON.stringify([125, 160, 190]), "prior work 100 drops the steps already climbed");
+  ok(reps(C.warmupRamp(225, 45, 5, true, 100)) === JSON.stringify([3, 2, 1]), "trimmed steps keep their reps");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 125)) === JSON.stringify([160, 190]), "a step equal to the prior work is dropped too");
+  ok(weights(C.warmupRamp(225, 45, 5, true, 315)) === JSON.stringify([160, 190]), "prior work above every step keeps the heaviest two");
+  ok(reps(C.warmupRamp(225, 45, 5, true, 315)) === JSON.stringify([2, 1]), "the kept bridge keeps its reps");
+  ok(weights(C.warmupRamp(225, 45, 5, true, null)) === weights(C.warmupRamp(225))
+    && weights(C.warmupRamp(225, 45, 5, true, 0)) === weights(C.warmupRamp(225)), "no prior work leaves the ramp alone");
+  const sessionWork = [
+    { order: 0, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [225, 225, 245] },
+    { order: 1, movementGroup: "squat", exerciseType: "dumbbell", completedWorkLbs: [80] },
+    { order: 2, movementGroup: "hinge", exerciseType: "barbell", completedWorkLbs: [405] },
+    { order: 3, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [] },
+    { order: 5, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [315] },
+  ];
+  eq(C.priorWorkLb(4, "squat", "barbell", sessionWork), 245, "earlier same-group barbell work counts; later work does not");
+  eq(C.priorWorkLb(4, "squat", "dumbbell", sessionWork), 80, "a dumbbell's per-hand load only counts for a dumbbell lift");
+  eq(C.priorWorkLb(4, "press", "barbell", sessionWork), null, "another movement group prepared nobody");
+  eq(C.priorWorkLb(4, "squat", "barbell", sessionWork.concat([{ order: 2, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [undefined] }])), 245,
+    "a set restored without a load is ignored, not turned into NaN (native coalesces it to 0)");
+  eq(C.priorWorkLb(4, "", "barbell", sessionWork), null, "an unknown movement group never matches");
+  eq(C.priorWorkLb(0, "squat", "barbell", sessionWork), null, "nothing earlier means no prior work");
+  eq(C.priorWorkLb(4, "squat", "barbell", [{ order: 3, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [] }]), null,
+    "an earlier entry with nothing completed yet prepared nobody");
+}
 eq(C.programLoadStep(10, "dumbbell"), 5, "dumbbell program step capped per hand");
 eq(C.programLoadStep(2.5, "dumbbell"), 2.5, "fine dumbbell step preserved");
 eq(C.programLoadStep(10, "barbell"), 10, "barbell program step preserved");
@@ -659,7 +693,7 @@ eq(C.sessionTagCurrent(2, 1, 3, 2, 1, 0), false, "stale day → not current");
   eq(C.canResumeSession(2, 2, 3, 2, 1, 3, plan, plan), false, "stale week → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, [], plan), false, "pre-snapshot session (no plan names) → build fresh");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Overhead Press", "Incline DB Press"], plan), true,
-    "same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
+    "[INV-RESUME-BY-COMPOSITION] same composition in a different order resumes — role-first display reordering (and pre-role-first snapshots) must not orphan an in-flight session");
   eq(C.canResumeSession(2, 1, 3, 2, 1, 3, ["Dips", "Dips", "Overhead Press"], plan), false,
     "plan names compare as a multiset, not a set — duplicates must match");
 }
@@ -1569,6 +1603,15 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(C.exerciseMatchesSearch(searchable, "  ") && !C.exerciseMatchesSearch(searchable, "row"),
     "empty search includes everything and unrelated text is rejected");
 
+  const recentSessions = [["Back Squat", "Bench Press", "Back Squat"], ["Barbell Row", "", "Back Squat", "Overhead Press"], ["Deadlift"]];
+  eq(JSON.stringify(C.recentExerciseNames(recentSessions)),
+    JSON.stringify(["Back Squat", "Bench Press", "Barbell Row", "Overhead Press", "Deadlift"]),
+    "recent lifts are distinct, newest session first, in performed order");
+  eq(JSON.stringify(C.recentExerciseNames(recentSessions, 4)),
+    JSON.stringify(["Back Squat", "Bench Press", "Barbell Row", "Overhead Press"]), "recent lifts honour the cap");
+  ok(C.recentExerciseNames(recentSessions, 0).length === 0 && C.recentExerciseNames([]).length === 0,
+    "a zero cap or no history yields no recent lifts");
+
   const coachingProgram = {
     id: "program", expectedDayIndexes: [0, 1, 2, 3],
     slots: [
@@ -1687,7 +1730,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const blocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   ok(!!blocked && blocked.change.type === "hold",
-    "an unmet volume floor with no eligible day is surfaced, not silently dropped");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] an unmet volume floor with no eligible day is surfaced, not silently dropped");
   ok(blocked.explanation.includes("no eligible day (technique/explosive)"),
     "the blocked evidence names why the floor cannot be raised");
 
@@ -1701,11 +1744,11 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   report = C.evaluateCoaching(constrainedProgram, sessions);
   const constrainedPlan = report.recommendations.find((r) => r.change.type === "capacityPlan");
   ok(!!constrainedPlan && !constrainedPlan.change.additions.some((a) => a.pattern === "verticalPull"),
-    "a pattern with no policy-compatible exercise is never proposed");
+    "[INV-COACH-PROPOSES-ONLY-APPLIABLE] a pattern with no policy-compatible exercise is never proposed");
   const constrainedBlocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   ok(!!constrainedBlocked && constrainedBlocked.explanation.includes("no compatible exercise available"),
-    "the impossible pattern is reported as blocked instead of re-proposed forever");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] the impossible pattern is reported as blocked instead of re-proposed forever");
 
   // Permanently blocked floors report even when this rotation's budget is
   // already spent — only fillable-but-unbudgeted floors wait silently.
@@ -1717,7 +1760,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   const spentBlocked = report.recommendations.find((candidate) =>
     candidate.ruleID === `capacity.rotation-plan.blocked.v${C.COACHING_RULE_VERSION}`);
   eq((spentBlocked?.explanation.match(/no compatible exercise available/g) || []).length, 2,
-    "both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
+    "[INV-BLOCKED-FLOOR-IS-SURFACED] both unfillable floors (vertical pull, adductor) are reported although the 3-set budget was spent on hamstrings");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3));
@@ -1791,7 +1834,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   ok(!!suggestion && suggestion.change.slotID === "squat",
     "a completed max-effort exposure proposes a weekly special-exercise rotation");
   ok(suggestion.id.endsWith("-squat") && !suggestion.id.includes(latestSquat.id),
-    "the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] the rotation id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
 
   report = C.evaluateCoaching(withSlot("squat", { prescriptionStyle: "maxEffort" }), greenSessions);
   ok(!report.recommendations.some((candidate) =>
@@ -1818,7 +1861,7 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
     maxEffortSessions);
   ok(!report.recommendations.some((candidate) =>
     candidate.ruleID === `program.slot.rotate.max-effort-weekly.v${C.COACHING_RULE_VERSION}`),
-  "an unresolvable max-effort rotation is never proposed");
+  "[INV-COACH-PROPOSES-ONLY-APPLIABLE] an unresolvable max-effort rotation is never proposed");
 
   sessions = [];
   for (let dayIndex = 0; dayIndex < 4; dayIndex++) sessions.push(coachingSession(1, dayIndex, dayIndex * 3, 100));
@@ -1857,6 +1900,16 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
   eq(stage.change.expectedBaseWeightLb, 90, "the stage change records the base it evaluated");
   eq(stage.ruleID, "program.slot.linear-triples.v1", "the adaptive stage has an independent rule version");
   ok(stage.explanation.includes("100 to 90 lb"), "the strategy transition explains the observed rebuild");
+  ok(stage.id.endsWith("-press-a") && !linearSessions.some((session) => stage.id.includes(session.id)),
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] the stage id carries only portable components — a client-local session id would resurface dismissed prompts after a backup restore");
+  // A backup restore re-mints every session id (an IndexedDB autoincrement
+  // here); the same logbook must yield the same recommendation id.
+  const restoredStage = C.evaluateCoaching(withSlot("press-a", {
+    prescriptionStyle: "linearFives", baseWeightLb: 90, workingSets: 3, workingReps: 5,
+  }), linearSessions.map((session, index) => ({ ...session, id: index + 1 })))
+    .recommendations.find((candidate) => candidate.change.type === "useLinearTriples");
+  eq(restoredStage?.id, stage.id,
+    "[INV-RECOMMENDATION-ID-IS-PORTABLE] identical data yields an identical id after a restore re-mints the session ids");
 
   report = C.evaluateCoaching(withSlot("press-a", {
     prescriptionStyle: "linearFives", baseWeightLb: 100, workingSets: 3, workingReps: 5,
@@ -3035,6 +3088,10 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 {
   const s = (exerciseName, timestampMs, weightLb, reps) => ({ exerciseName, timestampMs, weightLb, reps });
   const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
+  deq(C.athleteHistoryIndex([]), {},
+    "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] no performed work, no capability — a program's base is never an input to the global fold");
+  eq(C.athleteHistoryIndex([s("Deadlift", 1000, 315, 5)])["Back Squat"], undefined,
+    "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] an exercise with no performed sets has no entry, not an estimate");
   const recency = C.athleteHistoryIndex([s("Deadlift", 1000, 315, 5), s("Deadlift", 2000, 275, 5)]);
   eq(recency.Deadlift.latestCompletedLoadLb, 275, "latest load follows recency, not magnitude");
   eq(recency.Deadlift.latestExposureMs, 2000, "latest exposure is the newest timestamp");
@@ -3102,6 +3159,22 @@ eq(C.activityWorkload(1800, 6.5)?.arbitraryUnits, 195, "half-step RPEs are valid
 
 // Focused logger presentation: resolved ramp rows collapse, but planned
 // warmups stay ahead of the current work set. Mirrors SetLifecycleTests.
+// The one auto-rest rule both the logger and native's Lock Screen apply
+// after a verdict. Mirrors CadenceCore SetLifecycle.restAfterCompleting.
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), 180,
+  "a new completion with auto-start on arms the exercise's rest");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: true, restSeconds: 180, autoStart: true, restRunning: false }), 60,
+  "a warmup rests a minute");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: false, restRunning: false }), null,
+  "auto-start off arms nothing");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: true }), null,
+  "a running rest is never restarted");
+eq(C.restAfterCompleting({ previous: "completed", status: "completed", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), null,
+  "re-applying an existing completion is not a new one");
+eq(C.restAfterCompleting({ previous: "planned", status: "skipped", isWarmup: false, restSeconds: 180, autoStart: true, restRunning: false }), null,
+  "a skip arms nothing");
+eq(C.restAfterCompleting({ previous: "planned", status: "completed", isWarmup: false, restSeconds: 0, autoStart: true, restRunning: false }), null,
+  "conditioning has no rest to arm");
 eq(C.focusedSetIndices([
   { isWarmup: true, status: "completed" },
   { isWarmup: true, status: "planned" },

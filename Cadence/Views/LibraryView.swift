@@ -2,132 +2,22 @@ import SwiftUI
 import SwiftData
 import CadenceCore
 
-/// The exercise library. Search first, then two composable filters, then the
-/// categories as collapsed groups that state their counts — nobody scrolls the
-/// whole catalog to find one lift. A filter reveals only the groups with
-/// matches, opened; clearing it returns every group, collapsed, except the ones
-/// the user opened themselves. Shelved lifts stay visible — with the re-entry
-/// test spelled out — so coming back to them is a decision, not an accident.
-/// Web twin: `exerciseLibrary` in views/settings.js.
+/// The exercise library: the shared browser (`ExerciseBrowser`) with rows
+/// that navigate to each exercise's detail, plus the toolbar that adds a
+/// custom exercise. Web twin: `exerciseLibrary` in views/settings.js.
 struct LibraryView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @State private var search = ""
-    @State private var movementFilter: MovementPattern?
-    @State private var typeFilter: ExerciseType?
-    @State private var openedCategories: Set<ExerciseCategory> = []
     @State private var showNewExercise = false
 
-    private var isFiltering: Bool {
-        !search.isEmpty || movementFilter != nil || typeFilter != nil
-    }
-
-    private var visibleExercises: [Exercise] {
-        let term = search.isEmpty ? nil : ExerciseSearch.preparedTerm(search)
-        return exercises.filter { exercise in
-            if let term, !exercise.matchesSearch(preparedTerm: term) { return false }
-            if !ExerciseSearch.matchesMovement(movementFilter, primary: exercise.movementPattern,
-                                               secondary: exercise.secondaryMovementPattern) { return false }
-            if let typeFilter, exercise.type != typeFilter { return false }
-            return true
-        }
-    }
-
-    /// While filtering, a group is open exactly when it has matches; the
-    /// user's own toggles are remembered only for the unfiltered list.
-    private func isExpanded(_ category: ExerciseCategory, hasMatches: Bool) -> Binding<Bool> {
-        Binding(
-            get: { isFiltering ? hasMatches : openedCategories.contains(category) },
-            set: { open in
-                guard !isFiltering else { return }
-                if open { openedCategories.insert(category) } else { openedCategories.remove(category) }
-            }
-        )
-    }
-
     var body: some View {
-        List {
-            Section {
-                Picker("Movement", selection: $movementFilter) {
-                    Text("All movements").tag(MovementPattern?.none)
-                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
-                        Text(pattern.name).tag(MovementPattern?.some(pattern))
-                    }
-                }
-                Picker("Equipment", selection: $typeFilter) {
-                    Text("All equipment").tag(ExerciseType?.none)
-                    ForEach(ExerciseType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(ExerciseType?.some(type))
-                    }
-                }
-                if isFiltering {
-                    Button("Clear filters") {
-                        search = ""
-                        movementFilter = nil
-                        typeFilter = nil
-                    }
+        ExerciseBrowser()
+            .navigationTitle("Library")
+            .plateCalculatorClearance()
+            .toolbar {
+                Button { showNewExercise = true } label: {
+                    Label("New exercise", systemImage: "plus")
                 }
             }
-            ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                let inCategory = visibleExercises.filter { $0.category == category }
-                if !isFiltering || !inCategory.isEmpty {
-                    Section {
-                        DisclosureGroup(isExpanded: isExpanded(category, hasMatches: !inCategory.isEmpty)) {
-                            ForEach(inCategory) { exercise in
-                                NavigationLink {
-                                    ExerciseDetailView(exercise: exercise)
-                                } label: {
-                                    LibraryRow(exercise: exercise)
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(category.rawValue).font(.headline)
-                                Spacer()
-                                Text("\(inCategory.count)")
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Library")
-        .searchable(text: $search, prompt: "Name, equipment or movement")
-        .toolbar {
-            Button { showNewExercise = true } label: {
-                Label("New exercise", systemImage: "plus")
-            }
-        }
-        .sheet(isPresented: $showNewExercise) { NewExerciseView() }
-    }
-}
-
-private struct LibraryRow: View {
-    let exercise: Exercise
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.name)
-                Text("\(exercise.movementPattern.name) · \(exercise.typeRaw) · \(exercise.loadBasis.label)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if exercise.isShelved {
-                Text(Copy.shelved)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Theme.hardStop.opacity(0.25), in: RoundedRectangle(cornerRadius: 2))
-                    .foregroundStyle(Theme.hardStop)
-            }
-            if exercise.isUnilateral {
-                Text("per side").font(.caption).foregroundStyle(.secondary)
-            }
-        }
+            .sheet(isPresented: $showNewExercise) { NewExerciseView() }
     }
 }
 
@@ -156,6 +46,18 @@ struct ExerciseDetailView: View {
     var sessionEntry: SessionExercise? = nil
     var sessionGym: Gym? = nil
     var sessionProgramFocus: TrainingFocus? = nil
+
+    init(exercise: Exercise, sessionEntry: SessionExercise? = nil, sessionGym: Gym? = nil,
+         sessionProgramFocus: TrainingFocus? = nil) {
+        self.exercise = exercise
+        self.sessionEntry = sessionEntry
+        self.sessionGym = sessionGym
+        self.sessionProgramFocus = sessionProgramFocus
+        // The library opens on the anatomy; between sets the pane opens on
+        // the work in hand (tier 1) with the tiers below collapsed (#184).
+        _showAnatomy = State(initialValue: sessionEntry == nil)
+    }
+
     @Query private var programs: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
@@ -163,7 +65,7 @@ struct ExerciseDetailView: View {
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
 
-    @State private var showAnatomy = true
+    @State private var showAnatomy: Bool
     @State private var showProgramming = false
     @State private var showSetup = false
     @State private var showStatus = false
@@ -259,33 +161,52 @@ struct ExerciseDetailView: View {
         ).snapped
     }
 
-    /// Compact previous-performance context from the newest completed session
-    /// containing this exercise.
-    private var lastDoneLabel: String {
-        for s in completed {
-            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
-            if exercise.type == .timed,
-               let longest = matching.flatMap(\.workingSets).compactMap(\.durationSeconds).max() {
-                let program = s.programName.map { " · \($0)" } ?? ""
-                return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(CardioFormat.durationLabel(seconds: longest))\(program)"
-            }
-            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
-            let program = s.programName.map { " · \($0)" } ?? ""
-            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(settingsList.unitDisplay.format(lb: top.weightLb)) × \(top.reps)\(program)"
+    private struct SessionSetHistory: Identifiable {
+        let session: WorkoutSession
+        let sets: [SetEntry]
+        var id: String { session.id }
+        var title: String {
+            session.date.formatted(date: .abbreviated, time: .omitted)
+                + (session.programName.map { " · \($0)" } ?? "")
         }
-        return "Not yet"
     }
 
-    /// Top-set weight per session, oldest→newest, capped to the last 24.
-    private var topSetSeries: [Double] {
-        var recent: [Double] = []
+    /// One traversal of completed sessions yields the last-done line, the
+    /// top-set series (oldest→newest, last 24) and the per-session set
+    /// history (newest first, last 5, #66). Three properties walking the
+    /// same name filter is how the rule drifts — the membershipData reason.
+    private var performanceData: (lastDone: String, series: [Double], recent: [SessionSetHistory]) {
+        var lastDone = "Not yet"
+        var series: [Double] = []
+        var recent: [SessionSetHistory] = []
         for s in completed {
-            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
-            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
-            recent.append(top.weightLb)
-            if recent.count == 24 { break }
+            let working = s.orderedExercises
+                .filter { $0.exercise?.name == exercise.name }
+                .flatMap(\.workingSets)
+            guard let top = working.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+            if recent.isEmpty {
+                let date = s.date.formatted(date: .abbreviated, time: .omitted)
+                let program = s.programName.map { " · \($0)" } ?? ""
+                if exercise.type == .timed, let longest = working.compactMap(\.durationSeconds).max() {
+                    lastDone = "\(date) — \(CardioFormat.durationLabel(seconds: longest))\(program)"
+                } else {
+                    lastDone = "\(date) — \(settingsList.unitDisplay.format(lb: top.weightLb)) × \(top.reps)\(program)"
+                }
+            }
+            if recent.count < 5 { recent.append(SessionSetHistory(session: s, sets: working)) }
+            if series.count < 24 { series.append(top.weightLb) }
+            if recent.count == 5 && series.count == 24 { break }
         }
-        return recent.reversed()
+        return (lastDone, series.reversed(), recent)
+    }
+
+    /// "225 lb × 5 · 2 left, 225 lb × 4" — the History row's performed label
+    /// per working set, plus the RIR flag under the name History gives it.
+    private func setHistoryLine(_ sets: [SetEntry]) -> String {
+        sets.map { set in
+            performedSetLabel(set, type: exercise.type, unitDisplay: settingsList.unitDisplay)
+                + (set.rir.map { " · \($0.name)" } ?? "")
+        }.joined(separator: ", ")
     }
 
     var body: some View {
@@ -327,12 +248,6 @@ struct ExerciseDetailView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        if let contextualTrainingRelationship {
-                            Text(contextualTrainingRelationship)
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
-                                .accessibilityIdentifier("training-focus-context")
-                        }
                         if let contextualEffortCue {
                             Text(contextualEffortCue)
                                 .font(.callout.bold())
@@ -348,40 +263,10 @@ struct ExerciseDetailView: View {
                             )
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                loadout: contextualSolution.loadout
+                                loadout: contextualSolution.loadout,
+                                plateStyle: style
                             )
                         }
-                    }
-                }
-            }
-
-            if let profile {
-                Section {
-                    DisclosureGroup(isExpanded: $showAnatomy) {
-                        AnatomyFigureView(profile: profile)
-                            .frame(maxWidth: 620)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Muscles worked").font(.headline)
-                            Text(profile.primary.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", "))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                }
-            }
-
-            Section("History") {
-                LabeledContent("Last done") {
-                    Text(lastDoneLabel).multilineTextAlignment(.trailing)
-                }
-                if exercise.type != .timed && topSetSeries.count >= 2 {
-                    LabeledContent("Top set, last \(topSetSeries.count)") {
-                        SparklineView(values: topSetSeries)
-                            .frame(width: 132, height: 30)
                     }
                 }
             }
@@ -391,9 +276,40 @@ struct ExerciseDetailView: View {
             // result four times.
             let data = membershipData
             let gym = defaultGym
+            let performance = performanceData
 
+            // Tier 2, one expand: previous performance, then programming
+            // context. Tier 1 above never moves when this opens (#184).
             Section {
                 DisclosureGroup(isExpanded: $showProgramming) {
+                    LabeledContent("Last done") {
+                        Text(performance.lastDone).multilineTextAlignment(.trailing)
+                    }
+                    if exercise.type != .timed && performance.series.count >= 2 {
+                        LabeledContent("Top set, last \(performance.series.count)") {
+                            SparklineView(values: performance.series)
+                                .frame(width: 132, height: 30)
+                        }
+                    }
+                    // #66: the last five sessions' working sets exactly as
+                    // stored — a projection, nothing the engine resolved is
+                    // recomputed. Warmups and skipped sets never appear.
+                    Text("RECENT SESSIONS")
+                        .font(.caption.bold())
+                        .tracking(0.7)
+                        .foregroundStyle(.secondary)
+                    if performance.recent.isEmpty {
+                        Text("No sessions yet.").foregroundStyle(.secondary)
+                    }
+                    ForEach(performance.recent) { row in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title).font(.caption.bold())
+                            Text(setHistoryLine(row.sets))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
                     if data.labels.isEmpty {
                         Text("Not currently used in a program.").foregroundStyle(.secondary)
                     } else {
@@ -457,10 +373,41 @@ struct ExerciseDetailView: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Programming context").font(.headline)
-                        Text(data.labels.isEmpty ? "No program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s") · rotation details")
+                        Text("Previous performance & programming").font(.headline)
+                        Text("Last done \(performance.lastDone) · " + (data.labels.isEmpty ? "no program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s")"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            // Tier 3, one expand: muscles and the training relationship as
+            // the engine labelled it. The figure's own legend separates
+            // primary from supporting muscles.
+            if profile != nil || contextualTrainingRelationship != nil {
+                Section {
+                    DisclosureGroup(isExpanded: $showAnatomy) {
+                        if let contextualTrainingRelationship {
+                            Text(contextualTrainingRelationship)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("training-focus-context")
+                        }
+                        if let profile {
+                            AnatomyFigureView(profile: profile)
+                                .frame(maxWidth: 620)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Muscles & relationship").font(.headline)
+                            Text(profile.map { $0.primary.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", ") } ?? "Training relationship")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
                 }
             }
@@ -613,6 +560,7 @@ struct ExerciseDetailView: View {
         }
         .listStyle(.plain)
         .accessibilityIdentifier("exercise-detail-screen")
+        .plateCalculatorClearance()
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
         .sheet(isPresented: $showExpandedContextBar) {
@@ -624,7 +572,8 @@ struct ExerciseDetailView: View {
                             BarbellInspectionView(solution: solution, plateStyle: style)
                             LoadoutSummaryView(
                                 requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
-                                loadout: solution.loadout
+                                loadout: solution.loadout,
+                                plateStyle: style
                             )
                             .padding(.horizontal)
                         }
@@ -651,7 +600,7 @@ struct ExerciseDetailView: View {
     }
 }
 
-private struct NewExerciseView: View {
+struct NewExerciseView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var exercises: [Exercise]

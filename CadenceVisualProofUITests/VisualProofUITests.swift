@@ -41,6 +41,19 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
         capture("after-04-exercise-pane-iphone")
 
+        // #184: tiers 2 and 3 open beneath tier 1, which does not move. The
+        // list is scrolled back to its top before the frame is compared.
+        let prescription = app.staticTexts["CURRENT PRESCRIPTION"]
+        XCTAssertTrue(prescription.waitForExistence(timeout: 3))
+        let tierOne = prescription.frame
+        openDisclosure("Previous performance & programming")
+        XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
+        openDisclosure("Muscles & relationship")
+        capture("after-04b-exercise-pane-tiers-open-iphone")
+        for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
+        XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,
+                       "tier 1 moved when tiers 2 and 3 opened")
+
         let frontLabel = app.staticTexts["Front"]
         for _ in 0..<4 where !frontLabel.isHittable { app.swipeUp() }
         XCTAssertTrue(frontLabel.waitForExistence(timeout: 3))
@@ -66,7 +79,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let achieved = app.staticTexts["ACHIEVED — BAR INCLUDED"]
+        let achieved = app.staticTexts["ACHIEVED WITH BAR"]
         for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
         XCTAssertTrue(achieved.isHittable)
         capture("after-07-plate-calculator-iphone")
@@ -83,7 +96,7 @@ final class VisualProofUITests: XCTestCase {
         let artwork = app.scrollViews["barbell-inspection-artwork"]
         let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
-        XCTAssertTrue(firstLeft.label.contains("Left plate 1 from inside"))
+        XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-exploded-iphone")
         toggle.tap()
@@ -101,6 +114,48 @@ final class VisualProofUITests: XCTestCase {
         inspect.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         capture("barbell-bumper-exploded-iphone")
+    }
+
+    /// #196: the floating plate button must never sit on top of a control.
+    /// Every tab root is scrolled to its end, then every hittable control's
+    /// frame is checked against the button's. The reserved band
+    /// (plateCalculatorClearance on each root list) is what makes this hold
+    /// at large text too. The active session is a cover with its own bottom
+    /// bar and no floating button, which the test states rather than
+    /// measures. Failures accumulate so one run reports every surface.
+    func test08PlateButtonNeverCoversContent() {
+        continueAfterFailure = true
+        let plate = app.buttons["Plate calculator"]
+        XCTAssertTrue(plate.waitForExistence(timeout: 5))
+        for tab in ["Settings", "History", "Program", "Body", "Today"] {
+            app.tabBars.buttons[tab].tap()
+            assertScrolledEndClearsPlateButton(tab.lowercased(), button: plate)
+        }
+        // Today was just scrolled to its end; bring the resume card back.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertTrue(resume.isHittable)
+        resume.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        for _ in 0..<6 { app.swipeUp() }
+        capture("after-11-session-end-clears-plate-button-iphone")
+        XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
+    }
+
+    private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
+        for _ in 0..<6 { app.swipeUp() }
+        // Capture BEFORE asserting so the artifact shows the state that was
+        // judged, pass or fail.
+        capture("after-11-\(surface)-end-clears-plate-button-iphone")
+        let button = plate.frame
+        let queries = [app.buttons, app.cells, app.switches, app.textFields, app.segmentedControls, app.staticTexts]
+        for query in queries {
+            for control in query.allElementsBoundByIndex
+            where control.isHittable && control.label != "Plate calculator" && !control.frame.isEmpty {
+                XCTAssertFalse(control.frame.intersects(button),
+                               "\(surface): '\(control.label)' \(control.frame) sits under the plate calculator button \(button)")
+            }
+        }
     }
 
     func test09WorkoutPreviewInspection() {
@@ -209,6 +264,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(complementary.waitForExistence(timeout: 4))
         complementary.tap()
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        // The relationship is tier 3 context: one expand, never in the prescription.
+        openDisclosure("Muscles & relationship")
         let focus = element("training-focus-context")
         XCTAssertTrue(focus.waitForExistence(timeout: 3))
         XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")
@@ -229,6 +286,123 @@ final class VisualProofUITests: XCTestCase {
         }
         XCTAssertTrue(element("current-exercise-Romanian Deadlift").waitForExistence(timeout: 5))
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
+    }
+
+    /// Xcode's accessibility audit over the surfaces a lifter touches most.
+    /// Every issue on a surface is collected and reported together, so one
+    /// run names the whole list instead of the first unlabeled control (#61).
+    func test12AccessibilityAudit() throws {
+        continueAfterFailure = true
+        try auditSurface("today")
+
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+        try auditSurface("settings")
+
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        try auditSurface("current-session")
+
+        // The session is a full-screen cover with no floating button; a fresh
+        // launch lands on Today, where the calculator is one tap away.
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        let calculator = app.buttons["Plate calculator"]
+        XCTAssertTrue(calculator.waitForExistence(timeout: 3))
+        calculator.tap()
+        XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+        try auditSurface("plate-calculator")
+    }
+
+    private func auditSurface(_ name: String) throws {
+        var issues: [String] = []
+        var advisories: [String] = []
+        // Judged against the app's surface, not system chrome or artwork:
+        // - contrast under the translucent tab bar / floating plate button
+        //   measures chrome (the first device run flagged exactly those);
+        // - contrast of a plate badge measures the photographic plate face
+        //   behind it, not the badge's own ink/fill pair;
+        // - hit-region findings on non-interactive nodes (static text, a
+        //   progress bar, plain containers) are not tap targets;
+        // - clipping is left out because SwiftUI Labels audit as clipped
+        //   while the captures show them intact;
+        // - Dynamic Type findings are reported as advisories, not failures:
+        //   the fixed-size numerals and eyebrows are a tracked follow-up.
+        let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
+        let types: XCUIAccessibilityAuditType = [
+            .sufficientElementDescription, .hitRegion, .contrast, .dynamicType,
+            .trait, .elementDetection,
+        ]
+        try app.performAccessibilityAudit(for: types) { issue in
+            let element = issue.element
+            let identifier = element?.identifier ?? ""
+            if issue.auditType == .contrast, let frame = element?.frame,
+               chrome.contains(where: { $0.intersects(frame) }) || identifier.hasPrefix("barbell-plate-") {
+                return true
+            }
+            if issue.auditType == .hitRegion, let element, nonInteractive.contains(element.elementType) {
+                return true
+            }
+            let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
+            // A finding with no element names nothing a fix could target; it
+            // is recorded with the advisories rather than failing the surface.
+            if issue.auditType == .dynamicType || element == nil { advisories.append(line) } else { issues.append(line) }
+            return true // keep collecting; the assertion below reports the full list
+        }
+        capture("after-12-audit-\(name)-iphone")
+        if !advisories.isEmpty {
+            let note = XCTAttachment(string: advisories.joined(separator: "\n"))
+            note.name = "dynamic-type-advisories-\(name)"
+            note.lifetime = .keepAlways
+            add(note)
+            print("Dynamic Type advisories on \(name):\n" + advisories.joined(separator: "\n"))
+        }
+        XCTAssertTrue(issues.isEmpty,
+                      "\(name) failed the accessibility audit:\n" + issues.joined(separator: "\n"))
+    }
+
+    /// #185: completing a set must not move the dominant block. The set track
+    /// and the current-set hero keep their frames; only their content
+    /// advances to the next set.
+    func test13SetCompletionKeepsDominantBlockStill() {
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let track = app.otherElements["Working sets"].firstMatch
+        let hero = element("current-set-hero")
+        XCTAssertTrue(track.waitForExistence(timeout: 3))
+        XCTAssertTrue(hero.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["WORKING SET 2 OF 3"].exists)
+        let trackBefore = track.frame
+        let heroBefore = hero.frame
+        capture("after-13-session-before-set-iphone")
+
+        let status = app.buttons["Set status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 3))
+        status.tap()
+        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        capture("after-13-session-after-set-iphone")
+        XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")
+        XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
+        XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")
+        XCTAssertEqual(hero.frame.height, heroBefore.height, accuracy: 0.5, "current-set hero resized on completion")
+    }
+
+    /// Scrolls a DisclosureGroup's label into the window and taps it. XCUI
+    /// never reports SwiftUI disclosure labels as hittable, so the tap goes
+    /// through a coordinate once the label's frame sits inside the window.
+    private func openDisclosure(_ label: String) {
+        let text = app.staticTexts[label]
+        // List rows are lazy: a label far below the fold does not exist in
+        // the hierarchy until the list scrolls near it.
+        for _ in 0..<8 where !text.exists { app.swipeUp() }
+        XCTAssertTrue(text.waitForExistence(timeout: 3), "\(label) is on this screen")
+        let window = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 120)
+        for _ in 0..<6 where !window.contains(text.frame) { app.swipeUp() }
+        XCTAssertTrue(window.contains(text.frame), "\(label) scrolled into view")
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func element(_ identifier: String) -> XCUIElement {

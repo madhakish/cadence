@@ -28,4 +28,5 @@ export const COPY = {
   swelling: "Pause and reassess before continuing.",
   emptyHistory: "Nothing logged yet.",
   shelved: "Shelved",
+  noExercisesMatch: "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise.",
 };

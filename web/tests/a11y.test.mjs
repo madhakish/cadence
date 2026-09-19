@@ -133,15 +133,21 @@ ok(/if !referenceInitialized\s*\{\s*referenceUnit = preferredUnit; referenceInit
 ok(/\.accessibilityLabel\("\\\(plate\.label\) plates per side"\)/.test(nativePlates)
   && /\.accessibilityValue\("\\\(reverseCounts\[plate\.id\] \?\? 0\)"\)/.test(nativePlates),
   "native reverse steppers expose one denomination label and the current count separately");
-ok(/\["white", "yellow", "green"\]\.includes\(token\) \? "#24262a" : "#fff"/.test(barbell),
-  "yellow, white, and green plates use the high-contrast dark denomination ink");
+ok(/C\.plateColour\(/.test(barbell) && !/#24262a|#17191c|#d23b3b|#7a1f1f/i.test(barbell),
+  "plate fill, edge, and denomination ink come from the shared core palette, not literals in the renderer");
 ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spoken load");
 const plates = read("app/js/views/plates.js");
 ok(/Achieved total, bar included/.test(barbell)
   && /\[solution\.totalLb, "lb", true\][\s\S]*\[C\.kgFromLb\(solution\.totalLb\), "kg", false\]/.test(barbell)
-  && /loadoutSummary\(targetLb, solution\)/.test(plates),
+  && /loadoutSummary\(targetLb, solution(, \{ plateStyle \})?\)/.test(plates),
   "the shared calculator/session total is announced and displayed pounds first, then kilograms");
 ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
+{
+  const summaryCalls = (source) => [...source.matchAll(/loadoutSummary\([^)]*\)/g)].map((m) => m[0]);
+  const views = ["app/js/views/session.js", "app/js/views/settings.js", "app/js/views/plates.js"].flatMap((file) => summaryCalls(read(file)));
+  ok(views.length >= 5 && views.every((call) => /plateStyle/.test(call)),
+    "every loadout summary names its plate family from the same style the bar was drawn with");
+}
 ok(/tabindex:\s*0[\s\S]*data-plate-denomination/.test(barbell),
   "every rendered plate denomination is keyboard inspectable");
 

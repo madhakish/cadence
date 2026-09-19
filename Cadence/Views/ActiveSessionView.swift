@@ -19,6 +19,7 @@ struct ActiveSessionView: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
 
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var session: WorkoutSession
     @State private var showExercisePicker = false
     @State private var confirmDiscard = false
@@ -82,7 +83,8 @@ struct ActiveSessionView: View {
     private func startWorkout() {
         workoutClock.begin(for: session,
                            currentLift: currentOrFirst?.exercise?.name ?? "",
-                           defaultRestSeconds: currentRestSeconds)
+                           defaultRestSeconds: currentRestSeconds,
+                           currentSet: currentProjection)
     }
 
     /// Names the cost of discarding. A session started by mistake has nothing
@@ -97,6 +99,11 @@ struct ActiveSessionView: View {
     private var currentRestSeconds: Int {
         smartRestSeconds(for: currentOrFirst?.exercise, role: currentOrFirst?.programRole, settings: settingsList.first)
     }
+    /// What the Lock Screen shows as the set you're on — the same focus rule
+    /// this screen draws, published whenever it changes.
+    private var currentProjection: CurrentSetProjection? {
+        WorkoutCommandService.projection(for: session, focus: currentOrFirst)
+    }
 
     var body: some View {
         List {
@@ -106,32 +113,28 @@ struct ActiveSessionView: View {
             // rather than moving the current lift ahead of exercises 1...N.
             earlierExerciseSections
             focusedExerciseSection
-
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SESSION PROGRESS")
-                        .font(.caption.bold())
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
-                        .font(.headline.monospacedDigit())
-                    Text(session.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            trainingAtSection
             remainingExerciseSections
 
-            Section {
+            // One supporting section for the session itself: where it is
+            // happening, adding a lift, and notes. Progress rides as the
+            // focused lift's footer, so nothing competes with the dominant
+            // block above it (#185).
+            Section("Session") {
+                // With no lift to carry it as a footer, progress and the date
+                // still have a home (mirrors the web session card).
+                if currentOrFirst == nil {
+                    Text(sessionProgressLine)
+                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("session-progress")
+                }
+                gymPicker
                 Button {
                     showExercisePicker = true
                 } label: {
                     Label("Add exercise", systemImage: "plus")
                 }
-            }
-
-            Section("Session notes") {
-                TextField("Notes", text: Bindable(session).notes, axis: .vertical)
+                TextField("Session notes", text: Bindable(session).notes, axis: .vertical)
                     .lineLimit(2...6)
             }
 
@@ -171,7 +174,8 @@ struct ActiveSessionView: View {
             // after a cold start); starting is an explicit act.
             workoutClock.resumeIfTracking(for: session,
                                           currentLift: currentOrFirst?.exercise?.name ?? "",
-                                          defaultRestSeconds: currentRestSeconds)
+                                          defaultRestSeconds: currentRestSeconds,
+                                          currentSet: currentProjection)
         }
         // Keep the activity's elapsed face and its quick-rest default honest.
         // Watch the derived VALUES, not the entry's identity: swapping the
@@ -179,6 +183,20 @@ struct ActiveSessionView: View {
         // name / default rest without changing which SessionExercise is current.
         .onChange(of: currentOrFirst?.exercise?.name) { pushActivityContext() }
         .onChange(of: currentRestSeconds) { pushActivityContext() }
+        // A set may have been completed from the Lock Screen while this screen
+        // was in the background: the record is already saved, so only the
+        // remembered focus can be stale. Drop it when its exercise has no
+        // planned work left (the derived fallback then picks the right one)
+        // and republish the face.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            if let entry = currentEntry, !entry.orderedSets.contains(where: { $0.status == .planned }) {
+                // The same rule the logger and the Lock Screen commands use:
+                // advance through authored order from the finished lift.
+                focusAfterResolving(entry)
+            }
+            pushActivityContext()
+        }
         .navigationTitle(workoutName)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Couldn't bank the session", isPresented: $showBankError) {
@@ -296,10 +314,9 @@ struct ActiveSessionView: View {
     }
 
     @ViewBuilder
-    private var trainingAtSection: some View {
+    private var gymPicker: some View {
         if !gyms.isEmpty {
-            Section("Training at") {
-                Picker("Gym", selection: Binding(
+                Picker("Training at", selection: Binding(
                     get: { gym?.id ?? "" },
                     set: { id in
                         guard let selected = gyms.first(where: { $0.id == id }) else { return }
@@ -338,8 +355,13 @@ struct ActiveSessionView: View {
                 )) {
                     ForEach(gyms) { option in Text(option.name).tag(option.id) }
                 }
-            }
         }
+    }
+
+    /// Supporting fact for the focused lift's footer: where the session is
+    /// and how much work is left. Web twin: `.session-progress`.
+    private var sessionProgressLine: String {
+        "Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets · \(session.date.formatted(date: .abbreviated, time: .omitted))"
     }
 
     /// Extracted from `body` — the multi-argument section call plus the recall
@@ -440,6 +462,7 @@ struct ActiveSessionView: View {
         ExerciseSection(
             entry: entry,
             emphasized: emphasized,
+            sessionProgress: emphasized ? sessionProgressLine : nil,
             settings: settingsList.first,
             gym: gym,
             programFocus: sessionProgram?.focus,
@@ -447,8 +470,10 @@ struct ActiveSessionView: View {
             lastTime: recallLine(for: entry, in: recall),
             adHocExposure: mostRecentTopExposure(for: entry),
             onDropLoad: { autoregEntry = entry },
-            onWork: { currentEntry = $0 },
-            onResolve: { focusAfterResolving($0) },
+            // A verdict changes the current set even when focus stays on the
+            // same lift; the Lock Screen face must follow every time (#200).
+            onWork: { currentEntry = $0; pushActivityContext() },
+            onResolve: { focusAfterResolving($0); pushActivityContext() },
             restTargetName: { nextRestExerciseName(after: entry) },
             onRemove: { removeExercise(entry) },
             onMove: { moveExercise(entry, direction: $0) }
@@ -513,7 +538,8 @@ struct ActiveSessionView: View {
         let nextName = nextRestExerciseName(after: currentOrFirst)
         restTimer.updateExerciseName(nextName)
         workoutClock.updateContext(currentLift: nextName,
-                                   defaultRestSeconds: currentRestSeconds)
+                                   defaultRestSeconds: currentRestSeconds,
+                                   currentSet: currentProjection)
     }
 
     private func bankSession() {
@@ -683,16 +709,6 @@ struct ActiveSessionView: View {
     }
 }
 
-/// Smart per-exercise rest via the shared CadenceCore precedence (per-exercise
-/// rest → program role → movementGroup bucket); no exercise → accessory bucket.
-func smartRestSeconds(for exercise: Exercise?, role: String? = nil, settings: AppSettings?) -> Int {
-    let config = settings?.restConfig ?? .standard
-    guard let ex = exercise else { return config.accessorySeconds }
-    return RestDefaults.seconds(category: ex.categoryRaw, movementGroup: ex.movementGroup, role: role,
-                                config: config,
-                                exerciseDefaultRest: ex.defaultRestSeconds)
-}
-
 /// Compact "how long ago" for the last-session recall line.
 private func agoLabel(_ date: Date) -> String {
     ProgramProgression.historyAgeLabel(exposureDate: date, asOf: .now, calendar: .current)
@@ -725,6 +741,9 @@ private struct ExerciseSection: View {
     /// Only the actively worked exercise gets the full between-sets cockpit.
     /// Remaining exercises stay in authored order underneath it.
     let emphasized: Bool
+    /// Session progress, shown as this section's footer for the focused lift
+    /// only. Supporting information never gets its own card (#185).
+    let sessionProgress: String?
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -1089,13 +1108,16 @@ private struct ExerciseSection: View {
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onStatusChange: { previous, status in
                         if status == .planned { onWork(entry) }
                         else { onResolve(entry) }
-                        // Auto-start only for a new completed verdict when the
-                        // user opted in (manual is the default), and never
-                        // restart a countdown already running.
-                        if status == .completed, previous != .completed,
-                           settings?.autoStartRest == true, !restTimer.isRunning {
-                            restTimer.start(seconds: set.isWarmup ? 60 : restSeconds,
-                                            exerciseName: restTargetName())
+                        // What follows a verdict is the same decision the
+                        // Lock Screen's commands make: a new completion with
+                        // auto-start on and no rest running arms the rest.
+                        guard let session = entry.session else { return }
+                        let decision = WorkoutCommandService.decision(
+                            after: previous, status: status, set: set, entry: entry, session: session,
+                            settings: settings, restRunning: restTimer.isRunning
+                        )
+                        if let seconds = decision.restSeconds {
+                            restTimer.start(seconds: seconds, exerciseName: restTargetName())
                         }
                     }, onRemove: { removeSet(set) })
                     // Discloses where the first working set's ad-hoc history
@@ -1131,13 +1153,15 @@ private struct ExerciseSection: View {
                             BarbellView(
                                 solution: exactSolution,
                                 plateStyle: style,
-                                presentation: .compactSide
+                                presentation: .compactSide,
+                                emphasis: isCurrent ? .current : .muted
                             )
                         }
                         if emphasized && isCurrent {
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                loadout: exactSolution.loadout
+                                loadout: exactSolution.loadout,
+                                plateStyle: style
                             )
                         }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
@@ -1263,6 +1287,9 @@ private struct ExerciseSection: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                        // House tap target; the glyph alone audits as too small (#61).
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                         .foregroundStyle(Theme.accent)
                 }
                 .accessibilityLabel("Exercise options")
@@ -1286,8 +1313,15 @@ private struct ExerciseSection: View {
                 }
             }
         } footer: {
-            if let site = entry.exercise?.watchSite {
-                Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+            VStack(alignment: .leading, spacing: 4) {
+                if let sessionProgress {
+                    Text(sessionProgress)
+                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .accessibilityIdentifier("session-progress")
+                }
+                if let site = entry.exercise?.watchSite {
+                    Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+                }
             }
         }
         .sheet(item: $expandedLoadout) { detail in
@@ -1297,7 +1331,8 @@ private struct ExerciseSection: View {
                         BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
                         LoadoutSummaryView(
                             requestedLb: detail.requestedLb,
-                            loadout: detail.solution.loadout
+                            loadout: detail.solution.loadout,
+                            plateStyle: detail.style
                         )
                             .padding(.horizontal)
                     }
@@ -1433,12 +1468,23 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
           let workingLb = overrideWorkingLb ?? entry.plannedWeightLb
             ?? entry.orderedSets.first(where: { !$0.isWarmup })?.weightLb,
           workingLb > 0 else { return }
+    let existing = entry.orderedSets.filter(\.isWarmup)
+    // Work already COMPLETED earlier in the session on this movement with
+    // this implement trims the ramp below it (issue #64) — but only while
+    // every warmup here is still planned: once one is resolved the ramp is
+    // the lifter's record and only its weights refresh. Mirrors web.
+    let priorWorkLb: Double? = {
+        guard !existing.contains(where: { $0.status != .planned }), let session = entry.session else { return nil }
+        return WarmupRamp.priorWorkLb(order: entry.order, movementGroup: exercise.movementGroup,
+                                      exerciseType: exercise.typeRaw, in: sessionWork(session))
+    }()
     var desired: [WarmupSet]
     if exercise.type == .barbell {
         desired = ProgramSession.achievableWarmups(
             WarmupRamp.ramp(workingLb: workingLb, barLb: bar.lb,
                             roundingLb: ProgramEngine.defaultRoundingLb,
-                            includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise)),
+                            includeEmptyBar: ProgramSession.includesEmptyBarWarmup(for: exercise),
+                            priorWorkLb: priorWorkLb),
             workingLb: workingLb, gym: gym, bar: bar, exercise: exercise)
     } else if exercise.type == .dumbbell && entry.programRole == LiftRole.main.rawValue {
         desired = WarmupRamp.dumbbellRamp(workingLb: workingLb,
@@ -1448,7 +1494,6 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     } else {
         return
     }
-    let existing = entry.orderedSets.filter(\.isWarmup)
     // A programmed entry was built under a resolved warmup policy — full
     // ramp, two bridging sets for a complementary lift, or none — possibly
     // refined by the user's own row edits. Resync refreshes the warmup
@@ -1499,6 +1544,18 @@ private func synchronizeWarmups(_ entry: SessionExercise, workingLb overrideWork
     let working = entry.orderedSets.filter { !$0.isWarmup }
     entry.sets = rebuilt + working
     for (index, set) in entry.sets.enumerated() { set.order = index }
+}
+
+/// What each entry has already lifted, in the shape `WarmupRamp.priorWorkLb`
+/// reads: completed working loads only — planned and skipped sets, and
+/// warmups, prepared nobody. Mirrors web `sessionWork`.
+private func sessionWork(_ session: WorkoutSession) -> [WarmupRamp.SessionWork] {
+    session.orderedExercises.map { entry in
+        WarmupRamp.SessionWork(order: entry.order,
+                               movementGroup: entry.exercise?.movementGroup ?? "",
+                               exerciseType: entry.exercise?.typeRaw ?? "",
+                               completedWorkLbs: entry.workingSets.map(\.weightLb))
+    }
 }
 
 // MARK: - Set row
@@ -2088,12 +2145,18 @@ private struct SetVerdictControl: View {
         return parts.joined(separator: ", ")
     }
 
+    /// The one mutation path — shared with the Lock Screen's commands — then
+    /// the section decides what follows.
     private func apply(_ status: SetStatus) {
         let previous = set.status
         guard previous != status else { return }
-        set.status = status
+        do {
+            try WorkoutCommandService.setStatus(status, of: set, context: context)
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Changing the set verdict", context: context)
+            return
+        }
         onStatusChange(previous, status)
-        save()
     }
 
     private func save() { PersistenceErrorCenter.shared.save(context, operation: "Changing the set verdict") }
@@ -2478,106 +2541,21 @@ private struct SessionBottomBar: View {
 
 private struct ExercisePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @State private var search = ""
-    @State private var typeFilter: ExerciseType?
-    @State private var detailExercise: Exercise?
     var equipmentPolicy: EquipmentPolicy = .any
     let onPick: (Exercise) -> Void
 
-    private var visible: [Exercise] {
-        let allowed = exercises.filter { equipmentPolicy.allows(exerciseType: $0.typeRaw) }
-        let pool = typeFilter.map { filter in allowed.filter { $0.type == filter } } ?? allowed
-        guard !search.isEmpty else { return pool }
-        let term = ExerciseSearch.preparedTerm(search)
-        return pool.filter { $0.matchesSearch(preparedTerm: term) }
-    }
-
     var body: some View {
         NavigationStack {
-            List {
-                // Equipment filter (issue #63): the catalog is too long for
-                // one flat list; search stays available above at all times.
-                Section {
-                    ExerciseTypeFilterRow(typeFilter: $typeFilter)
-                }
-                ForEach(ExerciseCategory.allCases, id: \.self) { category in
-                    let inCategory = visible.filter { $0.category == category }
-                    if !inCategory.isEmpty {
-                    Section(category.rawValue) {
-                        ForEach(inCategory) { exercise in
-                            HStack {
-                            Button {
-                                onPick(exercise)
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Text(exercise.name).foregroundStyle(.primary)
-                                    if exercise.isShelved {
-                                        Text(Copy.shelved)
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.hardStop)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            // Detail preview OVER the picker (issue #66): the
-                            // sheet keeps the search text and active filter, so
-                            // inspecting never restarts the hunt.
-                            Button {
-                                detailExercise = exercise
-                            } label: {
-                                Image(systemName: "info.circle")
-                                    .foregroundStyle(Theme.accent)
-                            }
-                            .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                    }
-                }
+            // The library browser with a selection closure (issue #63):
+            // search, Movement and Equipment filters, Recent, and the
+            // collapsed category groups — one surface for every picker.
+            ExerciseBrowser(equipmentPolicy: equipmentPolicy) { exercise in
+                onPick(exercise)
+                dismiss()
             }
             .navigationTitle("Add exercise")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, prompt: "Exercise, movement, or equipment")
-            .sheet(item: $detailExercise) { exercise in
-                NavigationStack {
-                    ExerciseDetailView(exercise: exercise)
-                }
-            }
         }
-    }
-}
-
-/// Horizontal equipment-filter chips shared by the pickers. A second tap on
-/// the active chip clears the filter, mirroring the web picker.
-struct ExerciseTypeFilterRow: View {
-    @Binding var typeFilter: ExerciseType?
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                chip(nil, label: "All")
-                ForEach(ExerciseType.allCases, id: \.self) { type in
-                    chip(type, label: type.rawValue)
-                }
-            }
-        }
-    }
-
-    private func chip(_ type: ExerciseType?, label: String) -> some View {
-        let active = typeFilter == type
-        return Button(label) {
-            typeFilter = (type != nil && active) ? nil : type
-        }
-        .font(.caption.bold())
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(active ? Theme.accent.opacity(0.25) : Color(.tertiarySystemFill),
-                    in: Capsule())
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
@@ -2667,6 +2645,8 @@ private struct CurrentSetHero: View {
     let set: SetEntry
     let ordinal: Int
     let total: Int
+    /// The dominant numeral keeps its proportion and still follows Dynamic Type.
+    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2688,7 +2668,9 @@ private struct CurrentSetHero: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if set.weightLb > 0 {
                     Text(Weight.trim(set.weightLb))
-                        .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
+                        .font(.system(size: numeralSize, weight: .black, design: .rounded).monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                     Text("lb")
                         .font(.title3)
                         .foregroundStyle(.secondary)
@@ -2701,7 +2683,7 @@ private struct CurrentSetHero: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text("BW")
-                        .font(.system(size: 44, weight: .black, design: .rounded))
+                        .font(.system(size: numeralSize, weight: .black, design: .rounded))
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -2712,5 +2694,6 @@ private struct CurrentSetHero: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("current-set-hero")
     }
 }

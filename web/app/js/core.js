@@ -307,6 +307,14 @@ export function focusAfterResolving(entries, resolvedIndex) {
 
 // Rest alerts name pending work; the final completed entry is not a next set.
 // Mirrors SetLifecycle.nextPendingExerciseIndex.
+// The one auto-rest rule applied after a verdict, wherever it came from.
+// Mirrors CadenceCore SetLifecycle.restAfterCompleting.
+export function restAfterCompleting({ previous, status, isWarmup, restSeconds, autoStart, restRunning }) {
+  if (status !== "completed" || previous === "completed" || !autoStart || restRunning) return null;
+  const seconds = isWarmup ? 60 : restSeconds;
+  return seconds > 0 ? seconds : null;
+}
+
 export function nextPendingExerciseIndex(entries, resolvedIndex) {
   if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= entries.length) return null;
   if (entries[resolvedIndex].includes("planned")) return resolvedIndex;
@@ -405,6 +413,19 @@ export function plateColorToken(plate, style = "bumper") {
   }
   return "black"; // 1.25 + misc
 }
+
+// The one token → colour table for every plate face, edge, and label ink on
+// every renderer of either client. Mirrors CadenceCore PlatePalette.
+export const PLATE_COLOURS = {
+  red: { fill: "#d23b3b", edge: "#7a1f1f", ink: "#ffffff" },
+  blue: { fill: "#2f6fed", edge: "#1b3f8f", ink: "#ffffff" },
+  green: { fill: "#1faa52", edge: "#10632f", ink: "#24262a" },
+  yellow: { fill: "#e8b008", edge: "#8a6a04", ink: "#24262a" },
+  white: { fill: "#ededed", edge: "#9a9a9a", ink: "#24262a" },
+  black: { fill: "#1c1d22", edge: "#3a3b42", ink: "#ffffff" },
+};
+export const PLATE_COLOUR_FALLBACK = { fill: "#888888", edge: "#333333", ink: "#ffffff" };
+export const plateColour = (token) => PLATE_COLOURS[token] || PLATE_COLOUR_FALLBACK;
 
 // Diameter relative to a 450 mm competition disc. Bumper competition plates
 // keep the same diameter; calibrated steel steps down with denomination.
@@ -874,13 +895,41 @@ const RAMP_STEPS = [
   { percent: 0.85, reps: 1 },
 ];
 
-export function warmupRamp(workingLb, barLb = 45, roundingLb = 5, includeEmptyBar = true) {
+// `priorWorkLb` is the heaviest working load already completed earlier in the
+// session on the same movement with the same implement (see priorWorkLb).
+// Every step at or below it — the empty bar included — is a climb the lifter
+// has already made and is dropped. A lift that would otherwise ramp never
+// loses its ramp entirely: when fewer than two steps clear the prior work,
+// the heaviest two of the untrimmed ramp remain — the same bridge a short
+// policy keeps. Mirrored 1:1 in CadenceCore WarmupRamp.ramp.
+export function warmupRamp(workingLb, barLb = 45, roundingLb = 5, includeEmptyBar = true, priorWorkLb = null) {
   const sets = includeEmptyBar ? [{ weightLb: barLb, reps: 10 }] : [];
   for (const step of RAMP_STEPS) {
     const w = roundTo(workingLb * step.percent, roundingLb);
     if (w > barLb + 1e-9 && w < workingLb - 1e-9) sets.push({ weightLb: w, reps: step.reps });
   }
-  return sets.map((s) => ({ ...s, label: `${trim(s.weightLb)} × ${s.reps}` }));
+  const trimmed = priorWorkLb > 0 ? sets.filter((s) => s.weightLb > priorWorkLb + 1e-9) : sets;
+  const kept = priorWorkLb > 0 && trimmed.length < 2 ? sets.slice(-2) : trimmed;
+  return kept.map((s) => ({ ...s, label: `${trim(s.weightLb)} × ${s.reps}` }));
+}
+
+// The heaviest working load already completed EARLIER in the session (lower
+// order) on the same movement group with the same implement — the climb a
+// later ramp need not repeat. The implement matters: a dumbbell's 80 per hand
+// is not 80 on a bar. Entries are { order, movementGroup, exerciseType,
+// completedWorkLbs }; completedWorkLbs holds COMPLETED working loads only —
+// planned and skipped sets, and warmups, prepared nobody. Null when nothing
+// qualifies or the movement group is unknown. Mirrored 1:1 in CadenceCore
+// WarmupRamp.priorWorkLb.
+export function priorWorkLb(order, movementGroup, exerciseType, session) {
+  if (!movementGroup) return null;
+  const heaviest = Math.max(...session
+    .filter((e) => e.order < order && e.movementGroup === movementGroup && e.exerciseType === exerciseType)
+    .flatMap((e) => e.completedWorkLbs)
+    // A set restored without a load must not poison the rule with NaN
+    // (native coalesces the same gap to 0 and still trims).
+    .filter(Number.isFinite));
+  return heaviest > 0 ? heaviest : null;
 }
 
 
@@ -3291,6 +3340,26 @@ export function exerciseMatchesSearch(exercise, query) {
     movementPatternName(exercise?.movementPattern), exercise?.type,
     ...(exercise?.aliases || []), ...(exercise?.strategyTags || [])]
     .some((value) => normalizedExerciseSearchText(value).includes(term));
+}
+
+// The lifter's recent lifts — the browser's entry point above the category
+// groups, never a category of its own. Distinct names from the most recent
+// completed sessions, newest session first and in performed order within a
+// session, capped. A name appears once, at its most recent position. Mirrors
+// ExerciseSearch.recentNames in CadenceCore.
+export function recentExerciseNames(sessionsNewestFirst, limit = 6) {
+  if (limit <= 0) return [];
+  const seen = new Set();
+  const recent = [];
+  for (const names of sessionsNewestFirst) {
+    for (const name of names) {
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      recent.push(name);
+      if (recent.length === limit) return recent;
+    }
+  }
+  return recent;
 }
 
 export const isConditioningPattern = (pattern) =>

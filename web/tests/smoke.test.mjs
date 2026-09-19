@@ -899,6 +899,20 @@ for (let i = 0; i < 10; i++) {
     "the logger title is the workout name, with the date kept in its progress card");
   ok(logger.querySelector(".session-progress")?.textContent.includes("Exercise 1 of"),
     "the logger reports exercise and whole-workout set progress");
+  // #185: progress is supporting information — the focused card's footer,
+  // never a card of its own — and the session's own controls (gym, add a
+  // lift, notes) share one supporting card beneath the exercises.
+  ok(logger.querySelector(".exercise-card.emphasized .session-progress") && logger.querySelectorAll(".session-progress").length === 1,
+    "session progress rides as the focused exercise's footer");
+  {
+    const support = logger.querySelector(".session-support");
+    const cards = [...logger.querySelectorAll(".card")];
+    ok(support?.querySelector("select") && support?.querySelector("textarea")
+      && [...support.querySelectorAll("button")].some((button) => button.textContent === "+ Add exercise"),
+      "gym, add-exercise, and notes share one supporting session card");
+    ok(cards.indexOf(support) > cards.indexOf(logger.querySelector(".exercise-card.emphasized")),
+      "the supporting session card sits below the dominant block");
+  }
   ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
     "the current set owns the cockpit while a full-set control remains available");
   // The focused exercise leads with the approved hierarchy: a set track with
@@ -1186,6 +1200,11 @@ ok(settingsGroups.every((group) => group.querySelector(":scope > summary") && gr
     .find((button) => button.textContent.includes("Add lift")).click();
   await tick();
   const picker = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  const pickerGroups = [...picker.querySelectorAll("details.library-group")];
+  ok(picker.querySelector("select[aria-label='Movement']") && picker.querySelector("select[aria-label='Equipment']")
+    && pickerGroups.length === 3
+    && pickerGroups.every((g) => !g.open && /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+  "the program picker is the library browser: Movement and Equipment filters over collapsed, counted category groups");
   const pickerSearch = picker.querySelector('input[type="search"]');
   pickerSearch.value = addedExercise.name;
   pickerSearch.dispatchEvent(new window.Event("input"));
@@ -1378,7 +1397,14 @@ ok(targetTotal?.textContent.includes("lb") && targetTotal?.textContent.includes(
 ok((targetHero?.compareDocumentPosition(targetTotal) || 0) & Node.DOCUMENT_POSITION_FOLLOWING,
   "target mode puts the physical loadout first, followed immediately by its dual-unit answer");
 ok(plateOverlay.querySelectorAll("svg.plate-badge").length > 0,
-  "target per-side rows expose readable denomination badges");
+  "target per-side cells expose readable denomination badges");
+ok(plateOverlay.querySelector(".calc-hero .display")?.textContent === "Know your load."
+    && /plate loading/i.test(plateOverlay.querySelector(".calc-hero .eyebrow")?.textContent || ""),
+  "the calculator opens on the approved heading");
+ok(plateOverlay.querySelectorAll(".loadout-cell").length > 0 && !plateOverlay.querySelector(".plate-list"),
+  "target mode reads the rack from the summary's cells, not a second per-side list");
+ok(plateOverlay.querySelector(".barbell-stage-footer")?.textContent.includes("Larger view"),
+  "the stage offers the larger view where the approved screen puts it");
 const reverseButton = [...plateOverlay.querySelectorAll(".seg button")].find((button) => button.textContent === "On the bar");
 ok(reverseButton, "plate calculator exposes the reverse-mode control");
 reverseButton?.click(); await tick();
@@ -1521,10 +1547,76 @@ await withCleanup(async (keep) => {
   "exercise pane names the complementary relationship and its originating training focus");
   ok(!pane.textContent.includes("2–3 reps left"),
     "hypertrophy complementary work is not mislabeled with the strength effort contract");
+  // #184 tiers: the prescription (tier 1) stays clear of the relationship,
+  // which lives in the muscles disclosure (tier 3) below previous
+  // performance and programming (tier 2); both tiers start closed between sets.
+  {
+    const tiers = [...pane.querySelectorAll("details.info-disclosure")];
+    const progression = pane.querySelector("details.progression-disclosure");
+    const muscles = pane.querySelector("details.muscles-disclosure");
+    ok(!pane.querySelector(".current-prescription .training-focus-context") && muscles?.contains(focusContext),
+      "the training relationship is tier 3 context, not part of the current prescription");
+    ok(tiers.indexOf(progression) === 0 && tiers.indexOf(muscles) === 1 && !progression.open && !muscles.open,
+      "tier 2 precedes tier 3 and both start collapsed when opened between sets");
+    ok(pane.querySelector(".current-prescription").compareDocumentPosition(progression) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "tier 1 stays above the disclosures");
+  }
   ok(pane.querySelector('.current-prescription .weight-measure.primary .weight-value')?.textContent === "220",
     "exercise detail reconstructs the recorded 220 lb instead of substituting 221.37 lb of kg plates");
   pane.querySelector(".overlay-head button")?.click(); await tick();
 }
+
+// #66: tier 2 lists the last five sessions' working sets newest first with
+// the RIR flag where one was recorded, timed work shows its duration, and an
+// exercise with no completed session says so.
+await withCleanup(async (keep) => {
+  const day = (daysAgo) => db.iso(new Date(Date.now() - daysAgo * 86400000));
+  const bank = async (exerciseName, daysAgo, sets, programTag = null) => keep(db.Sessions, await db.Sessions.save({
+    date: day(daysAgo), notes: "", isCompleted: true, gymName: null, programTag,
+    exercises: [{ order: 0, exerciseName, notes: "", phase: null,
+      sets: sets.map((set, order) => ({ order, isWarmup: false, status: "completed", ...set })) }],
+  }));
+  await bank("Deadlift", 2, [{ weightLb: 230, reps: 5 }, { weightLb: 230, reps: 5 }]);
+  await bank("Deadlift", 1, [
+    { weightLb: 135, reps: 5, isWarmup: true },
+    { weightLb: 225, reps: 5, flags: ["clean", "rir2"] },
+    { weightLb: 225, reps: 4 },
+    { weightLb: 225, reps: 9, status: "skipped" },
+  ], { programName: "Fixture Pull" });
+  await bank("Plank", 1, [{ weightLb: 0, reps: 0, durationSeconds: 45 }]);
+  const open = async (exercise) => {
+    settings.exerciseDetail(exercise);
+    const pane = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    await waitFor(() => pane.querySelector("details.progression-disclosure .set-history-row"));
+    return pane;
+  };
+  const rows = (pane) => [...pane.querySelectorAll("details.progression-disclosure .set-history-row")]
+    .map((row) => ({ title: row.querySelector(".title")?.textContent, sets: row.querySelector(".sub")?.textContent }));
+
+  let pane = await open(await db.Exercises.byName("Deadlift"));
+  const expected = (await db.Sessions.completed())
+    .filter((s) => s.exercises.some((x) => x.exerciseName === "Deadlift")).slice(0, 5);
+  let shown = rows(pane);
+  ok(shown.length === 5 && expected.length === 5
+      && shown.every((row, index) => row.title.startsWith(ui.fmtDate(expected[index].date))),
+    "tier 2 lists the five newest completed sessions for the exercise, newest first");
+  ok(shown[0].title === `${ui.fmtDate(day(1))} · Fixture Pull` && shown[0].sets === "225 lb × 5 · 2 left, 225 lb × 4",
+    "a session row names its program and lists working sets with the RIR label, without warmups or skipped sets");
+  ok(shown[1].sets === "230 lb × 5, 230 lb × 5", "sets without a recorded RIR carry no reserve label");
+  pane.querySelector(".overlay-head button").click(); await tick();
+
+  pane = await open(await db.Exercises.byName("Plank"));
+  shown = rows(pane);
+  ok(shown[0]?.sets === "0:45" && !pane.textContent.includes("BW × 0"),
+    "a timed exercise's set history shows the duration, not a synthetic load");
+  pane.querySelector(".overlay-head button").click(); await tick();
+
+  const logged = new Set((await db.Sessions.completed()).flatMap((s) => s.exercises.map((x) => x.exerciseName)));
+  pane = await open((await db.Exercises.all()).find((x) => !logged.has(x.name)));
+  ok(rows(pane).length === 1 && rows(pane)[0].sets === "No sessions yet.",
+    "an exercise with no completed session says so in tier 2");
+  pane.querySelector(".overlay-head button").click(); await tick();
+})();
 
 // ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
@@ -1710,6 +1802,43 @@ ok(parsed.settings.theme === "carbon", "theme defaults to carbon and round-trips
     "a group the user opened stays open across a filter round trip");
   screen.querySelector(".overlay-head button").click();
 }
+// Every exercise picker is the library browser (issue #63): the logger's
+// "+ Add exercise" sheet carries the Movement and Equipment filters and the
+// collapsed, counted category groups; a completed session surfaces its lifts
+// as a Recent group above them; a nonsense search says how to widen the
+// hunt or add a custom exercise, with both ways out beside the copy.
+await withCleanup(async (keep) => {
+  keep(db.Sessions, await db.Sessions.save({ date: db.iso(new Date(Date.now() + 1000)), notes: "", isCompleted: true,
+    exercises: [{ order: 0, exerciseName: "Barbell Row", notes: "", sets: [] }] }));
+  const sid = keep(db.Sessions, await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false, exercises: [] }));
+  await session.openSession(sid); await tick();
+  const logger = [...document.querySelectorAll(".overlay")].at(-1);
+  [...logger.querySelectorAll("button")].find((button) => button.textContent === "+ Add exercise").click();
+  await tick();
+  const sheet = [...document.querySelectorAll("#overlays .sheet")].at(-1);
+  const groups = () => [...sheet.querySelectorAll("details.library-group")];
+  ok(sheet.querySelector('input[type="search"]') && sheet.querySelector("select[aria-label='Movement']")
+    && sheet.querySelector("select[aria-label='Equipment']"),
+  "the logger picker carries the library's search and Movement/Equipment filters");
+  ok(!sheet.querySelector(".library-hero"), "the picker sheet has no Library hero under its own title");
+  ok(groups().length === 3 && groups().every((g) => !g.open && /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
+    "the logger picker lists the categories as collapsed groups that state their counts");
+  await waitFor(() => sheet.querySelector(".library-recent"));
+  const recent = sheet.querySelector(".library-recent");
+  ok([...recent.querySelectorAll("button")].some((button) => button.textContent === "Barbell Row")
+    && recent.compareDocumentPosition(groups()[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+  "a completed session surfaces its lifts as a Recent group above the categories");
+  const search = sheet.querySelector('input[type="search"]');
+  search.value = "zzqx no such lift";
+  search.dispatchEvent(new window.Event("input"));
+  ok(groups().length === 0 && sheet.textContent.includes(
+    "No exercises match. Clear the filters or search by movement, equipment, or alias — or add a custom exercise."),
+  "a nonsense search says how to widen it or add a custom exercise");
+  ok([...sheet.querySelectorAll(".library-empty button")].map((button) => button.textContent).join("|") === "Clear filters|+ New exercise",
+    "the clear-filters and new-exercise actions sit beside the empty-state copy");
+  [...document.querySelectorAll("#overlays .scrim")].at(-1).click();
+  logger.querySelector(".overlay-head button").click(); await tick();
+})();
 // Themes: Foundry leads and keeps the carbon key, Heritage Gold keeps the
 // memento key, and Titanium is the one new value — a version-13 enum
 // addition (v4/v5 pattern). Older bundles keep restoring their own theme; an
@@ -5472,8 +5601,62 @@ await withCleanup(async (keep) => {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// ---- session-aware warmups (issue #64): a later same-group barbell lift ----
+// does not re-climb a ramp the lifter already made this session.
+{
+  const gym = await db.Gyms.default();
+  const frontSquatEx = (await db.Exercises.all()).find((e) => e.name === "Front Squat");
+  const bar45 = C.barId(C.BARS.bar45lb);
+  const set = (order, weightLb, reps, warm, status) => ({
+    order, weightLb, reps, isWarmup: warm, isPerSide: false, enteredUnit: "lb", status,
+    prescriptionBlock: warm ? "warmup" : "work",
+    flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null, autoregReason: null,
+  });
+  const heavySquat = { order: 0, exerciseName: "Back Squat", notes: "", phase: null, programRole: null, barId: bar45,
+    plannedWeightLb: 225, plannedSets: 5, plannedReps: 5,
+    sets: [set(0, 45, 10, true, "completed"), set(1, 90, 5, true, "completed"), set(2, 125, 3, true, "completed"),
+      set(3, 160, 2, true, "completed"), set(4, 190, 1, true, "completed"),
+      ...[5, 6, 7, 8, 9].map((order) => set(order, 225, 5, false, "completed"))] };
+  // Added ad hoc after the squat: one working set and no warmups yet — how
+  // "+ Add exercise" leaves an entry before its first weight is applied.
+  const frontSquat = { order: 1, exerciseName: "Front Squat", notes: "", phase: null, programRole: null, barId: bar45,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [set(0, 185, 5, false, "planned")] };
+  const sid = await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false,
+    gymId: gym?.id || null, gymName: gym?.name || null, exercises: [heavySquat, frontSquat] });
+  const openAndResync = async () => {
+    await session.openSession(sid); await tick();
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    const select = overlay.querySelector('section.exercise-card[aria-label^="Front Squat"] select.bar-select');
+    select.value = bar45;
+    select.dispatchEvent(new window.Event("change")); await tick();
+    overlay.querySelector("button")?.click(); await tick(); await tick(); // ‹ Back
+    return (await db.Sessions.get(sid)).exercises.find((entry) => entry.exerciseName === "Front Squat");
+  };
+  const weights = (sets) => JSON.stringify(sets.filter((s) => s.isWarmup).map((s) => s.weightLb));
+  const rungs = (priorWorkLb) => session.achievableWarmups(
+    C.warmupRamp(185, 45, 5, true, priorWorkLb), 185, C.BARS.bar45lb, gym, frontSquatEx);
+  ok(rungs(null).length === 5 && rungs(225).length === 2 && rungs(225)[0].weightLb > 100,
+    "the fixture's cold ramp is five rungs and 225 already lifted leaves the two heaviest");
+  const trimmed = await openAndResync();
+  ok(weights(trimmed.sets) === JSON.stringify(rungs(225).map((s) => s.weightLb)),
+    `a squat-group barbell lift added after completed 225 squats bridges with the two heaviest rungs instead of re-climbing from the bar (got ${weights(trimmed.sets)})`);
+  ok(trimmed.sets.filter((s) => !s.isWarmup).length === 1 && trimmed.sets.filter((s) => !s.isWarmup)[0].status === "planned",
+    "the trim never touches working sets");
+
+  // Once a warmup on the entry is resolved, the ramp is the lifter's record:
+  // a resync refreshes weights but neither trims nor rewrites it.
+  const stored = await db.Sessions.get(sid);
+  stored.exercises.find((entry) => entry.exerciseName === "Front Squat").sets = [
+    set(0, 45, 10, true, "completed"), set(1, 75, 5, true, "planned"), set(2, 100, 3, true, "planned"),
+    set(3, 130, 2, true, "planned"), set(4, 155, 1, true, "planned"), set(5, 185, 5, false, "planned")];
+  await db.Sessions.save(stored);
+  const resolved = await openAndResync();
+  const warm = resolved.sets.filter((s) => s.isWarmup);
+  ok(warm.length === 5 && warm[0].status === "completed" && warm[0].weightLb === 45,
+    `a resync on an entry with a resolved warmup keeps all five rows and never rewrites the completed one (got ${weights(resolved.sets)})`);
+  await db.Sessions.del(sid);
+}
+
 
 
 // ---- Stage 6: corrections rebuild what is replayable (epic #155) ----

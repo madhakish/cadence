@@ -1,4 +1,11 @@
 // Presentation-only reference profiles. Never written into exercise/gym data.
+import * as C from "./core.js";
+
+// The one spoken name for a plate on the bar, on both clients. Mirrors
+// CadenceCore BarbellScene.Disc.accessibilityLabel.
+export const discAccessibilityLabel = (disc) =>
+  `${C.plateLabel(disc.plate)} plate, ${disc.index + 1} from inside, ${disc.side < 0 ? "left" : "right"} side`;
+
 const BUMPER = {
   '25-kg': [450, 70], '20-kg': [450, 60], '15-kg': [450, 48], '10-kg': [450, 35], '5-kg': [450, 25],
   '55-lb': [450, 75], '45-lb': [450, 65], '35-lb': [450, 52], '25-lb': [450, 40], '10-lb': [450, 25],
@@ -11,15 +18,29 @@ const CHANGE = {
   '2.5-kg': [210, 19], '2-kg': [190, 19], '1.5-kg': [175, 18], '1.25-kg': [160, 16],
   '1-kg': [160, 16], '0.5-kg': [135, 12], '5-lb': [190, 19], '2.5-lb': [160, 16], '1.25-lb': [135, 12],
 };
+// The physical family a denomination belongs to in a style. Names the cell in
+// the loadout summary; never changes geometry or mass. Mirrors CadenceCore
+// PlateGeometry.family / familyLabel.
+export function plateFamily(plate, style = 'steel') {
+  const key = `${plate.value}-${plate.unit}`;
+  if (style === 'bumper' && BUMPER[key]) return 'bumper';
+  if (STEEL[key]) return 'steel';
+  return 'change';
+}
+export const plateFamilyLabel = (family) => ({ bumper: 'Bumpers', steel: 'Steel' })[family] || 'Change';
+
 export function plateGeometry(plate, style = 'steel') {
   const key = `${plate.value}-${plate.unit}`;
   const [diameter, thickness] = (style === 'bumper' ? BUMPER : STEEL)[key] || CHANGE[key] || [200, 20];
   return { diameter, thickness };
 }
+// Black iron is the untinted texture; every other token tints the face with
+// its palette fill. Mirrors CadenceCore PlateFaceTint.
 export function plateTintGains(token) {
-  const colors = { red:0xD23B3B, blue:0x2F6FED, green:0x1FAA52, yellow:0xE8B008, white:0xEDEDED };
-  const hex = colors[token];
-  return hex == null ? [1,1,1] : [16,8,0].map(shift => ((hex >> shift) & 255) / 255 * 3.2);
+  const fill = token === "black" ? null : C.PLATE_COLOURS[token]?.fill;
+  if (!fill) return [1, 1, 1];
+  const hex = Number.parseInt(fill.slice(1), 16);
+  return [16, 8, 0].map((shift) => ((hex >> shift) & 255) / 255 * 3.2);
 }
 export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}) {
   const angle = (exploded ? 38 : 18) * Math.PI / 180;

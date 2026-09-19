@@ -1,4 +1,5 @@
 import AppIntents
+import CadenceCore
 
 /// Lock Screen / Dynamic Island buttons + the quick rest control.
 /// `LiveActivityIntent` runs in the app's process (relaunched in the
@@ -73,6 +74,82 @@ struct ToggleRestIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let outcome = await WorkoutActivityController.toggleRest()
+        return .result(dialog: IntentDialog(stringLiteral: outcome))
+    }
+}
+
+/// Complete the set the Lock Screen face names. The set is identified
+/// structurally and re-derived when the command runs, so a stale face never
+/// completes the following set — it says the workout moved on instead.
+struct CompleteSetIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Complete set"
+    @Parameter(title: "Session") var sessionID: String
+    @Parameter(title: "Exercise") var exerciseIndex: Int
+    @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
+
+    init() {}
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
+        self.sessionID = sessionID
+        self.exerciseIndex = exerciseIndex
+        self.setIndex = setIndex
+        self.layout = layout
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let outcome = await WorkoutCommandBridge.perform(
+            .completeSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
+        return .result(dialog: IntentDialog(stringLiteral: outcome))
+    }
+}
+
+/// Skip the set the face names, with the same structural identity and
+/// stale-face refusal as completing it.
+struct SkipSetIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Skip set"
+    @Parameter(title: "Session") var sessionID: String
+    @Parameter(title: "Exercise") var exerciseIndex: Int
+    @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
+
+    init() {}
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
+        self.sessionID = sessionID
+        self.exerciseIndex = exerciseIndex
+        self.setIndex = setIndex
+        self.layout = layout
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let outcome = await WorkoutCommandBridge.perform(
+            .skipSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
+        return .result(dialog: IntentDialog(stringLiteral: outcome))
+    }
+}
+
+/// Return the set the face names to planned — the one-tap undo the logger
+/// also offers. Same identity rules; never touches a different set.
+struct UndoSetIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Undo set"
+    @Parameter(title: "Session") var sessionID: String
+    @Parameter(title: "Exercise") var exerciseIndex: Int
+    @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
+
+    init() {}
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
+        self.sessionID = sessionID
+        self.exerciseIndex = exerciseIndex
+        self.setIndex = setIndex
+        self.layout = layout
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let outcome = await WorkoutCommandBridge.perform(
+            .undoSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
         return .result(dialog: IntentDialog(stringLiteral: outcome))
     }
 }

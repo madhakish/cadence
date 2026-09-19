@@ -26,6 +26,11 @@ Adding a rule means adding tests on every platform in its `platforms` list.
 Deleting a rule is a deliberate act: say in the commit why the behaviour is no
 longer required.
 
+A pull request whose commits include a `fix:` without touching this file gets
+one advisory comment from the `Invariant nudge` workflow, updated in place,
+listing the fix commits with draft entries. Register the rule or reply why it
+is not one (a one-off, a typo, a build fix); the comment never blocks a merge.
+
 `platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
 `web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
 asserted in this workspace and are marked `unverifiable` — they are documented
@@ -102,7 +107,25 @@ wins over both.
 Re-syncing warmups after a bar, gym, or working-weight change refreshes their
 **weights** without changing **how many** a programmed entry owns. An
 equipment-changing swap is the exception: it rebuilds the ramp, because the old
-one described a different implement.
+one described a different implement. So is prior work: while every warmup on
+the entry is still planned, steps at or below a working load already
+**completed** earlier in the session on the same movement group with the same
+implement are dropped (never below two), removing only surplus planned rows. A
+completed or skipped warmup row is never rewritten or removed by a resync.
+
+### INV-WARMUP-RESYNC-SPARES-PERFORMED
+*platforms: native · unverifiable*
+
+A warmup resync — after a gym switch, a bar pick, or a working-weight change —
+rewrites only rows still **planned**. A completed or skipped warmup keeps the
+weight and reps the lifter performed, and a performed row past the new ramp's
+length survives the shrink; only surplus *planned* rows are dropped. Performed
+history is never reinterpreted against new equipment. Mirrored by the web
+logger's `synchronizeWarmups`.
+
+> Stamping every barbell entry with its bar made the resync reachable on every
+> gym switch, so a warmup the lifter had already logged was relabelled to the
+> new rack's ramp — and a surplus performed row deleted — after the fact.
 
 ### INV-CARDIO-SOLVES-THE-THIRD
 *platforms: core*
@@ -390,6 +413,24 @@ persists nothing.
 ---
 
 ## Session lifecycle
+
+### INV-RESUME-BY-COMPOSITION
+*platforms: core*
+
+Starting a program day resumes an open session for the same cycle, week, and
+day when the plan it was **built from** still equals the day's current plan as
+a **composition** — a sorted-name multiset — never as a sequence. A pure
+reorder (role-first display ordering, or a snapshot written before it existed)
+can never orphan an in-flight session behind a freshly built duplicate; only a
+program edit that changes the composition builds fresh. Each client adds a
+slot-identity gate on top: every entry tied to a slot must point at a slot the
+day still has (`ProgramSession.createSession`, `createSessionFromProgramDay`),
+so a same-named lift/accessory recategorization cannot slip past the name
+comparison.
+
+> Matching by sequence orphaned pre-upgrade in-flight sessions the moment
+> display order became role-first: Start built a duplicate, and the logged
+> sets sat in a session nothing would ever resume.
 
 ### INV-OPEN-IS-NOT-START
 *platforms: web*
@@ -846,6 +887,26 @@ counts, and pending peak results are exactly where the lifter left them, and
 no weight is re-derived or re-prompted. Switching never deletes a session,
 rewrites a historical program tag, or resets a PR.
 
+
+### INV-PROGRAM-PRESCRIBES-HISTORY-PROVES
+*platforms: core*
+
+Global capability is derived only from completed, performed work. The
+shared history fold takes completed set samples and nothing else: a
+program's base weight, a template's estimate, or a seeded starting load is
+never an input, so a program-local estimate can never become global truth.
+With no performed work there is no capability — the fold is empty, not
+guessed.
+
+### INV-EXERCISE-ID-FIRST
+*platforms: native, web*
+
+A non-nil exercise id resolves by id only. The name is the legacy input from
+which a missing id is derived once (`StableID.exerciseLegacyID`), after
+which slots, tracks, milestones, and session entries carry the id and are
+matched on it; a name lookup is the fallback for records that predate
+identity, never the primary key for records that carry one.
+
 ### INV-NEW-BLOCK-USES-CURRENT-HISTORY
 *platforms: native, web*
 
@@ -853,6 +914,53 @@ A new block seeds every slot from current global history through the training
 anchor resolver — exact history first, then an explicit related-lift rule,
 then the conservative catalog default — before it is ever activated. A lifter
 who has already earned a weight is never asked to type it again.
+
+---
+
+## Coaching
+
+### INV-BLOCKED-FLOOR-IS-SURFACED
+*platforms: core*
+
+A volume floor the coach cannot raise — no policy-compatible exercise fills the
+pattern, or every candidate day is technique/explosive — is always reported as
+a blocked `hold` recommendation naming the reason. It is never dropped from the
+report, including when the rotation's added-set budget is already spent; only
+fillable-but-unbudgeted floors wait silently. A budget of 0 remains the
+athlete's full opt-out of capacity management.
+
+> A `continue` past an unfillable pattern left the floor unmet forever with
+> nothing on screen to say so — the athlete's weakest movement was the one the
+> coach was quietest about.
+
+### INV-COACH-PROPOSES-ONLY-APPLIABLE
+*platforms: core*
+
+The coach never proposes a change whose Apply is guaranteed to fail. Capacity
+`addPattern` additions gate on the snapshot's `patternsWithAvailableExercise`,
+and max-effort weekly rotations gate on the slot's `rotationCandidateAvailable`;
+both are derived by the client from the same resolver Apply uses, under the
+program's equipment policy. When the caller does not say (a legacy snapshot),
+the engine proposes as before.
+
+> A freeWeightsOnly program whose only vertical-pull candidates were machines
+> was offered the same impossible plan every rotation, and Apply threw every
+> time.
+
+### INV-RECOMMENDATION-ID-IS-PORTABLE
+*platforms: core*
+
+A recommendation id is built from portable components only — the rule id, the
+cycle/rotation evidence key, and the program slot id. It never embeds a session
+id: that is an IndexedDB autoincrement on web and a UUID natively, and any
+backup restore re-mints it. Identical training data yields the identical id on
+both clients, so a dismissal or acceptance recorded in `coachingDecisions`
+keeps matching after a restore. Staleness is guarded by the change payload
+(`expectedBaseWeightLb`), not by the id.
+
+> The max-effort rotation and linear-triples ids carried the newest session's
+> id, so a dismissed prompt resurfaced after every backup restore and the two
+> clients disagreed on the id for the same logbook.
 
 ---
 
