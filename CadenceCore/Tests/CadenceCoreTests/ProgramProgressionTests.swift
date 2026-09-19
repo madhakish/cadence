@@ -1000,6 +1000,22 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.recoveryDayOrders([]), [])
     }
 
+    func testRecoveryPresentationMatchesScheduledWork() {
+        // [INV-RECOVERY-IS-A-BRIDGE] The visible sequence must not promise
+        // the full four-day rotation while the scheduler prescribes two.
+        XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5], rotation: 4), [2, 5])
+        XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5, 9], rotation: 4), [2, 5, 9],
+                       "TFH can explicitly schedule three recovery days")
+        for rotation in 1...3 {
+            XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5], rotation: rotation), [2, 5, 7, 9])
+            XCTAssertEqual(P.workoutDayLabel(name: "Day Alpha", rotation: rotation), "Day Alpha")
+            XCTAssertEqual(P.recoveryAccessorySets(ordinarySets: 3, rotation: rotation), 3)
+        }
+        XCTAssertEqual(P.workoutDayLabel(name: "Day Alpha", rotation: 4), "Recovery · Day Alpha")
+        XCTAssertEqual(P.recoveryAccessorySets(ordinarySets: 3, rotation: 4), 1,
+                       "recovery preview and builder must agree for timed and rep accessories")
+    }
+
     func testRecoveryAdvanceCountsBankedRepresentativesInsteadOfPointerOrder() {
         let selected = [0, 1]
         let afterLower = P.recoveryScheduleAdvance(

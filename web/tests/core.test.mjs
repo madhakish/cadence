@@ -472,6 +472,18 @@ eq(C.recoveryDayOrders([
 ]).join(","), "0,2,5", "ambiguous programs retain their complete authored rotation");
 eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
 
+// [INV-RECOVERY-IS-A-BRIDGE] Presentation uses authored recovery orders,
+// including a TFH policy with three days and sparse day ordering.
+eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], 4).join(","), "2,5", "visible legacy recovery has two days");
+eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5, 9], 4).join(","), "2,5,9", "TFH can show three recovery days");
+for (const rotation of [1, 2, 3]) {
+  eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], rotation).join(","), "2,5,7,9", "build retains all authored days");
+  eq(C.workoutDayLabel("Day Alpha", rotation), "Day Alpha", "build day keeps its authored name");
+  eq(C.recoveryAccessorySets(3, rotation), 3, "build accessory count holds");
+}
+eq(C.workoutDayLabel("Day Alpha", 4), "Recovery · Day Alpha", "recovery is explicit regardless of day name");
+eq(C.recoveryAccessorySets(3, 4), 1, "recovery preview and builder agree for all accessory modalities");
+
 // Recovery completion counts selected exposures actually banked in the
 // current cycle. Pointer order cannot make the second-authored day roll early,
 // and an old full-rotation day cannot count as part of the shortened bridge.

@@ -3436,6 +3436,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   for (let i = 1; i < 14; i++) { // 3 × 4 progression exposures + 2 recovery exposures
     prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+    if (prog.currentWeek === C.DELOAD_WEEK) {
+      await home.render(host());
+      const hero = host().querySelector(".today-hero");
+      ok(hero.textContent.includes(`Recovery · ${day.name}`) && hero.textContent.includes("Deload · light work"),
+        "[INV-RECOVERY-IS-A-BRIDGE] Today explicitly identifies the next recovery workout");
+      const sequence = host().querySelector(".day-sequence").textContent;
+      ok(sequence.includes("Lower A") && sequence.includes("Upper A") && !sequence.includes("Lower B") && !sequence.includes("Upper B"),
+        "Recovery sequence shows only the two scheduled representatives");
+      hero.querySelector("button").click();
+      const preview = document.querySelector("#overlays .overlay:last-child");
+      ok(preview.textContent.includes(`Start Recovery · ${day.name}`), "preview start action names recovery");
+      for (const acc of day.accessories) {
+        const row = [...preview.querySelectorAll(".row")].find(row => row.querySelector(".title")?.textContent === acc.exerciseName);
+        ok(/^1(?:×| ×)/.test(row?.querySelector(".sub.mono")?.textContent || ""),
+          "recovery accessory preview shows the single set the builder will create");
+      }
+      preview.querySelector(".overlay-head button").click();
+    }
     const id = await session.createSessionFromProgramDay(prog, day);
     const sess = await db.Sessions.get(id);
     if (sess.programTag.week === C.DELOAD_WEEK) {
@@ -3450,6 +3468,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   prog = await db.Programs.active();
   ok(prog.cycleNumber === 2, `cycle rolled over (cyc=${prog.cycleNumber})`);
   ok(prog.currentWeek === 1, `wave reset to week 1 (wk=${prog.currentWeek})`);
+  await home.render(host());
+  ok(!host().querySelector(".today-hero").textContent.includes("Recovery"), "new cycle returns to the ordinary workout heading");
+  ok(host().querySelector(".day-sequence").textContent.includes("Upper B"), "new cycle restores the full four-day sequence");
   ok(recoveryDays.join(",") === "Lower A,Upper A",
     `[INV-RECOVERY-IS-A-BRIDGE] phase 4 banks one lower and one upper exposure (${recoveryDays})`);
   const squatMain = prog.days[0].lifts.find((l) => l.role === "main");

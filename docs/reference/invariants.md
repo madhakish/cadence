@@ -373,6 +373,11 @@ Recovery prescriptions cut working volume, reduce every accessory to one set,
 and freeze accessory, rep-window, and per-exposure progression as well as e1RM
 observations. The next mesocycle always restarts at the first full authored day.
 
+Today and workout previews explicitly label recovery, including programs whose
+slots use double progression. Their sequence shows only the selected recovery
+days (the TFH policy's authored days when present). Accessory previews show the
+same reduced set count that session creation uses, for timed and rep work alike.
+
 ### INV-PHASE-NAME-IS-PER-SLOT
 *platforms: core, web*
 
@@ -382,6 +387,8 @@ shared phase-shaped table (`usesCyclePhases`, i.e. everything except
 `buildsOwnSessionShape`). `linearFives`, the three Texas days,
 `doubleProgression`, `fiveThreeOne`, `maxEffort` and `dynamicEffort` never
 carry one, and the program-level rotation indicator reports position only.
+The shared recovery rotation is explicitly identified on workout headings and
+start actions: every style reduces work there, unlike the distinct build phases.
 
 A slot's badge names the **resolved** style, so a slot left on `automatic`
 advertises what the engine will actually run rather than the placeholder.

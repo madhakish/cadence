@@ -429,6 +429,23 @@ public enum ProgramProgression {
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
     }
 
+    /// Presentation reads the same authored/representative orders as scheduling.
+    /// TFH callers supply the cohort's recovery orders instead of legacy inference.
+    public static func visibleDayOrders(dayOrders: [Int], recoveryDayOrders: [Int], rotation: Int) -> [Int] {
+        let selected = rotation == deloadWeek ? recoveryDayOrders : dayOrders
+        return Array(Set(selected)).sorted()
+    }
+
+    /// Recovery is shared by every slot style, even when build phases are not.
+    public static func workoutDayLabel(name: String, rotation: Int) -> String {
+        rotation == deloadWeek ? "Recovery · \(name)" : name
+    }
+
+    /// Used by both preview and creation; recovery always trims accessories.
+    public static func recoveryAccessorySets(ordinarySets: Int, rotation: Int) -> Int {
+        rotation == deloadWeek ? 1 : ordinarySets
+    }
+
     /// Recovery completion is set-based, not pointer-based. The bridge may be
     /// banked in either order, and a program upgraded while already in phase 4
     /// may point at a day omitted by the shortened bridge. Count the selected

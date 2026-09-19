@@ -2378,7 +2378,7 @@ export async function createSessionFromProgramDay(program, day) {
       ? acc.sets : Math.max(1, Math.round(acc.sets * accessoryPercent / 100));
     // Recovery retains movement familiarity but not a full accessory session.
     // Banking this exposure cannot advance the slot's rep/load target.
-    const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
+    const effectiveSets = C.recoveryAccessorySets(ordinarySets, program.currentWeek);
     // The target clamped into the slot's own window, so the card, the built
     // session, and the advance all read the same number. Mirrors
     // ProgramAccessory.prescribedReps.

@@ -236,7 +236,9 @@ enum ProgramSession {
             // a normal accessory session into the bridge. One easy set per
             // slot is enough exposure; completion deliberately cannot advance
             // its rep/load target (see SessionCompletion).
-            let effectiveSets = phase == .deload ? 1 : ordinarySets
+            let effectiveSets = ProgramProgression.recoveryAccessorySets(
+                ordinarySets: ordinarySets, rotation: program.currentWeek
+            )
             // The target clamped into the window this slot actually runs on —
             // a bodyweight identity has no load step, so its window top is
             // advisory and the prescription must follow the reps it earned.

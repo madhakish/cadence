@@ -1901,6 +1901,20 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
+// Presentation reads the schedule's orders, including TFH's authored recovery.
+// Mirrored in CadenceCore ProgramProgression.
+export function visibleDayOrders(dayOrders, recoveryDayOrders, rotation) {
+  return [...new Set(rotation === DELOAD_WEEK ? recoveryDayOrders : dayOrders)].sort((a, b) => a - b);
+}
+
+export function workoutDayLabel(name, rotation) {
+  return rotation === DELOAD_WEEK ? `Recovery · ${name}` : name;
+}
+
+export function recoveryAccessorySets(ordinarySets, rotation) {
+  return rotation === DELOAD_WEEK ? 1 : ordinarySets;
+}
+
 // Recovery completion is set-based, not pointer-based. The bridge can be
 // banked in either order, and an in-flight phase-4 program may still point at
 // an old full-rotation day omitted by the shortened bridge. Only selected
