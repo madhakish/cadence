@@ -1,0 +1,18 @@
+area:instructions:
+  - changed-files:
+      - any-glob-to-any-file: ['AGENTS.md', 'CLAUDE.md', 'AGENT-COORDINATION.md', '.agents/**', '.github/copilot-instructions.md', 'docs/AGENT-*.md', 'docs/REPOSITORY-HYGIENE.md']
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/workflows/**', '.github/scripts/**', '.github/labeler.yml', '.github/dependabot.yml']
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file: ['docs/**', '*.md']
+area:native:
+  - changed-files:
+      - any-glob-to-any-file: ['Cadence/**', 'CadenceWidgets/**', 'CadenceMigrationTests/**', 'project.yml']
+area:core:
+  - changed-files:
+      - any-glob-to-any-file: ['CadenceCore/**']
+area:web:
+  - changed-files:
+      - any-glob-to-any-file: ['web/**']

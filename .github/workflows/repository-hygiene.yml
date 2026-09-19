@@ -1,0 +1,39 @@
+name: Repository hygiene
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: repository-hygiene-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Test the hygiene checks
+        run: node --test .github/scripts/test-repository-hygiene.mjs
+      - name: Validate instruction files
+        run: node .github/scripts/check-agent-instructions.mjs
+      - name: Validate PR metadata and task issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/pr-contract.mjs
+      - name: Check diff whitespace
+        run: git diff --check HEAD^ HEAD
