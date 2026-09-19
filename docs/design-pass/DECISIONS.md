@@ -67,3 +67,10 @@
 - Session progress — "Exercise N of M · S of T work sets · date" is supporting information. It rides as the focused section's footer on native and as the focused card's footer on web, never as a card of its own.
 - One supporting section — the gym picker ("Training at"), "Add exercise", and session notes share one "Session" section beneath the exercises on both clients. For the proof fixture (three lifts, none passed) the session list holds 5 sections where the design-pass baseline held 8.
 - Unchanged — set completion, focus advance, rest, gym-switch bar restamping, notes persistence, and the cycle model. History and program filtering are untouched.
+
+## Exercise pane tiers, 2026-09-17
+
+- Tier 1, always visible — classification eyebrow, current prescription (load × reps, set position, effort cue, rest), the loaded bar, and the achieved-with-bar summary. Nothing in it is recomputed; it is the logger's own entry and solver path.
+- Tier 2, one expand — "Previous performance & programming": last done, the top-set sparkline, program membership, cycle and rotation context, deload phase. Its collapsed face states last-done and the assignment count.
+- Tier 3, one expand — "Muscles & relationship": the complementary/main relationship and its originating focus exactly as the engine labelled it, then the anatomy figure with its primary/supporting legend. The relationship left the prescription block; it is context, not the work in hand.
+- Default state — the library opens on the anatomy; between sets both tiers start collapsed so the work in hand is above the fold. Expanding either tier never moves tier 1; the iPhone suite asserts the prescription's frame after both open.

@@ -156,6 +156,18 @@ struct ExerciseDetailView: View {
     var sessionEntry: SessionExercise? = nil
     var sessionGym: Gym? = nil
     var sessionProgramFocus: TrainingFocus? = nil
+
+    init(exercise: Exercise, sessionEntry: SessionExercise? = nil, sessionGym: Gym? = nil,
+         sessionProgramFocus: TrainingFocus? = nil) {
+        self.exercise = exercise
+        self.sessionEntry = sessionEntry
+        self.sessionGym = sessionGym
+        self.sessionProgramFocus = sessionProgramFocus
+        // The library opens on the anatomy; between sets the pane opens on
+        // the work in hand (tier 1) with the tiers below collapsed (#184).
+        _showAnatomy = State(initialValue: sessionEntry == nil)
+    }
+
     @Query private var programs: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var gyms: [Gym]
@@ -163,7 +175,7 @@ struct ExerciseDetailView: View {
            sort: \WorkoutSession.date, order: .reverse)
     private var completed: [WorkoutSession]
 
-    @State private var showAnatomy = true
+    @State private var showAnatomy: Bool
     @State private var showProgramming = false
     @State private var showSetup = false
     @State private var showStatus = false
@@ -327,12 +339,6 @@ struct ExerciseDetailView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        if let contextualTrainingRelationship {
-                            Text(contextualTrainingRelationship)
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
-                                .accessibilityIdentifier("training-focus-context")
-                        }
                         if let contextualEffortCue {
                             Text(contextualEffortCue)
                                 .font(.callout.bold())
@@ -356,45 +362,25 @@ struct ExerciseDetailView: View {
                 }
             }
 
-            if let profile {
-                Section {
-                    DisclosureGroup(isExpanded: $showAnatomy) {
-                        AnatomyFigureView(profile: profile)
-                            .frame(maxWidth: 620)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Muscles worked").font(.headline)
-                            Text(profile.primary.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", "))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                }
-            }
-
-            Section("History") {
-                LabeledContent("Last done") {
-                    Text(lastDoneLabel).multilineTextAlignment(.trailing)
-                }
-                if exercise.type != .timed && topSetSeries.count >= 2 {
-                    LabeledContent("Top set, last \(topSetSeries.count)") {
-                        SparklineView(values: topSetSeries)
-                            .frame(width: 132, height: 30)
-                    }
-                }
-            }
-
             // One binding, one traversal: the computed property re-walks
             // programs→days→lifts on every access, and this body needs the
             // result four times.
             let data = membershipData
             let gym = defaultGym
 
+            // Tier 2, one expand: previous performance, then programming
+            // context. Tier 1 above never moves when this opens (#184).
             Section {
                 DisclosureGroup(isExpanded: $showProgramming) {
+                    LabeledContent("Last done") {
+                        Text(lastDoneLabel).multilineTextAlignment(.trailing)
+                    }
+                    if exercise.type != .timed && topSetSeries.count >= 2 {
+                        LabeledContent("Top set, last \(topSetSeries.count)") {
+                            SparklineView(values: topSetSeries)
+                                .frame(width: 132, height: 30)
+                        }
+                    }
                     if data.labels.isEmpty {
                         Text("Not currently used in a program.").foregroundStyle(.secondary)
                     } else {
@@ -458,10 +444,41 @@ struct ExerciseDetailView: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Programming context").font(.headline)
-                        Text(data.labels.isEmpty ? "No program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s") · rotation details")
+                        Text("Previous performance & programming").font(.headline)
+                        Text("Last done \(lastDoneLabel) · " + (data.labels.isEmpty ? "no program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s")"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            // Tier 3, one expand: muscles and the training relationship as
+            // the engine labelled it. The figure's own legend separates
+            // primary from supporting muscles.
+            if profile != nil || contextualTrainingRelationship != nil {
+                Section {
+                    DisclosureGroup(isExpanded: $showAnatomy) {
+                        if let contextualTrainingRelationship {
+                            Text(contextualTrainingRelationship)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("training-focus-context")
+                        }
+                        if let profile {
+                            AnatomyFigureView(profile: profile)
+                                .frame(maxWidth: 620)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Muscles & relationship").font(.headline)
+                            Text(profile.map { $0.primary.map { AnatomyData.muscleNames[$0] ?? $0 }.joined(separator: ", ") } ?? "Training relationship")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
                 }
             }

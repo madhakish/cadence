@@ -41,6 +41,19 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
         capture("after-04-exercise-pane-iphone")
 
+        // #184: tiers 2 and 3 open beneath tier 1, which does not move. The
+        // list is scrolled back to its top before the frame is compared.
+        let prescription = app.staticTexts["CURRENT PRESCRIPTION"]
+        XCTAssertTrue(prescription.waitForExistence(timeout: 3))
+        let tierOne = prescription.frame
+        openDisclosure("Previous performance & programming")
+        XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
+        openDisclosure("Muscles & relationship")
+        capture("after-04b-exercise-pane-tiers-open-iphone")
+        for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
+        XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,
+                       "tier 1 moved when tiers 2 and 3 opened")
+
         let frontLabel = app.staticTexts["Front"]
         for _ in 0..<4 where !frontLabel.isHittable { app.swipeUp() }
         XCTAssertTrue(frontLabel.waitForExistence(timeout: 3))
@@ -251,6 +264,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(complementary.waitForExistence(timeout: 4))
         complementary.tap()
         XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        // The relationship is tier 3 context: one expand, never in the prescription.
+        openDisclosure("Muscles & relationship")
         let focus = element("training-focus-context")
         XCTAssertTrue(focus.waitForExistence(timeout: 3))
         XCTAssertEqual(focus.label, "Complementary lift · Hypertrophy focus")
@@ -369,6 +384,19 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
         XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")
         XCTAssertEqual(hero.frame.height, heroBefore.height, accuracy: 0.5, "current-set hero resized on completion")
+    /// Scrolls a DisclosureGroup's label into the window and taps it. XCUI
+    /// never reports SwiftUI disclosure labels as hittable, so the tap goes
+    /// through a coordinate once the label's frame sits inside the window.
+    private func openDisclosure(_ label: String) {
+        let text = app.staticTexts[label]
+        // List rows are lazy: a label far below the fold does not exist in
+        // the hierarchy until the list scrolls near it.
+        for _ in 0..<8 where !text.exists { app.swipeUp() }
+        XCTAssertTrue(text.waitForExistence(timeout: 3), "\(label) is on this screen")
+        let window = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 120)
+        for _ in 0..<6 where !window.contains(text.frame) { app.swipeUp() }
+        XCTAssertTrue(window.contains(text.frame), "\(label) scrolled into view")
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func element(_ identifier: String) -> XCUIElement {

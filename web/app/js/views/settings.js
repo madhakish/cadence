@@ -1328,9 +1328,15 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
           ui.h("h2", { text: e.name }),
           e.notes ? ui.h("p", { class: "sub", text: e.notes }) : null));
 
-        // When opened between sets, the work in hand wins the hierarchy.
-        // This is the same stored entry and solver path the logger records;
-        // the pane does not invent a presentation-only prescription.
+        // The complementary/main relationship and its originating focus, as
+        // the engine labelled it. Tier 3 context, never re-derived here.
+        const relationship = sessionEntry?.programRole ? [
+          sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
+          sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
+        ].filter(Boolean).join(" · ") : null;
+        // Tier 1: when opened between sets, the work in hand wins the
+        // hierarchy. This is the same stored entry and solver path the logger
+        // records; the pane does not invent a presentation-only prescription.
         if (sessionEntry) {
           const working = (sessionEntry.sets || []).filter((set) => !set.isWarmup);
           const current = working.find((set) => set.status === "planned") || working.at(-1) || null;
@@ -1339,16 +1345,10 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             && !(sessionEntry.prescriptionStyle === "automatic" && !sessionProgramFocus)
             ? C.complementaryEffortCue(sessionEntry.programRole, sessionEntry.prescriptionStyle,
               e.movementGroup, sessionProgramFocus || "strength") : null;
-          const relationship = sessionEntry.programRole ? [
-            sessionEntry.programRole === "complementary" ? "Complementary lift" : "Main lift",
-            sessionProgramFocus ? `${sessionProgramFocus[0].toUpperCase()}${sessionProgramFocus.slice(1)} focus` : null,
-          ].filter(Boolean).join(" · ") : null;
           const live = ui.h("section", { class: "current-prescription", "aria-label": "Current prescription" },
             ui.h("span", { class: "eyebrow", text: "CURRENT PRESCRIPTION" }),
             ui.h("div", { class: "prescription-line mono", text: current
               ? `${current.weightLb === 0 ? "BW" : C.both(current.weightLb)} × ${current.reps}` : "No working sets" }),
-            relationship ? ui.h("div", { class: "sub training-focus-context", text: relationship,
-              "aria-label": `Training context: ${relationship}` }) : null,
             ui.h("div", { class: "sub", text: current
               ? [`Set ${currentNumber} of ${working.length}`, effortCue,
                 Number.isFinite(restSeconds) ? `${ui.mmss(restSeconds)} rest` : null].filter(Boolean).join(" · ")
@@ -1377,19 +1377,31 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
           body.append(live);
         }
 
-        const profile = muscleProfile(e.name, e.movementGroup);
-        if (profile) {
-          const svg = figureSVG(profile);
-          svg.style.maxWidth = "620px"; svg.style.width = "100%";
-          body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
-            ui.h("summary", {}, ui.h("span", { text: "Muscles & anatomy" }),
-              ui.h("span", { class: "sub", text: profile.primary.map((id) => id).join(" · ") })),
-            ui.h("div", { class: "anatomy-card" }, svg, muscleLegend(profile, svg))));
-        }
+        // Tier 2, one expand: previous performance and programming context.
+        // Tier 1 above never moves when this opens.
         const insightWrap = ui.h("div", {});
-        body.append(ui.h("details", { class: "card info-disclosure", open: !sessionEntry },
+        body.append(ui.h("details", { class: "card info-disclosure progression-disclosure" },
           ui.h("summary", { text: "Previous performance & programming" }), insightWrap));
         exerciseInsight(insightWrap, e);
+        // Tier 3, one expand: muscles and the training relationship. The
+        // library opens on the anatomy; between sets the pane opens on the
+        // work in hand.
+        const profile = muscleProfile(e.name, e.movementGroup);
+        if (profile || relationship) {
+          const muscles = ui.h("details", { class: "card info-disclosure muscles-disclosure", open: !sessionEntry },
+            ui.h("summary", {}, ui.h("span", { text: "Muscles & relationship" }),
+              ui.h("span", { class: "sub", text: profile ? profile.primary.map((id) => id).join(" · ") : "Training relationship" })));
+          if (relationship) {
+            muscles.append(ui.h("div", { class: "sub training-focus-context", text: relationship,
+              "aria-label": `Training context: ${relationship}` }));
+          }
+          if (profile) {
+            const svg = figureSVG(profile);
+            svg.style.maxWidth = "620px"; svg.style.width = "100%";
+            muscles.append(ui.h("div", { class: "anatomy-card" }, svg, muscleLegend(profile, svg)));
+          }
+          body.append(muscles);
+        }
         const setup = ui.h("div", { class: "disclosure-content" });
         body.append(ui.h("details", { class: "card info-disclosure" },
           ui.h("summary", { text: "Exercise setup" }), setup));
