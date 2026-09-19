@@ -194,4 +194,140 @@ final class WorkoutCommandTests: XCTestCase {
         XCTAssertEqual(face.prescriptionLabel, "5 reps · 95 lb / 43.1 kg")
         XCTAssertEqual(face.exerciseName, "Back Squat")
     }
+
+    func testDeleteThenAddCannotRetargetAnyStaleCommand() throws {
+        // [INV-LOCK-SCREEN-SET-IDENTITY]
+        for status in [SetStatus.completed, .skipped, .planned] {
+            let container = try makeContainer()
+            let context = container.mainContext
+            let (session, settings) = try makeSession(context: context, autoStart: false)
+            let entry = session.orderedExercises[0]
+            let original = entry.orderedSets
+            original[0].status = .completed
+            let previous: SetStatus = status == .planned ? .completed : .planned
+            original[1].status = previous
+            original[2].status = previous
+            try context.save()
+            let stale = WorkoutCommandService.layout(of: session)
+            let command: WorkoutCommand
+            switch status {
+            case .completed: command = .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: stale)
+            case .skipped: command = .skipSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: stale)
+            case .planned: command = .undoSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: stale)
+            }
+
+            // Same edit path as the logger: remove A, renumber B, append C.
+            // The old and new display patterns are both "Back Squat#wss".
+            entry.sets.removeAll { $0 === original[1] }
+            context.delete(original[1])
+            original[2].order = 1
+            let replacement = SetEntry(order: 2, weightLb: 185, reps: 6)
+            context.insert(replacement)
+            entry.sets.append(replacement)
+            try context.save()
+
+            XCTAssertThrowsError(try WorkoutCommandService.perform(
+                command, settings: settings, restRunning: false, context: context)) { error in
+                XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+            }
+            XCTAssertEqual(original[2].status, previous, "a stale \(status) must not mutate B")
+            XCTAssertEqual(replacement.status, .planned, "the added set is untouched")
+            let reloaded = try XCTUnwrap(try ModelContext(container).fetch(FetchDescriptor<WorkoutSession>()).first)
+            XCTAssertEqual(reloaded.orderedExercises[0].orderedSets.map(\.status), [.completed, previous, .planned])
+        }
+    }
+
+    func testReorderingEqualKindSetsCannotRetargetAStaleCommand() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let (session, settings) = try makeSession(context: context, autoStart: false)
+        let original = sets(session)
+        original[0].status = .completed
+        try context.save()
+        let stale = WorkoutCommandService.layout(of: session)
+        original[1].order = 2
+        original[2].order = 1
+        try context.save()
+
+        XCTAssertThrowsError(try WorkoutCommandService.perform(
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: stale),
+            settings: settings, restRunning: false, context: context)) { error in
+            XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+        }
+        XCTAssertEqual(original.map(\.status), [.completed, .planned, .planned])
+    }
+
+    func testReorderingIdenticalExerciseEntriesCannotRetargetAStaleCommand() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let (session, settings) = try makeSession(context: context, autoStart: false)
+        let first = session.orderedExercises[0]
+        let second = SessionExercise(order: 1, exercise: first.exercise)
+        context.insert(second)
+        session.exercises.append(second)
+        for set in first.orderedSets {
+            let copy = SetEntry(order: set.order, weightLb: set.weightLb, reps: set.reps, isWarmup: set.isWarmup)
+            context.insert(copy)
+            second.sets.append(copy)
+        }
+        try context.save()
+        let stale = WorkoutCommandService.layout(of: session)
+        first.order = 1
+        second.order = 0
+        try context.save()
+
+        XCTAssertThrowsError(try WorkoutCommandService.perform(
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: stale),
+            settings: settings, restRunning: false, context: context)) { error in
+            XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+        }
+        XCTAssertTrue(session.exercises.flatMap(\.sets).allSatisfy { $0.status == .planned })
+    }
+
+    func testUnchangedCommandSurvivesStoreReopen() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-command-identity-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let config = ModelConfiguration("command-identity", schema: schema, url: directory.appendingPathComponent("Cadence.store"))
+        let command: WorkoutCommand
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let expectedSet: Data
+        let expectedLayout: String
+        do {
+            let container = try ModelContainer(for: schema, configurations: config)
+            let (session, _) = try makeSession(context: container.mainContext, autoStart: false)
+            expectedSet = try encoder.encode(sets(session)[0].persistentModelID)
+            expectedLayout = WorkoutCommandService.layout(of: session)
+            XCTAssertFalse(expectedLayout.isEmpty)
+            let face = WorkoutCommand.completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: expectedLayout)
+            command = try JSONDecoder().decode(WorkoutCommand.self, from: JSONEncoder().encode(face))
+        }
+
+        let reopened = try ModelContainer(for: schema, configurations: config)
+        let context = reopened.mainContext
+        let session = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutSession>()).first)
+        XCTAssertEqual(WorkoutCommandService.layout(of: session), expectedLayout)
+        // PersistentIdentifier equality includes the container's object-ID
+        // backing; its Codable representation is the cross-launch contract.
+        XCTAssertEqual(try encoder.encode(sets(session)[0].persistentModelID), expectedSet)
+        _ = try WorkoutCommandService.perform(command, settings: nil, restRunning: false, context: context)
+        XCTAssertEqual(sets(session).map(\.status), [.completed, .planned, .planned])
+    }
+
+    func testLegacyAndUnavailableIdentitiesAreRefused() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let (session, settings) = try makeSession(context: context, autoStart: false)
+        for stale in ["", SetLifecycle.layoutFingerprint("Back Squat#wss")] {
+            XCTAssertThrowsError(try WorkoutCommandService.perform(
+                .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: stale),
+                settings: settings, restRunning: false, context: context)) { error in
+                XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+            }
+        }
+        XCTAssertEqual(sets(session).map(\.status), [.planned, .planned, .planned])
+    }
 }

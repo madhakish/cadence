@@ -50,14 +50,22 @@ enum WorkoutCommandService {
         }
     }
 
-    /// The structure a face was built from: exercise order and each entry's
-    /// warmup/work set layout. Reordering, removing, or adding anything
-    /// changes it, and a command carrying the old value is refused.
+    /// Bind a face to the ordered persisted entries and sets, not just their
+    /// labels and warmup/work pattern. Equal-shaped replacements must differ.
     static func layout(of session: WorkoutSession) -> String {
-        let description = session.orderedExercises.map { entry in
+        let entries = session.orderedExercises
+        let identities = entries.map { entry in
+            [entry.persistentModelID] + entry.orderedSets.map(\.persistentModelID)
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        // An unavailable identity must never authorize a command. Persisted
+        // identifiers encode across contexts/relaunches; debug strings don't.
+        guard let encoded = try? encoder.encode(identities) else { return "" }
+        let description = entries.map { entry in
             "\(entry.exercise?.name ?? "?")#\(entry.orderedSets.map { $0.isWarmup ? "w" : "s" }.joined())"
         }.joined(separator: ";")
-        return SetLifecycle.layoutFingerprint(description)
+        return "ids-v1:" + SetLifecycle.layoutFingerprint(encoded.base64EncodedString() + ";" + description)
     }
 
     // MARK: Decision
@@ -141,7 +149,7 @@ enum WorkoutCommandService {
         guard !session.isCompleted else { throw Failure.sessionAlreadyBanked }
         // Indices are array offsets; a face built before the session was
         // reordered or edited must not land on whatever now occupies them.
-        guard layout == Self.layout(of: session) else { throw Failure.movedOn }
+        guard !layout.isEmpty, layout == Self.layout(of: session) else { throw Failure.movedOn }
         let ordered = session.orderedExercises
         guard ordered.indices.contains(exerciseIndex) else { throw Failure.setNotFound }
         let entry = ordered[exerciseIndex]
