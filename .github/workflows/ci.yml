@@ -192,6 +192,8 @@ jobs:
         run: |
           node .github/scripts/test-release-parser.mjs
           node .github/scripts/test-plan-release.mjs
+      - name: Verify the invariant nudge drafts
+        run: node .github/scripts/test-invariant-nudge.mjs
       - name: Verify release-state recovery
         run: bash .github/scripts/test-reconcile-release-state.sh
       - name: Fetch release history
