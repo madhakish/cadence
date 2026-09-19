@@ -36,10 +36,28 @@ enum WorkoutCommandService {
 
     // MARK: Mutation
 
-    /// Change one set's status and save. Every writer goes through here.
+    /// Change one set's status and save. Every writer goes through here. A
+    /// failed save restores the status, so the shared context never carries
+    /// a verdict that was reported as not written.
     static func setStatus(_ status: SetStatus, of set: SetEntry, context: ModelContext) throws {
+        let previous = set.status
         set.status = status
-        try context.save()
+        do {
+            try context.save()
+        } catch {
+            set.status = previous
+            throw error
+        }
+    }
+
+    /// The structure a face was built from: exercise order and each entry's
+    /// warmup/work set layout. Reordering, removing, or adding anything
+    /// changes it, and a command carrying the old value is refused.
+    static func layout(of session: WorkoutSession) -> String {
+        let description = session.orderedExercises.map { entry in
+            "\(entry.exercise?.name ?? "?")#\(entry.orderedSets.map { $0.isWarmup ? "w" : "s" }.joined())"
+        }.joined(separator: ";")
+        return SetLifecycle.layoutFingerprint(description)
     }
 
     // MARK: Decision
@@ -90,10 +108,14 @@ enum WorkoutCommandService {
         let set = sets[setIndex]
         let group = sets.filter { $0.isWarmup == set.isWarmup }
         let ordinal = (group.firstIndex { $0.persistentModelID == set.persistentModelID } ?? 0) + 1
+        let type = entry.exercise?.type
+        let timed = type == .timed || type == .conditioning
         return CurrentSetProjection(
             exerciseIndex: exerciseIndex, setIndex: setIndex, ordinal: ordinal, total: group.count,
             isWarmup: set.isWarmup, reps: set.reps, loadLb: set.weightLb,
-            exerciseName: entry.exercise?.name ?? ""
+            exerciseName: entry.exercise?.name ?? "",
+            durationSeconds: timed ? set.durationSeconds : nil,
+            layout: layout(of: session)
         )
     }
 
@@ -107,15 +129,19 @@ enum WorkoutCommandService {
         let sessionID: String
         let exerciseIndex: Int
         let setIndex: Int
+        let layout: String
         let status: SetStatus
         switch command {
-        case let .completeSet(s, e, i): (sessionID, exerciseIndex, setIndex, status) = (s, e, i, .completed)
-        case let .skipSet(s, e, i): (sessionID, exerciseIndex, setIndex, status) = (s, e, i, .skipped)
-        case let .undoSet(s, e, i): (sessionID, exerciseIndex, setIndex, status) = (s, e, i, .planned)
+        case let .completeSet(s, e, i, l): (sessionID, exerciseIndex, setIndex, layout, status) = (s, e, i, l, .completed)
+        case let .skipSet(s, e, i, l): (sessionID, exerciseIndex, setIndex, layout, status) = (s, e, i, l, .skipped)
+        case let .undoSet(s, e, i, l): (sessionID, exerciseIndex, setIndex, layout, status) = (s, e, i, l, .planned)
         }
         let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.id == sessionID })
         guard let session = try context.fetch(descriptor).first else { throw Failure.sessionNotFound }
         guard !session.isCompleted else { throw Failure.sessionAlreadyBanked }
+        // Indices are array offsets; a face built before the session was
+        // reordered or edited must not land on whatever now occupies them.
+        guard layout == Self.layout(of: session) else { throw Failure.movedOn }
         let ordered = session.orderedExercises
         guard ordered.indices.contains(exerciseIndex) else { throw Failure.setNotFound }
         let entry = ordered[exerciseIndex]

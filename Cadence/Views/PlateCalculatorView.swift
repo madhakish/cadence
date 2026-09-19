@@ -7,6 +7,7 @@ import CadenceCore
 struct PlateCalculatorView: View {
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
+    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 34
 
     @State private var mode: Mode = .target
     @State private var targetText = ""
@@ -84,7 +85,8 @@ struct PlateCalculatorView: View {
                         .tracking(0.8)
                         .foregroundStyle(Theme.accent)
                     Text("Know your load.")
-                        .font(.system(size: 34, weight: .bold))
+                        .font(.system(size: heroSize, weight: .bold))
+                        .minimumScaleFactor(0.7)
                         .tracking(-0.5)
                 }
                 .accessibilityElement(children: .combine)

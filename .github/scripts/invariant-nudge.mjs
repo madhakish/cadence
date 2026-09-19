@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 export const MARKER = "<!-- invariant-nudge -->";
 export const REGISTRY = "docs/reference/invariants.md";
 
-const FIX_SUBJECT = /^fix(\([^)]*\))?!?:\s*(.+)$/;
+const FIX_SUBJECT = /^fix(\([^)]*\))?!?:\s*(\S.*)$/;
 
 function firstParagraph(body) {
   const paragraphs = body.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);

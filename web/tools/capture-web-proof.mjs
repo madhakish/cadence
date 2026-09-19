@@ -83,7 +83,10 @@ const browser = await puppeteer.launch({
 try {
   fs.mkdirSync(OUT, { recursive: true });
   for (const viewport of VIEWPORTS) {
-    const page = await browser.newPage();
+    // Each viewport gets its own browser context (and so its own IndexedDB),
+    // so the second capture set never inherits the first one's session.
+    const context = await browser.createBrowserContext();
+    const page = await context.newPage();
     page.on("pageerror", (error) => console.error(`[${viewport.name}] page error:`, error.message));
     await page.setViewport(viewport);
     await page.goto(`http://127.0.0.1:${PORT}/cadence/app/`, { waitUntil: "networkidle0" });
@@ -128,6 +131,7 @@ try {
     await nav("settings"); await shot("settings");
     await nav("history"); await shot("history");
     await page.close();
+    await context.close();
   }
 } finally {
   await browser.close();

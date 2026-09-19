@@ -120,6 +120,14 @@ struct ActiveSessionView: View {
             // focused lift's footer, so nothing competes with the dominant
             // block above it (#185).
             Section("Session") {
+                // With no lift to carry it as a footer, progress and the date
+                // still have a home (mirrors the web session card).
+                if currentOrFirst == nil {
+                    Text(sessionProgressLine)
+                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("session-progress")
+                }
                 gymPicker
                 Button {
                     showExercisePicker = true
@@ -183,7 +191,9 @@ struct ActiveSessionView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             if let entry = currentEntry, !entry.orderedSets.contains(where: { $0.status == .planned }) {
-                currentEntry = nil
+                // The same rule the logger and the Lock Screen commands use:
+                // advance through authored order from the finished lift.
+                focusAfterResolving(entry)
             }
             pushActivityContext()
         }
@@ -460,8 +470,10 @@ struct ActiveSessionView: View {
             lastTime: recallLine(for: entry, in: recall),
             adHocExposure: mostRecentTopExposure(for: entry),
             onDropLoad: { autoregEntry = entry },
-            onWork: { currentEntry = $0 },
-            onResolve: { focusAfterResolving($0) },
+            // A verdict changes the current set even when focus stays on the
+            // same lift; the Lock Screen face must follow every time (#200).
+            onWork: { currentEntry = $0; pushActivityContext() },
+            onResolve: { focusAfterResolving($0); pushActivityContext() },
             restTargetName: { nextRestExerciseName(after: entry) },
             onRemove: { removeExercise(entry) },
             onMove: { moveExercise(entry, direction: $0) }
@@ -2633,6 +2645,8 @@ private struct CurrentSetHero: View {
     let set: SetEntry
     let ordinal: Int
     let total: Int
+    /// The dominant numeral keeps its proportion and still follows Dynamic Type.
+    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2654,7 +2668,9 @@ private struct CurrentSetHero: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if set.weightLb > 0 {
                     Text(Weight.trim(set.weightLb))
-                        .font(.system(size: 44, weight: .black, design: .rounded).monospacedDigit())
+                        .font(.system(size: numeralSize, weight: .black, design: .rounded).monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                     Text("lb")
                         .font(.title3)
                         .foregroundStyle(.secondary)
@@ -2667,7 +2683,7 @@ private struct CurrentSetHero: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text("BW")
-                        .font(.system(size: 44, weight: .black, design: .rounded))
+                        .font(.system(size: numeralSize, weight: .black, design: .rounded))
                 }
             }
             .accessibilityElement(children: .ignore)

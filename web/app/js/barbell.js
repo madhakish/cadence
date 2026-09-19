@@ -198,18 +198,20 @@ export function barbellStage(rendered, {
     const toggle = uiText("button", "btn ghost sm barbell-explode", "38° inspection · tap to collapse");
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "true");
-    toggle.setAttribute("aria-label", "Assemble bar");
+    toggle.setAttribute("aria-label", `${toggle.textContent}. Assemble bar`);
     const swipe = uiText("span", "sub", "Swipe across · inside → outside");
     const flip = () => {
       exploded = !exploded;
       paint();
       toggle.textContent = exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect";
-      toggle.setAttribute("aria-label", exploded ? "Assemble bar" : "Explode plates");
+      toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
       swipe.hidden = !exploded;
     };
     toggle.addEventListener("click", flip);
-    track.addEventListener("click", flip);
+    // A plate is focusable so its name can be read; activating it must not
+    // flip the view under a screen-reader user.
+    track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
     footer.append(toggle, swipe);
   } else if (onExpand) {
     const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");

@@ -925,7 +925,10 @@ export function priorWorkLb(order, movementGroup, exerciseType, session) {
   if (!movementGroup) return null;
   const heaviest = Math.max(...session
     .filter((e) => e.order < order && e.movementGroup === movementGroup && e.exerciseType === exerciseType)
-    .flatMap((e) => e.completedWorkLbs));
+    .flatMap((e) => e.completedWorkLbs)
+    // A set restored without a load must not poison the rule with NaN
+    // (native coalesces the same gap to 0 and still trims).
+    .filter(Number.isFinite));
   return heaviest > 0 ? heaviest : null;
 }
 

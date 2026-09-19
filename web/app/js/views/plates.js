@@ -13,7 +13,7 @@ function expandedBar(solution, plateStyle, requestedLb = null) {
   ui.pushScreen({ title: "Loaded bar", build: (body) => {
     const rendered = barbellSVG(solution, "full", plateStyle);
     body.append(barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "expanded" }),
-      loadoutSummary(requestedLb, solution));
+      loadoutSummary(requestedLb, solution, { plateStyle }));
   } });
 }
 

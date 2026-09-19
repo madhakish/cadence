@@ -86,18 +86,20 @@ struct CompleteSetIntent: LiveActivityIntent {
     @Parameter(title: "Session") var sessionID: String
     @Parameter(title: "Exercise") var exerciseIndex: Int
     @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
 
     init() {}
-    init(sessionID: String, exerciseIndex: Int, setIndex: Int) {
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
         self.sessionID = sessionID
         self.exerciseIndex = exerciseIndex
         self.setIndex = setIndex
+        self.layout = layout
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let outcome = await WorkoutCommandBridge.perform(
-            .completeSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex))
+            .completeSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
         return .result(dialog: IntentDialog(stringLiteral: outcome))
     }
 }
@@ -109,18 +111,20 @@ struct SkipSetIntent: LiveActivityIntent {
     @Parameter(title: "Session") var sessionID: String
     @Parameter(title: "Exercise") var exerciseIndex: Int
     @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
 
     init() {}
-    init(sessionID: String, exerciseIndex: Int, setIndex: Int) {
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
         self.sessionID = sessionID
         self.exerciseIndex = exerciseIndex
         self.setIndex = setIndex
+        self.layout = layout
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let outcome = await WorkoutCommandBridge.perform(
-            .skipSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex))
+            .skipSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
         return .result(dialog: IntentDialog(stringLiteral: outcome))
     }
 }
@@ -132,18 +136,20 @@ struct UndoSetIntent: LiveActivityIntent {
     @Parameter(title: "Session") var sessionID: String
     @Parameter(title: "Exercise") var exerciseIndex: Int
     @Parameter(title: "Set") var setIndex: Int
+    @Parameter(title: "Layout") var layout: String
 
     init() {}
-    init(sessionID: String, exerciseIndex: Int, setIndex: Int) {
+    init(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String) {
         self.sessionID = sessionID
         self.exerciseIndex = exerciseIndex
         self.setIndex = setIndex
+        self.layout = layout
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let outcome = await WorkoutCommandBridge.perform(
-            .undoSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex))
+            .undoSet(sessionID: sessionID, exerciseIndex: exerciseIndex, setIndex: setIndex, layout: layout))
         return .result(dialog: IntentDialog(stringLiteral: outcome))
     }
 }

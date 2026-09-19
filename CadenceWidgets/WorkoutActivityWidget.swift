@@ -60,7 +60,12 @@ struct WorkoutActivityWidget: Widget {
                     if let rest = context.state.rest {
                         restControls(rest)
                     } else if let set = context.state.currentSet, let sessionID = context.state.sessionID {
-                        setControls(set, sessionID: sessionID)
+                        // The set row joins the workout row; Rest, Pause, and
+                        // End stay reachable from the island (#200).
+                        VStack(spacing: 6) {
+                            setControls(set, sessionID: sessionID)
+                            workoutControls(context.state)
+                        }
                     } else {
                         workoutControls(context.state)
                     }
@@ -175,11 +180,11 @@ private func currentSetFace(_ set: CurrentSetProjection) -> some View {
 @ViewBuilder
 private func setControls(_ set: CurrentSetProjection, sessionID: String) -> some View {
     HStack(spacing: 10) {
-        Button(intent: CompleteSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex)) {
+        Button(intent: CompleteSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex, layout: set.layout)) {
             Label("Complete set", systemImage: "checkmark")
         }
         .tint(restAccent)
-        Button(intent: SkipSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex)) {
+        Button(intent: SkipSetIntent(sessionID: sessionID, exerciseIndex: set.exerciseIndex, setIndex: set.setIndex, layout: set.layout)) {
             Label("Skip", systemImage: "forward.end")
         }
         .tint(.secondary)

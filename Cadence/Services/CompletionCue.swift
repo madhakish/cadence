@@ -21,19 +21,38 @@ enum CompletionCue {
 
     private static var player: AVAudioPlayer?
 
+    /// The tone plays only while the device-local sound preference is on;
+    /// haptics and the announcement are independent of it.
+    static var soundEnabled: Bool { WorkoutActivityController.completionSoundEnabled }
+
     /// Foreground cue: tone, haptic when the athlete allows it, and a
     /// VoiceOver announcement that says the same thing the screen does.
     static func play(haptics: Bool, announcement: String) {
-        playTone()
+        if soundEnabled { playTone() }
         if haptics {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
         UIAccessibility.post(notification: .announcement, argument: announcement)
     }
 
-    /// The same tone on a delivered notification.
-    static var notificationSound: UNNotificationSound {
-        UNNotificationSound(named: UNNotificationSoundName(rawValue: soundFile))
+    /// The same tone on a delivered notification, or silence when the sound
+    /// preference is off.
+    static var notificationSound: UNNotificationSound? {
+        soundEnabled ? UNNotificationSound(named: UNNotificationSoundName(rawValue: soundFile)) : nil
+    }
+
+    /// Releases the player and hands the audio session back once the half
+    /// second is over, so a cue never leaves an active session behind.
+    private final class Releaser: NSObject, AVAudioPlayerDelegate {
+        func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+            CompletionCue.release()
+        }
+    }
+    private static let releaser = Releaser()
+
+    private static func release() {
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
     private static func playTone() {
@@ -48,6 +67,7 @@ enum CompletionCue {
             try session.setCategory(.ambient, options: [.mixWithOthers])
             try session.setActive(true, options: [])
             let tone = try AVAudioPlayer(contentsOf: url)
+            tone.delegate = releaser
             tone.prepareToPlay()
             tone.play()
             player = tone

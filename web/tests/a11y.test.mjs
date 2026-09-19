@@ -142,6 +142,12 @@ ok(/Achieved total, bar included/.test(barbell)
   && /loadoutSummary\(targetLb, solution(, \{ plateStyle \})?\)/.test(plates),
   "the shared calculator/session total is announced and displayed pounds first, then kilograms");
 ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
+{
+  const summaryCalls = (source) => [...source.matchAll(/loadoutSummary\([^)]*\)/g)].map((m) => m[0]);
+  const views = ["app/js/views/session.js", "app/js/views/settings.js", "app/js/views/plates.js"].flatMap((file) => summaryCalls(read(file)));
+  ok(views.length >= 5 && views.every((call) => /plateStyle/.test(call)),
+    "every loadout summary names its plate family from the same style the bar was drawn with");
+}
 ok(/tabindex:\s*0[\s\S]*data-plate-denomination/.test(barbell),
   "every rendered plate denomination is keyboard inspectable");
 

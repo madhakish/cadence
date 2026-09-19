@@ -178,9 +178,13 @@ public enum SetLifecycle {
 /// complete the following set. Native-only surface today; kept here so the
 /// vocabulary is one definition across the app and its extension.
 public enum WorkoutCommand: Codable, Hashable, Sendable {
-    case completeSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
-    case skipSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
-    case undoSet(sessionID: String, exerciseIndex: Int, setIndex: Int)
+    /// `layout` is the fingerprint of the session's structure the face was
+    /// built from (`SetLifecycle.layoutFingerprint`); a command whose layout
+    /// no longer matches the session names a slot that may have moved, and is
+    /// refused rather than resolved against the new order.
+    case completeSet(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String)
+    case skipSet(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String)
+    case undoSet(sessionID: String, exerciseIndex: Int, setIndex: Int, layout: String)
 }
 
 /// What a Lock Screen face knows about the set the lifter is on: enough to
@@ -195,9 +199,16 @@ public struct CurrentSetProjection: Codable, Hashable, Sendable {
     public var reps: Int
     public var loadLb: Double
     public var exerciseName: String
+    /// Set for timed and conditioning work, whose prescription is a duration
+    /// rather than reps.
+    public var durationSeconds: Int?
+    /// Fingerprint of the session structure this projection was built from;
+    /// commands carry it back so a stale face is refused, never misapplied.
+    public var layout: String
 
     public init(exerciseIndex: Int, setIndex: Int, ordinal: Int, total: Int,
-                isWarmup: Bool, reps: Int, loadLb: Double, exerciseName: String) {
+                isWarmup: Bool, reps: Int, loadLb: Double, exerciseName: String,
+                durationSeconds: Int? = nil, layout: String = "") {
         self.exerciseIndex = exerciseIndex
         self.setIndex = setIndex
         self.ordinal = ordinal
@@ -206,6 +217,26 @@ public struct CurrentSetProjection: Codable, Hashable, Sendable {
         self.reps = reps
         self.loadLb = loadLb
         self.exerciseName = exerciseName
+        self.durationSeconds = durationSeconds
+        self.layout = layout
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case exerciseIndex, setIndex, ordinal, total, isWarmup, reps, loadLb, exerciseName, durationSeconds, layout
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        exerciseIndex = try c.decode(Int.self, forKey: .exerciseIndex)
+        setIndex = try c.decode(Int.self, forKey: .setIndex)
+        ordinal = try c.decode(Int.self, forKey: .ordinal)
+        total = try c.decode(Int.self, forKey: .total)
+        isWarmup = try c.decode(Bool.self, forKey: .isWarmup)
+        reps = try c.decode(Int.self, forKey: .reps)
+        loadLb = try c.decode(Double.self, forKey: .loadLb)
+        exerciseName = try c.decode(String.self, forKey: .exerciseName)
+        durationSeconds = try c.decodeIfPresent(Int.self, forKey: .durationSeconds)
+        layout = try c.decodeIfPresent(String.self, forKey: .layout) ?? ""
     }
 
     /// "Set 2 of 3" / "Warmup 1 of 2".
@@ -214,9 +245,28 @@ public struct CurrentSetProjection: Codable, Hashable, Sendable {
     }
 
     /// "6 reps · 138.7 lb / 62.9 kg" — pounds first, kilograms after, or
-    /// bodyweight when the set carries no load.
+    /// bodyweight when the set carries no load. Timed and conditioning work
+    /// reads as its duration ("0:30", "0:30 · 20 lb / 9.1 kg") instead.
     public var prescriptionLabel: String {
+        if let seconds = durationSeconds, seconds > 0 {
+            let duration = CardioFormat.durationLabel(seconds: seconds)
+            return loadLb > 0 ? "\(duration) · \(Weight.both(lb: loadLb))" : duration
+        }
         let load = loadLb > 0 ? Weight.both(lb: loadLb) : "bodyweight"
         return "\(reps) reps · \(load)"
+    }
+}
+
+extension SetLifecycle {
+    /// Deterministic fingerprint of a session's structure (the caller's
+    /// description of exercise order and set layout), stable across launches
+    /// and processes — unlike `hashValue`. FNV-1a, 64-bit, hex.
+    public static func layoutFingerprint(_ description: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in description.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return String(hash, radix: 16)
     }
 }

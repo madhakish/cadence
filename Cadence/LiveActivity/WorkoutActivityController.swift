@@ -272,6 +272,13 @@ enum WorkoutActivityController {
     /// layer) because this controller is also compiled into the widget
     /// extension. `CompletionCue` plays the same file in the foreground.
     static let completionSoundFile = "completion-cue.wav"
+    /// Device-local preference (UserDefaults, like the Health read opt-in):
+    /// whether the completion cue makes a sound at all. Haptics keep their
+    /// own persisted setting. Defaults on.
+    static let completionSoundPreferenceKey = "completionCueSound"
+    static var completionSoundEnabled: Bool {
+        UserDefaults.standard.object(forKey: completionSoundPreferenceKey) as? Bool ?? true
+    }
 
     /// The one "Rest over." notification. Scheduled when a rest starts or is
     /// retargeted, cancelled on skip, pause, and foreground completion.
@@ -286,8 +293,12 @@ enum WorkoutActivityController {
             let content = UNMutableNotificationContent()
             content.title = "Rest over."
             content.body = exerciseName.isEmpty ? "Rest complete." : "\(exerciseName) — next set."
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: completionSoundFile))
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+            content.sound = completionSoundEnabled
+                ? UNNotificationSound(named: UNNotificationSoundName(rawValue: completionSoundFile)) : nil
+            // The foreground tick owns the deadline and cancels this request;
+            // a one-second margin keeps that cancellation ahead of delivery so
+            // the athlete never hears the tone twice.
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds + 1, repeats: false)
             center.add(UNNotificationRequest(identifier: notificationID, content: content, trigger: trigger))
         }
         // Ask only when the athlete starts a feature that needs alerts; first

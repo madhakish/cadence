@@ -854,11 +854,11 @@ export async function openSession(id) {
             ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
               const expanded = barbellSVG(solution, "full", plateStyle);
               screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
-                loadoutSummary(requestedLb, solution));
+                loadoutSummary(requestedLb, solution, { plateStyle }));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
           },
-        }), loadoutSummary(requestedLb, solution, { compact: true }));
+        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
         wrap.append(rendered.svg);

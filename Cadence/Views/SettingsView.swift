@@ -9,6 +9,9 @@ struct SettingsView: View {
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
     @Query private var settingsList: [AppSettings]
+    /// Device-local, never in the store or a backup (it mirrors this phone's
+    /// audio preference the way the Health read opt-in mirrors an OS grant).
+    @AppStorage(WorkoutActivityController.completionSoundPreferenceKey) private var completionCueSound = true
     @Query(sort: \Gym.name) private var gyms: [Gym]
     @Query(sort: \LiftTrack.exerciseName) private var tracks: [LiftTrack]
     @Query(sort: \TrainingInterval.startDate, order: .reverse)
@@ -127,6 +130,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                             Toggle("Auto-start rest after a set", isOn: bindable.autoStartRest)
                             Toggle("Haptics", isOn: bindable.haptics)
+                            Toggle("Completion sound", isOn: $completionCueSound)
                             Toggle("Show gym tag on first launch of the day",
                                    isOn: bindable.gymTagFirstLaunchOfDay)
                             Text("Profile & Health").font(.headline)

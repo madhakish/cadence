@@ -143,3 +143,10 @@ The original target remains available for comparison. This change does not
 rewrite old workouts: older logs may contain nominal weights, and today's gym
 inventory cannot establish which plates were actually used. Correct a past set
 only from your record of what was on the bar.
+
+## Turn the completion sound off
+
+Settings → Rest & training behavior → **Completion sound**. It is a device
+setting, not part of your backup: the tone stops for rest and hold cues in the
+app and in the notification alike, while haptics and the spoken announcement
+keep their own switches.

@@ -117,6 +117,9 @@ struct WorkoutPreviewView: View {
                                 BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style) {
                                     plateDetail = PreviewPlateDetail(solution: solution, style: style, requestedLb: target.weightLb)
                                 }
+                                Text("\(solution.loadout.perSideLabel) / side")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             } else if type == .dumbbell {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }

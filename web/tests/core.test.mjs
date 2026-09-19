@@ -210,6 +210,8 @@ ok(JSON.stringify(r.map((x) => x.weightLb)) === JSON.stringify([100, 135, 170, 2
   eq(C.priorWorkLb(4, "squat", "barbell", sessionWork), 245, "earlier same-group barbell work counts; later work does not");
   eq(C.priorWorkLb(4, "squat", "dumbbell", sessionWork), 80, "a dumbbell's per-hand load only counts for a dumbbell lift");
   eq(C.priorWorkLb(4, "press", "barbell", sessionWork), null, "another movement group prepared nobody");
+  eq(C.priorWorkLb(4, "squat", "barbell", sessionWork.concat([{ order: 2, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [undefined] }])), 245,
+    "a set restored without a load is ignored, not turned into NaN (native coalesces it to 0)");
   eq(C.priorWorkLb(4, "", "barbell", sessionWork), null, "an unknown movement group never matches");
   eq(C.priorWorkLb(0, "squat", "barbell", sessionWork), null, "nothing earlier means no prior work");
   eq(C.priorWorkLb(4, "squat", "barbell", [{ order: 3, movementGroup: "squat", exerciseType: "barbell", completedWorkLbs: [] }]), null,

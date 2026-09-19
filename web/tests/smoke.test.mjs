@@ -1820,6 +1820,7 @@ await withCleanup(async (keep) => {
   ok(sheet.querySelector('input[type="search"]') && sheet.querySelector("select[aria-label='Movement']")
     && sheet.querySelector("select[aria-label='Equipment']"),
   "the logger picker carries the library's search and Movement/Equipment filters");
+  ok(!sheet.querySelector(".library-hero"), "the picker sheet has no Library hero under its own title");
   ok(groups().length === 3 && groups().every((g) => !g.open && /\d+\s*$/.test(g.querySelector("summary").textContent.trim())),
     "the logger picker lists the categories as collapsed groups that state their counts");
   await waitFor(() => sheet.querySelector(".library-recent"));

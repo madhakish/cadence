@@ -24,6 +24,28 @@ final class RestTimer {
     var hapticsEnabled = true
     private var clock: RestClock.State?
     private var timer: Timer?
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        #if canImport(UIKit)
+        // While suspended the display timer cannot run and the notification
+        // owns the deadline; on return, a rest that expired meanwhile ends
+        // quietly instead of playing the cue the notification already played.
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.invalidate()
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.resumeAfterForeground()
+            },
+        ]
+        #endif
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     var isPaused: Bool { clock?.paused ?? false }
     var total: TimeInterval { clock?.total ?? 0 }
@@ -153,6 +175,20 @@ final class RestTimer {
     private func invalidate() {
         timer?.invalidate()
         timer = nil
+    }
+
+    /// Back in the foreground with the display timer suspended: resume the
+    /// countdown, or finish a rest whose deadline passed while away without
+    /// a second cue.
+    private func resumeAfterForeground() {
+        guard let state = clock, !state.paused, timer == nil, isRunning else { return }
+        remaining = RestClock.remaining(state, now: now)
+        if remaining <= 0 {
+            stopLocalOnly()
+            WorkoutActivityController.applyRestDetached(nil, exerciseName: exerciseName)
+        } else {
+            startTicking()
+        }
     }
 
     /// Clear local state without touching the activity/notification (they were

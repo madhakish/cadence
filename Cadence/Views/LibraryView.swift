@@ -11,6 +11,7 @@ struct LibraryView: View {
     var body: some View {
         ExerciseBrowser()
             .navigationTitle("Library")
+            .plateCalculatorClearance()
             .toolbar {
                 Button { showNewExercise = true } label: {
                     Label("New exercise", systemImage: "plus")
@@ -559,6 +560,7 @@ struct ExerciseDetailView: View {
         }
         .listStyle(.plain)
         .accessibilityIdentifier("exercise-detail-screen")
+        .plateCalculatorClearance()
         .navigationTitle(exercise.name)
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
         .sheet(isPresented: $showExpandedContextBar) {

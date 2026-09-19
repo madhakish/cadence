@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 22
       - name: Draft or refresh the registry nudge
+        # Advisory by definition: an API hiccup or an odd commit must never
+        # redden the pull request.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

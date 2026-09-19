@@ -1073,7 +1073,7 @@ function intervalEditor(interval) {
 export function exerciseLibrary(exercises) {
   ui.pushScreen({
     title: "Exercise library",
-    build: (body) => { body.append(exerciseBrowser(exercises)); },
+    build: (body) => { body.append(exerciseBrowser(exercises, { hero: true })); },
   });
 }
 
@@ -1091,7 +1091,7 @@ export function exerciseLibrary(exercises) {
 // text and active filters survive the inspection — picking after reading
 // never restarts the hunt. Every picker is this browser plus a selection
 // closure; nothing else. Mirrors native ExerciseBrowser.
-export function exerciseBrowser(exercises, { onSelect = null, availableOnly = false, equipmentPolicy = "any" } = {}) {
+export function exerciseBrowser(exercises, { onSelect = null, availableOnly = false, equipmentPolicy = "any", hero = false } = {}) {
   const wrap = ui.h("div", { class: "exercise-browser" });
   const search = ui.h("input", { type: "search", placeholder: "Name, equipment or movement", "aria-label": "Search exercises" });
   const movement = ui.h("select", { "aria-label": "Movement" },
@@ -1182,10 +1182,13 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((entry) => entry.exerciseName)));
     if (recentNames.length) paint();
   });
-  wrap.append(
-    ui.h("header", { class: "library-hero" },
+  // The hero names the Library screen; a picker sheet has its own title.
+  if (hero) {
+    wrap.append(ui.h("header", { class: "library-hero" },
       ui.h("span", { class: "eyebrow accent", text: "Exercise library" }),
-      ui.h("h3", { class: "display", text: "Find your lift." })),
+      ui.h("h3", { class: "display", text: "Find your lift." })));
+  }
+  wrap.append(
     search,
     ui.h("div", { class: "library-filters" },
       ui.h("label", {}, ui.h("span", { text: "Movement" }), movement),
@@ -1391,10 +1394,10 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
               onExpand: () => ui.pushScreen({ title: `${e.name} · loaded bar`, build: (screen) => {
                 screen.append(barbellStage(barbellSVG(solution, "full", style), {
                   caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
-                }), loadoutSummary(requestedLb, solution));
+                }), loadoutSummary(requestedLb, solution, { plateStyle: style }));
                 const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
               } }),
-            }), loadoutSummary(requestedLb, solution, { compact: true }));
+            }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle: style }));
             const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
           }
           body.append(live);

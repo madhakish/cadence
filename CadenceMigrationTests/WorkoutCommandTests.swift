@@ -45,7 +45,7 @@ final class WorkoutCommandTests: XCTestCase {
         let (session, settings) = try makeSession(context: context, autoStart: true)
 
         let warmup = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertEqual(sets(session)[0].status, .completed)
         XCTAssertEqual(warmup.decision.restSeconds, 60, "a warmup rests a minute")
@@ -56,7 +56,7 @@ final class WorkoutCommandTests: XCTestCase {
         XCTAssertEqual(warmup.decision.currentSet?.prescriptionLabel, "6 reps · 185 lb / 83.9 kg")
 
         let work = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertEqual(work.decision.restSeconds,
                        smartRestSeconds(for: session.orderedExercises[0].exercise, role: "main", settings: settings),
@@ -65,7 +65,7 @@ final class WorkoutCommandTests: XCTestCase {
         XCTAssertTrue(work.message.hasPrefix("Back Squat logged. Rest "), work.message)
 
         let last = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 2),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 2, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertNil(last.decision.currentSet, "nothing is left to show once the last set is logged")
         XCTAssertEqual(last.decision.nextExerciseName, "", "no pending work means no rest target")
@@ -76,7 +76,7 @@ final class WorkoutCommandTests: XCTestCase {
         let context = container.mainContext
         let (session, settings) = try makeSession(context: context, autoStart: true)
         XCTAssertThrowsError(try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)) { error in
             XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
         }
@@ -88,10 +88,10 @@ final class WorkoutCommandTests: XCTestCase {
         let context = container.mainContext
         let (session, settings) = try makeSession(context: context, autoStart: true)
         _ = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertThrowsError(try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)) { error in
             XCTAssertEqual(error as? WorkoutCommandService.Failure, .alreadyResolved)
         }
@@ -104,10 +104,10 @@ final class WorkoutCommandTests: XCTestCase {
         let context = container.mainContext
         let (session, settings) = try makeSession(context: context, autoStart: true)
         _ = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         let undo = try WorkoutCommandService.perform(
-            .undoSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .undoSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertEqual(sets(session)[0].status, .planned)
         XCTAssertNil(undo.decision.restSeconds, "an undo never arms a rest")
@@ -121,7 +121,7 @@ final class WorkoutCommandTests: XCTestCase {
         let context = container.mainContext
         let (session, settings) = try makeSession(context: context, autoStart: true)
         let skip = try WorkoutCommandService.perform(
-            .skipSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .skipSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertEqual(sets(session)[0].status, .skipped)
         XCTAssertNil(skip.decision.restSeconds)
@@ -133,13 +133,13 @@ final class WorkoutCommandTests: XCTestCase {
         let context = container.mainContext
         let (session, settings) = try makeSession(context: context, autoStart: false)
         let off = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)
         XCTAssertNil(off.decision.restSeconds)
         XCTAssertEqual(off.message, "Back Squat logged.")
         settings.autoStartRest = true
         let running = try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 1, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: true, context: context)
         XCTAssertNil(running.decision.restSeconds, "a running rest is never restarted")
     }
@@ -151,15 +151,35 @@ final class WorkoutCommandTests: XCTestCase {
         session.isCompleted = true
         try context.save()
         XCTAssertThrowsError(try WorkoutCommandService.perform(
-            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: WorkoutCommandService.layout(of: session)),
             settings: settings, restRunning: false, context: context)) { error in
             XCTAssertEqual(error as? WorkoutCommandService.Failure, .sessionAlreadyBanked)
         }
         XCTAssertThrowsError(try WorkoutCommandService.perform(
-            .completeSet(sessionID: "no-such-session", exerciseIndex: 0, setIndex: 0),
+            .completeSet(sessionID: "no-such-session", exerciseIndex: 0, setIndex: 0, layout: ""),
             settings: settings, restRunning: false, context: context)) { error in
             XCTAssertEqual(error as? WorkoutCommandService.Failure, .sessionNotFound)
         }
+    }
+
+    /// A face built before the session was edited names offsets that may now
+    /// point elsewhere; its layout no longer matches, so it is refused.
+    func testACommandFromABeforeEditFaceIsRefused() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let (session, settings) = try makeSession(context: context, autoStart: false)
+        let stale = WorkoutCommandService.layout(of: session)
+        let extra = SetEntry(order: 3, weightLb: 185, reps: 6, isWarmup: false)
+        context.insert(extra)
+        session.orderedExercises[0].sets.append(extra)
+        try context.save()
+        XCTAssertNotEqual(stale, WorkoutCommandService.layout(of: session), "adding a set changes the layout")
+        XCTAssertThrowsError(try WorkoutCommandService.perform(
+            .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: stale),
+            settings: settings, restRunning: false, context: context)) { error in
+            XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+        }
+        XCTAssertEqual(session.orderedExercises[0].orderedSets[0].status, .planned, "nothing was written")
     }
 
     func testProjectionNamesTheFirstUnresolvedSetOfTheFocusedExercise() throws {

@@ -102,6 +102,7 @@ struct InjuryTimelineView: View {
                 }
             }
             .navigationTitle("Signals")
+            .plateCalculatorClearance()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
