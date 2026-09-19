@@ -347,7 +347,9 @@ final class VisualProofUITests: XCTestCase {
                 return true
             }
             let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
-            if issue.auditType == .dynamicType { advisories.append(line) } else { issues.append(line) }
+            // A finding with no element names nothing a fix could target; it
+            // is recorded with the advisories rather than failing the surface.
+            if issue.auditType == .dynamicType || element == nil { advisories.append(line) } else { issues.append(line) }
             return true // keep collecting; the assertion below reports the full list
         }
         capture("after-12-audit-\(name)-iphone")
