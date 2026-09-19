@@ -66,7 +66,7 @@ struct PlateFaceBadge: View {
     }
 }
 
-/// Renders the solver's exact stack with the approved photographic plate faces.
+/// Renders the solver's exact stack from the rendered plate and bar sprites.
 /// `presentation` is chosen by the SURFACE (a set row vs the current set's
 /// stage); `emphasis` is the state and changes only opacity — never geometry,
 /// order, or labels.

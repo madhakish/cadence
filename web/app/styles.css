@@ -336,9 +336,9 @@ svg.barbell { height: 46px; max-width: 100%; }
 svg.barbell.emphasis-muted { opacity: .85; }
 svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-shadow { fill: #000; opacity: .14; }
-.barbell-knurl { stroke: #202225; stroke-width: .45; opacity: .45; vector-effect: non-scaling-stroke; }
 .barbell-plate, .barbell-plate-face, .barbell-plate-rim, .barbell-plate-recess,
-.barbell-plate-hub, .barbell-lock-collar { vector-effect: non-scaling-stroke; }
+.barbell-plate-hub { vector-effect: non-scaling-stroke; }
+.barbell-plate-target { pointer-events: visiblePainted; }
 .barbell-plate-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .barbell-hero { padding: 12px 0 4px; }
 .barbell-hero svg.barbell { height: 84px; }

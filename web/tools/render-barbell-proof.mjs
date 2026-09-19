@@ -1,4 +1,4 @@
-// Render the production SVG with its actual photographic assets, not a mockup.
+// Render the production SVG with its actual sprite assets, not a mockup.
 // Usage: node tools/render-barbell-proof.mjs /absolute/output/directory
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

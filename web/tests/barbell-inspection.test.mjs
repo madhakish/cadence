@@ -19,7 +19,7 @@ const open = barbellScene(solution, 'bumper', true);
 const compact = B.barbellSVG(solution, 'compact', 'bumper');
 assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
 assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
-assert.equal(compact.svg.querySelectorAll('[data-side="left"]').length, counts.length);
+assert.equal(compact.svg.querySelectorAll('.barbell-plate-body[data-side="left"]').length, counts.length);
 assert.equal(compact.svg.getAttribute('role'), 'group', 'the SVG does not hide its plate accessibility children');
 assert.match(compact.svg.getAttribute('aria-label'), /Assembled loaded bar,.*per side/);
 for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {

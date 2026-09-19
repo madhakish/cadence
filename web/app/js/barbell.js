@@ -143,37 +143,48 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     root.append(placeBarSprite(`bar-collar-${angle}`, point(scene.collar - half), point(scene.collar + half), axisLength));
   }
   // Far plates first (+x), then near (−x): painter's order for that camera.
+  // The artwork paints in that order; the focusable plate groups are appended
+  // afterwards in the spoken order both clients share (each side from the
+  // collar outward), so keyboard traversal never follows paint order.
+  const art = el('g', { class:'barbell-plate-art', 'aria-hidden':'true' });
+  root.append(art);
+  const focusable = [];
   for (const d of [...scene.discs].sort((a, b) => b.x - a.x)) {
     const token = C.plateColorToken(d.plate, style);
     const colour = C.plateColour(token);
     const side = d.side < 0 ? 'left' : 'right';
+    // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
+    const x = d.x - d.depth/2;
     const group = el('g', { class:'barbell-plate-body', tabindex:0, role:'img',
       'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
       'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
       'aria-label':discAccessibilityLabel(d) });
-    // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
-    const x = d.x - d.depth/2;
+    // Transparent hit target over the face: focus ring, pointer, and the
+    // inspection's plate activation all land here.
+    group.append(el('ellipse', { class:'barbell-plate-target', cx:x, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:'transparent' }));
+    focusable.push({ side: d.side, index: d.index, group });
     const name = plateSpriteName(d.plate, style, exploded);
     const meta = PLATE_SPRITES.sprites[name];
     const k = d.radius / meta.faceRadius;
     const frame = { x: x - meta.faceCenter[0] * k, y: d.y - meta.faceCenter[1] * k, width: meta.size[0] * k, height: meta.size[1] * k };
-    group.append(el('image', { class:'barbell-plate-face', href:spriteURL(name), ...frame, 'data-sprite':name,
-      preserveAspectRatio:'none', filter:`url(#${id}-${token})` }));
+    art.append(el('image', { class:'barbell-plate-face', href:spriteURL(name), ...frame, 'data-sprite':name,
+      'data-center-x':d.x, preserveAspectRatio:'none', filter:`url(#${id}-${token})` }));
     const clipID = `${id}-hub-${side}-${d.index}`;
     const clip = el('clipPath', { id:clipID });
     clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*meta.hubRadius, ry:d.radius*meta.hubRadius }));
     defs.append(clip);
-    group.append(el('image', { class:'barbell-plate-hub', href:spriteURL(name), ...frame,
+    art.append(el('image', { class:'barbell-plate-hub', href:spriteURL(name), ...frame,
       preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
     const labelSize = exploded ? 14 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
-      fill:colour.ink,
+      fill:colour.ink, 'data-side':side, 'data-stack-index':d.index, 'data-plate-value':d.plate.value,
       'data-plate-denomination':C.plateLabel(d.plate) });
     label.textContent = C.trim(d.plate.value, 2);
-    group.append(label);
-    root.append(group);
+    art.append(label);
   }
+  focusable.sort((a, b) => (a.side - b.side) || (a.index - b.index));
+  for (const { group } of focusable) root.append(group);
   if (solution.collarLb > 0) {
     const half = PLATE_SPRITES.sprites[`bar-collar-near-${angle}`].spanUnits / 2;
     root.append(placeBarSprite(`bar-collar-near-${angle}`, point(-scene.collar - half), point(-scene.collar + half), axisLength));

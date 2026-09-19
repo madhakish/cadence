@@ -50,9 +50,21 @@ for (const [name, solution] of Object.entries(fixtures)) {
       && body.getAttribute("aria-label")?.includes(body.dataset.plateDenomination)
       && body.tabIndex === 0),
   `${name}: every plate is focusable and named with its exact denomination`);
-  ok(labels.every((label) => label.textContent === C.trim(Number(label.parentNode.dataset.plateValue), 2)
-      && label.dataset.plateDenomination === label.parentNode.dataset.plateDenomination),
+  const bodyFor = (label) => rendered.svg.querySelector(
+    `.barbell-plate-body[data-side="${label.dataset.side}"][data-stack-index="${label.dataset.stackIndex}"]`);
+  ok(labels.every((label) => label.textContent === C.trim(Number(bodyFor(label).dataset.plateValue), 2)
+      && label.dataset.plateDenomination === bodyFor(label).dataset.plateDenomination),
     `${name}: printed value and accessible unit come from authoritative plate metadata`);
+  // Keyboard and assistive order is the order both clients speak: the left
+  // side from the collar outward, then the right — never the painter order.
+  const spoken = bodies.map((body) => `${body.dataset.side}:${body.dataset.stackIndex}`);
+  const leftCount = flattened(solution).length;
+  const expectedSpoken = [...Array(leftCount).keys()].map((i) => `left:${i}`)
+    .concat([...Array(leftCount).keys()].map((i) => `right:${i}`));
+  ok(spoken.join(",") === expectedSpoken.join(","),
+    `${name}: focus order runs each side collar-outward, left then right`);
+  ok(bodies.every((body) => body.querySelector(".barbell-plate-target") && !body.querySelector("image")),
+    `${name}: focusable plate groups carry a hit target, not the artwork`);
 }
 
 ok(fixtures.F1.bar.unit === "kg" && fixtures.F1.perSide.every((count) => count.plate.unit === "kg")
@@ -92,7 +104,7 @@ ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll("image.barbell-collar,
   ok(faces.length === svg.querySelectorAll(".barbell-plate-body").length && faces.length > 0
     && faces.every((face) => /^plate-bumper-/.test(face.dataset.sprite) && face.dataset.sprite.endsWith("-assembled")),
     "F1: each disc is a bumper sprite at the assembled angle");
-  const order = [...svg.querySelectorAll(".barbell-plate-body")].map((g) => Number(g.dataset.centerX));
+  const order = faces.map((face) => Number(face.dataset.centerX));
   ok(order.every((x, i) => i === 0 || x <= order[i - 1]), "discs paint from the far (+x) end to the near end");
   ok(svg.querySelectorAll("image.barbell-shaft").length === 1
     && svg.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
