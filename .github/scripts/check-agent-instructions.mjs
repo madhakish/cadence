@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { prose } from './markdown-prose.mjs';
 
 export const budgets = {
   'AGENTS.md': [200, 8192],
@@ -10,10 +11,6 @@ export const budgets = {
   'AGENT-COORDINATION.md': [120, 6144],
 };
 export const commonFiles = [...Object.keys(budgets), '.agents/torvalds-doctrine.md'];
-
-function prose(text) {
-  return text.replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\s*\1\s*$/gm, '');
-}
 
 export function anchors(text) {
   const seen = new Map();

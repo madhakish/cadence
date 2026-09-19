@@ -1,6 +1,7 @@
 // Check metadata structure, not the truth of an author's verification claim.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { prose } from './markdown-prose.mjs';
 
 export function validatePullRequest(pr, repository) {
   const errors = [];
@@ -9,7 +10,7 @@ export function validatePullRequest(pr, repository) {
   }
   // GitHub authenticates this bot identity; its generated update body is useful already.
   if (pr.user?.login === 'dependabot[bot]' && pr.user?.type === 'Bot') return { errors, task: null };
-  const body = (pr.body ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\s*\1\s*$/gm, '');
+  const body = prose(pr.body ?? '');
   const values = {};
   for (const field of ['Task', 'Scope', 'Verification']) {
     const matches = [...body.matchAll(new RegExp(`^${field}:[ \t]*([^\\r\\n]*)$`, 'gmi'))];
@@ -43,7 +44,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (event.pull_request) {
     const result = validatePullRequest(event.pull_request, process.env.GITHUB_REPOSITORY);
     if (result.errors.length) throw new Error(result.errors.join('\n'));
-    if (result.task) await checkTask(result.task, process.env.GH_TOKEN);
+    if (result.task && !process.argv.includes('--offline')) await checkTask(result.task, process.env.GH_TOKEN);
     console.log('PR contract passed. Verification evidence still requires review.');
   } else console.log('PR contract is not applicable to this event.');
 }

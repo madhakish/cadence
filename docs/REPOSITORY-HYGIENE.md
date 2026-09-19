@@ -43,9 +43,19 @@ node .github/scripts/check-agent-instructions.mjs
 git diff --check
 ```
 
-`Repository hygiene` runs on PR changes, including title/body edits, and main
-pushes. It has a five-minute timeout, a read-only token, no secrets, and no npm
-install. It cancels superseded runs of this workflow only.
+The main CI pipeline runs script tests, instruction validation, and offline PR
+metadata validation before expensive suites. Its existing dependency chain gates
+later builds and release jobs on that result. Offline validation needs no API
+token. The separate `PR contract` check adds issue lookup on PR events, including
+title/body edits, so editing prose does not rerun the app pipeline. It has a
+read-only token, no secrets or npm install, and a five-minute timeout. Both paths
+use the same parser. A code push rechecks metadata inside CI too.
+
+Like application tests, these checks execute candidate code under `pull_request`.
+They detect mistakes; a PR can change its own workflow or validator, so they are
+not tamper-proof policy enforcement. Review changes to these files before merge.
+Stronger enforcement needs a separately trusted required workflow or GitHub App.
+Do not give this candidate-code path write credentials or repository secrets.
 
 The instruction check validates entry-point budgets, the aggregate 20 KiB
 budget including doctrine and automatic imports, required entry-point links,
@@ -80,7 +90,7 @@ and becomes selectable, configure a main-branch ruleset with these values:
 | Require pull requests | Enabled |
 | Required approving reviews | 0 for the current single-maintainer setup |
 | Require conversation resolution | Enabled |
-| Required checks | `CadenceCore tests (Linux)`, `Web tests (parity + smoke)`, `App build (macOS)`, `Repository hygiene` |
+| Required checks | `CadenceCore tests (Linux)`, `Web tests (parity + smoke)`, `App build (macOS)`, `PR contract` |
 | Require branch up to date | Enabled |
 | Block force pushes and deletions | Enabled |
 

@@ -24,6 +24,17 @@ test('missing, duplicate, placeholder and example-only fields fail', () => {
   }
 });
 
+test('unterminated fences, longer closers and shorter non-closers hide metadata', () => {
+  for (const fence of ['```', '~~~~']) {
+    const longer = fence + fence[0];
+    const examples = [fence + 'text\n' + pr.body, fence + 'text\n' + pr.body + '\n' + longer,
+      longer + '\n' + fence + '\n' + pr.body + '\n' + longer];
+    for (const body of examples) assert.ok(validate({ body }).errors.length, body);
+    assert.deepEqual(validate({ body: fence + 'text\nTask: fake\n' + longer + '\n' + pr.body }).errors, []);
+  }
+  assert.ok(validate({ body: '<!--\n' + pr.body }).errors.length);
+});
+
 test('Conventional Commit titles and authenticated Dependabot identity', () => {
   assert.equal(validate({ title: 'fix(core)!: migrate the store' }).errors.length, 0);
   assert.ok(validate({ title: 'misc updates' }).errors.length);
