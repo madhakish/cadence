@@ -1561,6 +1561,58 @@ await withCleanup(async (keep) => {
   pane.querySelector(".overlay-head button")?.click(); await tick();
 }
 
+// #66: tier 2 lists the last five sessions' working sets newest first with
+// the RIR flag where one was recorded, timed work shows its duration, and an
+// exercise with no completed session says so.
+await withCleanup(async (keep) => {
+  const day = (daysAgo) => db.iso(new Date(Date.now() - daysAgo * 86400000));
+  const bank = async (exerciseName, daysAgo, sets, programTag = null) => keep(db.Sessions, await db.Sessions.save({
+    date: day(daysAgo), notes: "", isCompleted: true, gymName: null, programTag,
+    exercises: [{ order: 0, exerciseName, notes: "", phase: null,
+      sets: sets.map((set, order) => ({ order, isWarmup: false, status: "completed", ...set })) }],
+  }));
+  await bank("Deadlift", 2, [{ weightLb: 230, reps: 5 }, { weightLb: 230, reps: 5 }]);
+  await bank("Deadlift", 1, [
+    { weightLb: 135, reps: 5, isWarmup: true },
+    { weightLb: 225, reps: 5, flags: ["clean", "rir2"] },
+    { weightLb: 225, reps: 4 },
+    { weightLb: 225, reps: 9, status: "skipped" },
+  ], { programName: "Fixture Pull" });
+  await bank("Plank", 1, [{ weightLb: 0, reps: 0, durationSeconds: 45 }]);
+  const open = async (exercise) => {
+    settings.exerciseDetail(exercise);
+    const pane = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    await waitFor(() => pane.querySelector("details.progression-disclosure .set-history-row"));
+    return pane;
+  };
+  const rows = (pane) => [...pane.querySelectorAll("details.progression-disclosure .set-history-row")]
+    .map((row) => ({ title: row.querySelector(".title")?.textContent, sets: row.querySelector(".sub")?.textContent }));
+
+  let pane = await open(await db.Exercises.byName("Deadlift"));
+  const expected = (await db.Sessions.completed())
+    .filter((s) => s.exercises.some((x) => x.exerciseName === "Deadlift")).slice(0, 5);
+  let shown = rows(pane);
+  ok(shown.length === 5 && expected.length === 5
+      && shown.every((row, index) => row.title.startsWith(ui.fmtDate(expected[index].date))),
+    "tier 2 lists the five newest completed sessions for the exercise, newest first");
+  ok(shown[0].title === `${ui.fmtDate(day(1))} · Fixture Pull` && shown[0].sets === "225 lb × 5 · 2 left, 225 lb × 4",
+    "a session row names its program and lists working sets with the RIR label, without warmups or skipped sets");
+  ok(shown[1].sets === "230 lb × 5, 230 lb × 5", "sets without a recorded RIR carry no reserve label");
+  pane.querySelector(".overlay-head button").click(); await tick();
+
+  pane = await open(await db.Exercises.byName("Plank"));
+  shown = rows(pane);
+  ok(shown[0]?.sets === "0:45" && !pane.textContent.includes("BW × 0"),
+    "a timed exercise's set history shows the duration, not a synthetic load");
+  pane.querySelector(".overlay-head button").click(); await tick();
+
+  const logged = new Set((await db.Sessions.completed()).flatMap((s) => s.exercises.map((x) => x.exerciseName)));
+  pane = await open((await db.Exercises.all()).find((x) => !logged.has(x.name)));
+  ok(rows(pane).length === 1 && rows(pane)[0].sets === "No sessions yet.",
+    "an exercise with no completed session says so in tier 2");
+  pane.querySelector(".overlay-head button").click(); await tick();
+})();
+
 // ---- full session flow: start Deadlift (245 target snapped to achieved load), complete, expect PR + advance ----
 // First prove untouched prescriptions are not performed work.
 {

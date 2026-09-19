@@ -959,6 +959,25 @@ struct SessionDetailView: View {
 
 }
 
+/// What the lifter actually did in one set: distance/duration for
+/// conditioning, duration for timed holds, load × reps otherwise. Shared by
+/// the history log and the exercise pane's set history (#66) so a timed set
+/// never renders as a synthetic load on either surface.
+func performedSetLabel(_ set: SetEntry, type: ExerciseType?, unitDisplay: UnitDisplay) -> String {
+    if type == .conditioning {
+        return CardioFormat.setLabel(distanceMiles: set.distanceMiles,
+                                     durationSeconds: set.durationSeconds,
+                                     inclinePercent: set.inclinePercent,
+                                     loadLb: set.weightLb,
+                                     flights: set.flights)
+    }
+    if type == .timed {
+        return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)
+    }
+    let load = set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
+    return "\(load) × \(set.reps)\(set.isPerSide ? "/side" : "")"
+}
+
 private struct HistorySetRow: View {
     let set: SetEntry
     let type: ExerciseType?
@@ -1001,19 +1020,7 @@ private struct HistorySetRow: View {
     }
 
     private var actualLabel: String {
-        let performed: String
-        if type == .conditioning {
-            performed = CardioFormat.setLabel(distanceMiles: set.distanceMiles,
-                                               durationSeconds: set.durationSeconds,
-                                               inclinePercent: set.inclinePercent,
-                                               loadLb: set.weightLb,
-                                               flights: set.flights)
-        } else if type == .timed {
-            performed = CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)
-        } else {
-            let load = set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
-            performed = "\(load) × \(set.reps)\(set.isPerSide ? "/side" : "")"
-        }
+        let performed = performedSetLabel(set, type: type, unitDisplay: unitDisplay)
         switch set.status {
         case .completed: return performed
         case .skipped: return "Skipped · \(performed)"

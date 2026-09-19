@@ -271,33 +271,52 @@ struct ExerciseDetailView: View {
         ).snapped
     }
 
-    /// Compact previous-performance context from the newest completed session
-    /// containing this exercise.
-    private var lastDoneLabel: String {
-        for s in completed {
-            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
-            if exercise.type == .timed,
-               let longest = matching.flatMap(\.workingSets).compactMap(\.durationSeconds).max() {
-                let program = s.programName.map { " · \($0)" } ?? ""
-                return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(CardioFormat.durationLabel(seconds: longest))\(program)"
-            }
-            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
-            let program = s.programName.map { " · \($0)" } ?? ""
-            return "\(s.date.formatted(date: .abbreviated, time: .omitted)) — \(settingsList.unitDisplay.format(lb: top.weightLb)) × \(top.reps)\(program)"
+    private struct SessionSetHistory: Identifiable {
+        let session: WorkoutSession
+        let sets: [SetEntry]
+        var id: String { session.id }
+        var title: String {
+            session.date.formatted(date: .abbreviated, time: .omitted)
+                + (session.programName.map { " · \($0)" } ?? "")
         }
-        return "Not yet"
     }
 
-    /// Top-set weight per session, oldest→newest, capped to the last 24.
-    private var topSetSeries: [Double] {
-        var recent: [Double] = []
+    /// One traversal of completed sessions yields the last-done line, the
+    /// top-set series (oldest→newest, last 24) and the per-session set
+    /// history (newest first, last 5, #66). Three properties walking the
+    /// same name filter is how the rule drifts — the membershipData reason.
+    private var performanceData: (lastDone: String, series: [Double], recent: [SessionSetHistory]) {
+        var lastDone = "Not yet"
+        var series: [Double] = []
+        var recent: [SessionSetHistory] = []
         for s in completed {
-            let matching = s.exercises.filter { $0.exercise?.name == exercise.name }
-            guard let top = matching.flatMap(\.workingSets).max(by: { $0.weightLb < $1.weightLb }) else { continue }
-            recent.append(top.weightLb)
-            if recent.count == 24 { break }
+            let working = s.orderedExercises
+                .filter { $0.exercise?.name == exercise.name }
+                .flatMap(\.workingSets)
+            guard let top = working.max(by: { $0.weightLb < $1.weightLb }) else { continue }
+            if recent.isEmpty {
+                let date = s.date.formatted(date: .abbreviated, time: .omitted)
+                let program = s.programName.map { " · \($0)" } ?? ""
+                if exercise.type == .timed, let longest = working.compactMap(\.durationSeconds).max() {
+                    lastDone = "\(date) — \(CardioFormat.durationLabel(seconds: longest))\(program)"
+                } else {
+                    lastDone = "\(date) — \(settingsList.unitDisplay.format(lb: top.weightLb)) × \(top.reps)\(program)"
+                }
+            }
+            if recent.count < 5 { recent.append(SessionSetHistory(session: s, sets: working)) }
+            if series.count < 24 { series.append(top.weightLb) }
+            if recent.count == 5 && series.count == 24 { break }
         }
-        return recent.reversed()
+        return (lastDone, series.reversed(), recent)
+    }
+
+    /// "225 lb × 5 · 2 left, 225 lb × 4" — the History row's performed label
+    /// per working set, plus the RIR flag under the name History gives it.
+    private func setHistoryLine(_ sets: [SetEntry]) -> String {
+        sets.map { set in
+            performedSetLabel(set, type: exercise.type, unitDisplay: settingsList.unitDisplay)
+                + (set.rir.map { " · \($0.name)" } ?? "")
+        }.joined(separator: ", ")
     }
 
     var body: some View {
@@ -367,19 +386,39 @@ struct ExerciseDetailView: View {
             // result four times.
             let data = membershipData
             let gym = defaultGym
+            let performance = performanceData
 
             // Tier 2, one expand: previous performance, then programming
             // context. Tier 1 above never moves when this opens (#184).
             Section {
                 DisclosureGroup(isExpanded: $showProgramming) {
                     LabeledContent("Last done") {
-                        Text(lastDoneLabel).multilineTextAlignment(.trailing)
+                        Text(performance.lastDone).multilineTextAlignment(.trailing)
                     }
-                    if exercise.type != .timed && topSetSeries.count >= 2 {
-                        LabeledContent("Top set, last \(topSetSeries.count)") {
-                            SparklineView(values: topSetSeries)
+                    if exercise.type != .timed && performance.series.count >= 2 {
+                        LabeledContent("Top set, last \(performance.series.count)") {
+                            SparklineView(values: performance.series)
                                 .frame(width: 132, height: 30)
                         }
+                    }
+                    // #66: the last five sessions' working sets exactly as
+                    // stored — a projection, nothing the engine resolved is
+                    // recomputed. Warmups and skipped sets never appear.
+                    Text("RECENT SESSIONS")
+                        .font(.caption.bold())
+                        .tracking(0.7)
+                        .foregroundStyle(.secondary)
+                    if performance.recent.isEmpty {
+                        Text("No sessions yet.").foregroundStyle(.secondary)
+                    }
+                    ForEach(performance.recent) { row in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title).font(.caption.bold())
+                            Text(setHistoryLine(row.sets))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
                     if data.labels.isEmpty {
                         Text("Not currently used in a program.").foregroundStyle(.secondary)
@@ -445,7 +484,7 @@ struct ExerciseDetailView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Previous performance & programming").font(.headline)
-                        Text("Last done \(lastDoneLabel) · " + (data.labels.isEmpty ? "no program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s")"))
+                        Text("Last done \(performance.lastDone) · " + (data.labels.isEmpty ? "no program assignment" : "\(data.labels.count) assignment\(data.labels.count == 1 ? "" : "s")"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)

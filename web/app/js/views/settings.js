@@ -8,6 +8,7 @@ import { Settings, Gyms, Tracks, Exercises, Programs, Checkpoints, Intervals, BA
 import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory, bootstrapAccessoryFromHistory } from "../templates.js";
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
+import { historySetPresentationForTest } from "./history.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
@@ -1259,7 +1260,7 @@ async function exerciseInsight(wrap, e) {
     const prog = s.programTag
       ? (s.programTag.programName || programs.find((p) => p.id === s.programTag.programId)?.name || "a program")
       : null;
-    hist.push({ date: s.date, top, longestSeconds, prog });
+    hist.push({ date: s.date, top, longestSeconds, prog, sets: w });
   }
   const card = ui.h("div", { class: "card" });
   const last = hist[0];
@@ -1271,8 +1272,23 @@ async function exerciseInsight(wrap, e) {
     ui.h("span", { class: "sub", style: { textAlign: "right", whiteSpace: "pre-line" }, text: memberships.join("\n") || "none" })));
   if (e.type !== "timed" && hist.length >= 2) {
     const series = [...hist].reverse().slice(-24).map((h) => h.top.weightLb);
-    card.append(ui.h("div", { class: "row", style: { borderBottom: "0" } },
+    card.append(ui.h("div", { class: "row" },
       ui.h("span", { text: `Top set, last ${series.length}` }), ui.spark(series)));
+  }
+  // #66: the last five sessions' working sets exactly as stored, newest
+  // first — the History row's performed label per set plus the RIR flag
+  // under the name History gives it. A projection; nothing the engine
+  // resolved is recomputed. Warmups and skipped sets were filtered above.
+  card.append(ui.h("div", { class: "section-title", text: "Recent sessions" }));
+  if (!hist.length) card.append(ui.h("div", { class: "row set-history-row" }, ui.h("span", { class: "sub", text: "No sessions yet." })));
+  for (const h of hist.slice(0, 5)) {
+    card.append(ui.h("div", { class: "row set-history-row" },
+      ui.h("div", { class: "lead" },
+        ui.h("span", { class: "title", text: `${ui.fmtDate(h.date)}${h.prog ? ` · ${h.prog}` : ""}` }),
+        ui.h("span", { class: "sub mono", text: h.sets.map((set) => {
+          const rir = C.setRIR(set.flags || []);
+          return historySetPresentationForTest(set, e.type).actual + (rir ? ` · ${C.SET_RIR_LABELS[rir]}` : "");
+        }).join(", ") }))));
   }
   wrap.append(card);
 
