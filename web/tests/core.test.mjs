@@ -3035,6 +3035,10 @@ eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,t
 {
   const s = (exerciseName, timestampMs, weightLb, reps) => ({ exerciseName, timestampMs, weightLb, reps });
   const deq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
+  deq(C.athleteHistoryIndex([]), {},
+    "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] no performed work, no capability — a program's base is never an input to the global fold");
+  eq(C.athleteHistoryIndex([s("Deadlift", 1000, 315, 5)])["Back Squat"], undefined,
+    "[INV-PROGRAM-PRESCRIBES-HISTORY-PROVES] an exercise with no performed sets has no entry, not an estimate");
   const recency = C.athleteHistoryIndex([s("Deadlift", 1000, 315, 5), s("Deadlift", 2000, 275, 5)]);
   eq(recency.Deadlift.latestCompletedLoadLb, 275, "latest load follows recency, not magnitude");
   eq(recency.Deadlift.latestExposureMs, 2000, "latest exposure is the newest timestamp");
