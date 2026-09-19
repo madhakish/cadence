@@ -113,32 +113,20 @@ struct ActiveSessionView: View {
             // rather than moving the current lift ahead of exercises 1...N.
             earlierExerciseSections
             focusedExerciseSection
-
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SESSION PROGRESS")
-                        .font(.caption.bold())
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                    Text("Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets")
-                        .font(.headline.monospacedDigit())
-                    Text(session.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            trainingAtSection
             remainingExerciseSections
 
-            Section {
+            // One supporting section for the session itself: where it is
+            // happening, adding a lift, and notes. Progress rides as the
+            // focused lift's footer, so nothing competes with the dominant
+            // block above it (#185).
+            Section("Session") {
+                gymPicker
                 Button {
                     showExercisePicker = true
                 } label: {
                     Label("Add exercise", systemImage: "plus")
                 }
-            }
-
-            Section("Session notes") {
-                TextField("Notes", text: Bindable(session).notes, axis: .vertical)
+                TextField("Session notes", text: Bindable(session).notes, axis: .vertical)
                     .lineLimit(2...6)
             }
 
@@ -316,10 +304,9 @@ struct ActiveSessionView: View {
     }
 
     @ViewBuilder
-    private var trainingAtSection: some View {
+    private var gymPicker: some View {
         if !gyms.isEmpty {
-            Section("Training at") {
-                Picker("Gym", selection: Binding(
+                Picker("Training at", selection: Binding(
                     get: { gym?.id ?? "" },
                     set: { id in
                         guard let selected = gyms.first(where: { $0.id == id }) else { return }
@@ -358,8 +345,13 @@ struct ActiveSessionView: View {
                 )) {
                     ForEach(gyms) { option in Text(option.name).tag(option.id) }
                 }
-            }
         }
+    }
+
+    /// Supporting fact for the focused lift's footer: where the session is
+    /// and how much work is left. Web twin: `.session-progress`.
+    private var sessionProgressLine: String {
+        "Exercise \(currentExerciseNumber) of \(session.orderedExercises.count) · \(totalWorkSetCount == 0 ? 0 : min(resolvedWorkSetCount + 1, totalWorkSetCount)) of \(totalWorkSetCount) work sets · \(session.date.formatted(date: .abbreviated, time: .omitted))"
     }
 
     /// Extracted from `body` — the multi-argument section call plus the recall
@@ -460,6 +452,7 @@ struct ActiveSessionView: View {
         ExerciseSection(
             entry: entry,
             emphasized: emphasized,
+            sessionProgress: emphasized ? sessionProgressLine : nil,
             settings: settingsList.first,
             gym: gym,
             programFocus: sessionProgram?.focus,
@@ -736,6 +729,9 @@ private struct ExerciseSection: View {
     /// Only the actively worked exercise gets the full between-sets cockpit.
     /// Remaining exercises stay in authored order underneath it.
     let emphasized: Bool
+    /// Session progress, shown as this section's footer for the focused lift
+    /// only. Supporting information never gets its own card (#185).
+    let sessionProgress: String?
     // Passed down from ActiveSessionView (which already queries them) — a
     // per-section @Query would register one redundant fetch per exercise.
     let settings: AppSettings?
@@ -1305,8 +1301,15 @@ private struct ExerciseSection: View {
                 }
             }
         } footer: {
-            if let site = entry.exercise?.watchSite {
-                Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+            VStack(alignment: .leading, spacing: 4) {
+                if let sessionProgress {
+                    Text(sessionProgress)
+                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .accessibilityIdentifier("session-progress")
+                }
+                if let site = entry.exercise?.watchSite {
+                    Text("Watch: \(site.rawValue.lowercased()) — \(site.watchNote)")
+                }
             }
         }
         .sheet(item: $expandedLoadout) { detail in
@@ -2738,5 +2741,6 @@ private struct CurrentSetHero: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("current-set-hero")
     }
 }

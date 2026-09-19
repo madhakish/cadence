@@ -899,6 +899,20 @@ for (let i = 0; i < 10; i++) {
     "the logger title is the workout name, with the date kept in its progress card");
   ok(logger.querySelector(".session-progress")?.textContent.includes("Exercise 1 of"),
     "the logger reports exercise and whole-workout set progress");
+  // #185: progress is supporting information — the focused card's footer,
+  // never a card of its own — and the session's own controls (gym, add a
+  // lift, notes) share one supporting card beneath the exercises.
+  ok(logger.querySelector(".exercise-card.emphasized .session-progress") && logger.querySelectorAll(".session-progress").length === 1,
+    "session progress rides as the focused exercise's footer");
+  {
+    const support = logger.querySelector(".session-support");
+    const cards = [...logger.querySelectorAll(".card")];
+    ok(support?.querySelector("select") && support?.querySelector("textarea")
+      && [...support.querySelectorAll("button")].some((button) => button.textContent === "+ Add exercise"),
+      "gym, add-exercise, and notes share one supporting session card");
+    ok(cards.indexOf(support) > cards.indexOf(logger.querySelector(".exercise-card.emphasized")),
+      "the supporting session card sits below the dominant block");
+  }
   ok(logger.querySelector(".current-set-card") && [...logger.querySelectorAll("button")].some((button) => button.textContent === "Show all sets"),
     "the current set owns the cockpit while a full-set control remains available");
   // The focused exercise leads with the approved hierarchy: a set track with

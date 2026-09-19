@@ -60,3 +60,10 @@
 - Renderer state — presentation (a set row's compact bar vs the current set's stage) is chosen by the surface; emphasis (current / standard / muted) is a renderer prop that changes only opacity, never geometry, order, or labels.
 
 - Loadout summary — one composition everywhere a bar is explained: "Achieved with bar" in the accent, the load numeral pounds-first with the difference from the request beside it, the bar and the per-side stack on one line, then one cell per plate family (bumpers, steel, change) counting both sleeves, plus a collars cell. The calculator opens on "Know your load." and no longer repeats the stack as a list.
+
+## Session hierarchy, 2026-09-17
+
+- Dominant block — the focused lift owns the top of the session: movement eyebrow, set track, current set (position, reps, load), then its set rows. Nothing above it changes when a set is completed; the iPhone capture suite asserts the set track and current-set hero keep their frames (`test13SetCompletionKeepsDominantBlockStill`).
+- Session progress — "Exercise N of M · S of T work sets · date" is supporting information. It rides as the focused section's footer on native and as the focused card's footer on web, never as a card of its own.
+- One supporting section — the gym picker ("Training at"), "Add exercise", and session notes share one "Session" section beneath the exercises on both clients. For the proof fixture (three lifts, none passed) the session list holds 5 sections where the design-pass baseline held 8.
+- Unchanged — set completion, focus advance, rest, gym-switch bar restamping, notes persistence, and the cycle model. History and program filtering are untouched.

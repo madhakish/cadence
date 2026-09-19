@@ -456,13 +456,26 @@ export async function openSession(id) {
       earlier.forEach((entry) => prior.append(exerciseCard(entry, body, false)));
       body.append(prior);
     }
+    // Session progress is supporting information: it rides as the footer of
+    // the dominant block (or of the session card once every lift is done),
+    // never as a card of its own. Mirrors the native focused-section footer.
+    const progress = ui.h("div", { class: "session-progress" },
+      ui.h("span", { class: "mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
+      ui.h("span", { class: "sub", text: ` · ${ui.fmtDate(session.date)}` }));
     if (current) {
-      body.append(exerciseCard(current, body, true));
+      const focused = exerciseCard(current, body, true);
+      focused.append(progress);
+      body.append(focused);
     }
-    body.append(ui.h("div", { class: "session-progress" },
-      ui.h("div", { class: "eyebrow", text: workoutName }),
-      ui.h("div", { class: "title mono", text: `Exercise ${exerciseNumber} of ${session.exercises.length} · ${workSets.length === 0 ? 0 : Math.min(resolvedWork + 1, workSets.length)} of ${workSets.length} work sets` }),
-      ui.h("div", { class: "sub", text: ui.fmtDate(session.date) })));
+    session.exercises.slice(currentIndex + 1)
+      .forEach((se) => body.append(exerciseCard(se, body, false)));
+
+    // One supporting card for the session itself: where it is happening,
+    // adding a lift, and notes. Mirrors the native "Session" section beneath
+    // the exercises.
+    const support = ui.h("section", { class: "card session-support", "aria-label": "Session" },
+      ui.h("div", { class: "section-title", text: "Session" }));
+    if (!current) support.append(progress);
     if (gymOptions.length) {
       const gymSelect = ui.h("select", {}, ...gymOptions.map((g) => ui.h("option", { value: g.id, text: g.name, selected: g.id === gymState.value?.id })));
       gymSelect.addEventListener("change", () => {
@@ -487,16 +500,13 @@ export async function openSession(id) {
         }
         save(); renderBody(body);
       });
-      body.append(ui.field("Training at", gymSelect));
+      support.append(ui.field("Training at", gymSelect));
     }
-    session.exercises.slice(currentIndex + 1)
-      .forEach((se) => body.append(exerciseCard(se, body, false)));
-
-    body.append(ui.h("button", { class: "btn ghost wide", style: { marginTop: "12px" }, text: "+ Add exercise", onClick: () => pickExercise(body) }));
-
-    const notes = ui.h("textarea", { rows: 2, placeholder: "Session notes", value: session.notes || "" });
+    support.append(ui.h("button", { class: "btn ghost wide", text: "+ Add exercise", onClick: () => pickExercise(body) }));
+    const notes = ui.h("textarea", { rows: 2, placeholder: "Optional", value: session.notes || "" });
     notes.addEventListener("input", () => { session.notes = notes.value; save(); });
-    body.append(ui.h("div", { class: "section-title", text: "Session notes" }), notes);
+    support.append(ui.field("Session notes", notes));
+    body.append(support);
 
     body.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "16px", minHeight: "52px", fontSize: "18px" }, text: COPY.sessionDone, onClick: () => finish() }));
     body.append(ui.h("button", { class: "btn ghost danger wide", style: { marginTop: "8px" },
