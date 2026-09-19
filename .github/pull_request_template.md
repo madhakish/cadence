@@ -1,3 +1,10 @@
+Task:
+Scope:
+Verification:
+
+<!-- Task: #123, owner/repo#123, an issue URL, or none — a maintenance reason.
+     Verification: checks and results, or a specific pending reason. -->
+
 ## What changed and why
 
 <!-- Lead with the behaviour, not the diff. If this fixes a bug, describe what

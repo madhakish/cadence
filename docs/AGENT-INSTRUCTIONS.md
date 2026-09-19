@@ -35,7 +35,7 @@ These are repository maintenance budgets, not universal model context limits:
 | `CLAUDE.md` loader | At most 20 lines and 1 KiB |
 | `.github/copilot-instructions.md` | At most 40 lines and 2 KiB |
 | `AGENT-COORDINATION.md` | At most 120 lines and 6 KiB |
-| The above plus the doctrine, counted once each | At most 20 KiB |
+| The above plus doctrine and automatic imports, counted once each | At most 20 KiB |
 
 Keep durable instructions about triggers, actions, evidence, and stopping rules.
 Put current run IDs, claims, status, and results in issues/PRs. Put detailed
@@ -85,3 +85,10 @@ Checked September 19, 2026:
 - [Codex instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 - [Claude instruction files and imports](https://code.claude.com/docs/en/memory)
 - [Copilot instruction support by feature](https://docs.github.com/en/copilot/reference/custom-instructions-support)
+
+## Automated hygiene
+
+[Repository hygiene](REPOSITORY-HYGIENE.md) documents the PR contract, automated
+instruction checks, labels, and proposed merge settings. Run the local commands
+there when changing instructions or workflows. The gate checks structure and
+budgets; reviewers still verify preserved meaning and actual evidence.
