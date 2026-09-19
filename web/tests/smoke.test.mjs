@@ -3500,6 +3500,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   });
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   const priorIds = [];
+  const beforePointerRepair = JSON.stringify({ ...program, nextDayIndex: 0 });
+  const repaired = await session.reconcileRecoveryBridge(program, [], new Date("2042-01-01T10:00:00.000Z"));
+  ok(repaired?.reason === null && repaired?.message.startsWith("Recovery continues"),
+    "[INV-RECOVERY-IS-A-BRIDGE] an omitted recovery pointer is repaired without declaring recovery complete");
+  ok(JSON.stringify(program) === beforePointerRepair, "pointer repair preserves all cycle and progression state");
+  ok((await db.Programs.get(program.id)).nextDayIndex === 0, "recovery pointer repair is persisted");
   for (const [index, dayIndex] of [0, 1].entries()) {
     priorIds.push(await db.Sessions.save({
       date: `2042-01-0${index + 1}T12:00:00.000Z`,
@@ -3604,7 +3610,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const inside = await session.reconcileRecoveryBridge(
     program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
   );
-  ok(inside === null, "Recovery remains available one millisecond before the seven-day boundary");
+  ok(inside?.reason === null && program.currentWeek === 4 && program.nextDayIndex === 1,
+    "Recovery remains available before seven days and repairs a pointer to an already-banked exposure");
   const expired = await session.reconcileRecoveryBridge(
     program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
   );
@@ -3759,7 +3766,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     }));
   }
   const held = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
-  ok(held === null,
+  ok(held?.reason === null && program.cycleNumber === 1
+      && program.currentWeek === C.DELOAD_WEEK && program.nextDayIndex === 2,
     "[INV-RECOVERY-IS-A-BRIDGE] a three-day authored bridge is not closed by two sessions");
   ids.push(await db.Sessions.save({
     date: new Date().toISOString(), completedAt: new Date().toISOString(),

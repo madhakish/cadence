@@ -355,6 +355,9 @@ the bridge's own length with a floor of two — never a constant two — so a
 program keeping its full authored pass is not truncated by the guard meant to
 protect it. An in-flight program upgraded from the old four-day phase 4
 recognizes bridge exposures it already banked instead of prescribing them again.
+Before preview/start, an omitted or already-banked recovery pointer moves to
+the remaining selected exposure. A valid manually chosen upper-first order is
+preserved. Repairing this pointer never applies pending grades or rolls the cycle.
 
 A recovery bridge expires seven elapsed days after the final completed Peak (or
 the preceding completed hard rotation when an early-recovery decision skipped

@@ -19,7 +19,7 @@ struct SessionSummary {
 enum SessionCompletion {
 
     struct RecoveryBridgeReconciliation {
-        let reason: RecoveryBridgeCompletionReason
+        let reason: RecoveryBridgeCompletionReason? // nil when only the next-day pointer was repaired
         let message: String
     }
 
@@ -680,7 +680,24 @@ enum SessionCompletion {
                 asOf: now
             )
         }
-        guard let reason else { return nil }
+        guard let reason else {
+            let next = ProgramProgression.recoveryResumeDayOrder(
+                dayOrders: recoveryOrders,
+                completedDayOrders: recoverySessions.compactMap(\.programDayIndex),
+                currentDayOrder: program.nextDayIndex
+            )
+            guard next != program.nextDayIndex else { return nil }
+            program.nextDayIndex = next
+            do {
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
+            return RecoveryBridgeReconciliation(
+                reason: nil, message: "Recovery continues — next light session: \(program.day(order: next)?.name ?? "program day")."
+            )
+        }
 
         let nextCycle = program.cycleNumber + 1
         let banked = recoverySessions.count

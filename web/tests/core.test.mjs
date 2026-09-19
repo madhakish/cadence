@@ -488,6 +488,11 @@ eq(C.recoveryAccessorySets(3, 4), 1, "recovery preview and builder agree for all
 // current cycle. Pointer order cannot make the second-authored day roll early,
 // and an old full-rotation day cannot count as part of the shortened bridge.
 let recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [0]);
+eq(C.recoveryResumeDayOrder([0, 1], [], 2), 0, "omitted recovery pointer resumes the first representative");
+eq(C.recoveryResumeDayOrder([0, 1], [0], 2), 1, "omitted pointer resumes the remaining representative");
+eq(C.recoveryResumeDayOrder([0, 1], [0], 0), 1, "already-banked pointer is repaired");
+eq(C.recoveryResumeDayOrder([0, 1], [], 1), 1, "an explicitly chosen upper-first recovery remains valid");
+eq(C.recoveryResumeDayOrder([], [], 2), 2, "an empty program does not invent a next day");
 eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
   "banking lower points at the remaining upper exposure");
 recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);

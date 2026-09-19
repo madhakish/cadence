@@ -284,7 +284,7 @@ struct HomeView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
                                 ForEach(days) { day in
-                                    Text("\(day.order == program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
+                                    Text("\(day.order == program.nextDayIndex ? "NOW " : program.currentWeek != ProgramProgression.deloadWeek && day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
                                         .font(.caption.bold())
                                         .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
                                     if day.id != days.last?.id { Text("→").foregroundStyle(.tertiary) }

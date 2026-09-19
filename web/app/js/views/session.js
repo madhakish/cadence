@@ -1777,8 +1777,18 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
     completed || Sessions.completed(), Exercises.all(),
   ]);
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
-  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
-  if (!reason) return null;
+  const { reason, recoverySessions, recoveryDayOrders } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  if (!reason) {
+    const next = C.recoveryResumeDayOrder(recoveryDayOrders,
+      recoverySessions.map((candidate) => candidate.programTag.dayIndex), program.nextDayIndex);
+    if (next === program.nextDayIndex) return null;
+    // Persist the staged pointer before changing the live object; a failed
+    // write must not leave Today displaying an unsaved schedule.
+    await Programs.save({ ...program, nextDayIndex: next });
+    program.nextDayIndex = next;
+    return { program, reason: null,
+      message: `Recovery continues — next light session: ${program.days.find((day) => day.order === next)?.name || "program day"}.` };
+  }
 
   const nextCycle = program.cycleNumber + 1;
   const banked = recoverySessions.length;

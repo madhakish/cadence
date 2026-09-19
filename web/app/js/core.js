@@ -1930,6 +1930,13 @@ export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
     : { nextDayOrder: next, isLastDay: false };
 }
 
+// Preserve a valid chosen recovery order; repair omitted/already-banked days.
+// Mirrored in CadenceCore ProgramProgression.recoveryResumeDayOrder.
+export function recoveryResumeDayOrder(dayOrders, completedDayOrders, currentDayOrder) {
+  if (!dayOrders.length || (dayOrders.includes(currentDayOrder) && !completedDayOrders.includes(currentDayOrder))) return currentDayOrder;
+  return recoveryScheduleAdvance(dayOrders, completedDayOrders).nextDayOrder;
+}
+
 // Why a bounded recovery bridge is ready to hand off to the next cycle.
 // `lastHardPhaseCompletionMs` is normally the final Peak completion; callers
 // may supply the preceding rotation completion when recovery started early.

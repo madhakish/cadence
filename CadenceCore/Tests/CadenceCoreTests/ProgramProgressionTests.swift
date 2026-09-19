@@ -1018,6 +1018,12 @@ final class ProgramProgressionTests: XCTestCase {
 
     func testRecoveryAdvanceCountsBankedRepresentativesInsteadOfPointerOrder() {
         let selected = [0, 1]
+        XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: selected, completedDayOrders: [], currentDayOrder: 2), 0)
+        XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: selected, completedDayOrders: [0], currentDayOrder: 2), 1)
+        XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: selected, completedDayOrders: [0], currentDayOrder: 0), 1)
+        XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: selected, completedDayOrders: [], currentDayOrder: 1), 1,
+                       "an explicitly chosen upper-first recovery remains valid")
+        XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: [], completedDayOrders: [], currentDayOrder: 2), 2)
         let afterLower = P.recoveryScheduleAdvance(
             dayOrders: selected, completedDayOrders: [0]
         )

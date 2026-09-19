@@ -94,7 +94,7 @@ export async function render(host) {
     root.append(ui.h("div", { class: "day-sequence", role: "status", ariaLabel: `${nextProgramDay?.name || "Next day"} is now` },
       ...days.flatMap((day, index) => [
         ui.h("span", { class: day.order === program.nextDayIndex ? "now" : "",
-          text: `${day.order === program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
+          text: `${day.order === program.nextDayIndex ? "NOW " : program.currentWeek !== C.DELOAD_WEEK && day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
         index < days.length - 1 ? document.createTextNode(" → ") : null,
       ].filter(Boolean))));
   }

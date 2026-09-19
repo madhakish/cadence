@@ -464,6 +464,18 @@ public enum ProgramProgression {
         return (selected[0], true)
     }
 
+    /// Preserve a valid chosen recovery order, including upper-first. Repair
+    /// an omitted or already-banked pointer to the next remaining exposure.
+    public static func recoveryResumeDayOrder(
+        dayOrders: [Int], completedDayOrders: [Int], currentDayOrder: Int
+    ) -> Int {
+        guard !dayOrders.isEmpty else { return currentDayOrder }
+        if dayOrders.contains(currentDayOrder), !completedDayOrders.contains(currentDayOrder) {
+            return currentDayOrder
+        }
+        return recoveryScheduleAdvance(dayOrders: dayOrders, completedDayOrders: completedDayOrders).nextDayOrder
+    }
+
     /// Decide whether recovery has done its job.
     ///
     /// Selected representative exposures still close a short bridge normally.
