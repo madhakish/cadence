@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
+import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
@@ -38,13 +38,18 @@ for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
 }
 // Luminance-driven: shading survives, the median lands near the fill, black iron is untouched.
 const yellow = plateTintMatrix('yellow', 'steel');
-const mid = plateTintApply(yellow, 0.305);
-assert.ok(Math.abs(mid[0] - 0.79) < 0.02 && Math.abs(mid[1] - 0.62) < 0.02 && Math.abs(mid[2] - 0.13) < 0.02, `yellow steel median → ${mid}`);
-const [bright, dark] = [plateTintApply(yellow, 0.40), plateTintApply(yellow, 0.23)];
+const median = 0.85 / plateTintLift('steel');
+const mid = plateTintApply(yellow, median);
+const fill = [0xE8, 0xB0, 0x08].map((v) => v / 255);
+for (let c = 0; c < 3; c++) {
+  const expected = Math.min(1, 0.85 * fill[c] + 0.85 * PLATE_TINT_GREY_MIX * (1 - fill[c]));
+  assert.ok(Math.abs(mid[c] - expected) < 0.01, `yellow steel median channel ${c} → ${mid[c]} vs ${expected}`);
+}
+const [bright, dark] = [plateTintApply(yellow, median * 1.3), plateTintApply(yellow, median * 0.75)];
 assert.ok(bright.every((v, i) => v > dark[i]), 'brighter texels stay brighter');
 assert.deepEqual(plateTintMatrix('black', 'bumper'), PLATE_TINT_IDENTITY);
-assert.ok(compact.svg.querySelectorAll('.barbell-knurl-band').length === 2 && compact.svg.querySelectorAll('.barbell-end-cap').length === 2,
-  'the shaft carries two knurl bands and two end caps');
+assert.equal(compact.svg.querySelectorAll('image.barbell-shaft').length, 1, 'one rendered shaft sprite');
+assert.equal(compact.svg.querySelectorAll('image.barbell-sleeve, image.barbell-sleeve-near').length, 2, 'a far and a near sleeve sprite');
 assert.ok([...compact.svg.querySelectorAll('.barbell-plate-hub')].every(hub=>!hub.hasAttribute('filter')),
   'the photographic hub keeps its original metal color');
 assert.deepEqual(open.discs.filter(d=>d.side===1).map(d=>d.plate.value), [45,10,25,2.5]);
@@ -100,7 +105,13 @@ assert.match(toggle.getAttribute('aria-label'), /Assemble bar/);
 const firstIDs=[...inspector.querySelectorAll('[id]')].map(x=>x.id);
 const secondIDs=[...B.barbellSVG(solution,'full').svg.querySelectorAll('[id]')].map(x=>x.id);
 assert.ok(!secondIDs.some(id=>firstIDs.includes(id)), 'multiple views never collide in SVG paint-server IDs');
-assert.equal(inspector.querySelectorAll('.barbell-lock-collar').length,2);
+assert.equal(inspector.querySelectorAll('image.barbell-collar, image.barbell-collar-near').length,2);
 const worker=readFileSync(new URL('../app/sw.js',import.meta.url),'utf8');
-for (const asset of ['js/barbell-scene.js','assets/plate-steel.png','assets/plate-bumper.png']) assert.ok(worker.includes(`"${asset}"`));
+for (const asset of ['js/barbell-scene.js','js/plate-sprites.js']) assert.ok(worker.includes(`"${asset}"`));
+{
+  // Every installed sprite is precached, so the loaded bar draws offline.
+  const sprites = readdirSync(new URL('../app/assets/plates/', import.meta.url)).filter((f) => f.endsWith('.png'));
+  assert.ok(sprites.length >= 16);
+  for (const file of sprites) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} precached`);
+}
 console.log('Barbell inspection geometry, identity, controls, and offline assets passed');

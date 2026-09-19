@@ -66,8 +66,10 @@ ok(fixtures.F3.bar.unit === "lb" && fixtures.F3.perSide.every((count) => count.p
 "F3: a lb bar keeps the kg-only rack and reports the non-exact result");
 ok(flattened(fixtures.F4).some((plate) => C.plateLabel(plate) === "1.25 kg"),
   "F4: a 1.25 kg plate remains 1.25 kg");
-const f5Right = [...B.barbellSVG(fixtures.F5, "full").svg
-  .querySelectorAll('.barbell-plate-body[data-side="right"]')]
+// Sprites paint far to near, so read the stack by its index, not DOM order.
+const byStack = (svg, side) => [...svg.querySelectorAll(`.barbell-plate-body[data-side="${side}"]`)]
+  .sort((a, b) => Number(a.dataset.stackIndex) - Number(b.dataset.stackIndex));
+const f5Right = byStack(B.barbellSVG(fixtures.F5, "full").svg, "right")
   .map((plate) => Number(plate.dataset.plateValue));
 ok(JSON.stringify(f5Right) === JSON.stringify([45, 10, 25, 2.5]),
   "F5: reverse mode preserves entered collar-to-sleeve order");
@@ -75,13 +77,27 @@ ok(fixtures.F6.satisfiesPolicy === false && fixtures.F6.policy === "exact",
   "F6: unreachable exact load keeps its policy warning evidence");
 const f7Steel = B.barbellSVG(fixtures.F7, "full", "steel").svg;
 const f7Bumper = B.barbellSVG(fixtures.F7, "full", "bumper").svg;
-ok(Number(f7Steel.querySelectorAll('[data-side="right"]')[0].getAttribute("height"))
-    !== Number(f7Steel.querySelectorAll('[data-side="right"]')[1].getAttribute("height"))
-    && Number(f7Bumper.querySelectorAll('[data-side="right"]')[0].getAttribute("height"))
-      === Number(f7Bumper.querySelectorAll('[data-side="right"]')[1].getAttribute("height")),
+ok(Number(byStack(f7Steel, "right")[0].getAttribute("height"))
+    !== Number(byStack(f7Steel, "right")[1].getAttribute("height"))
+    && Number(byStack(f7Bumper, "right")[0].getAttribute("height"))
+      === Number(byStack(f7Bumper, "right")[1].getAttribute("height")),
 "F7: calibrated steel and bumpers retain distinct diameter geometry");
-ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll(".barbell-lock-collar").length === 2,
+ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll("image.barbell-collar, image.barbell-collar-near").length === 2,
   "F8: configured collars render on both mirrored sleeves");
+{
+  // Every disc is a rendered sprite placed from the scene: the face image's
+  // frame scales the sprite's face radius to the disc radius, far plates paint first.
+  const svg = B.barbellSVG(fixtures.F1, "full", "bumper").svg;
+  const faces = [...svg.querySelectorAll("image.barbell-plate-face")];
+  ok(faces.length === svg.querySelectorAll(".barbell-plate-body").length && faces.length > 0
+    && faces.every((face) => /^plate-bumper-/.test(face.dataset.sprite) && face.dataset.sprite.endsWith("-assembled")),
+    "F1: each disc is a bumper sprite at the assembled angle");
+  const order = [...svg.querySelectorAll(".barbell-plate-body")].map((g) => Number(g.dataset.centerX));
+  ok(order.every((x, i) => i === 0 || x <= order[i - 1]), "discs paint from the far (+x) end to the near end");
+  ok(svg.querySelectorAll("image.barbell-shaft").length === 1
+    && svg.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
+    "the bar is one shaft sprite and two sleeve sprites");
+}
 
 const B2 = await import("../app/js/barbell-scene.js");
 ok(B2.discAccessibilityLabel({ plate: { value: 20, unit: "kg" }, index: 0, side: -1 }) === "20 kg plate, 1 from inside, left side",

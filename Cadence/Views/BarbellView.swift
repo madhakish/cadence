@@ -89,72 +89,55 @@ struct BarbellView: View {
             let scale = min(size.width / scene.width, size.height / scene.height)
             context.translateBy(x: size.width / 2, y: size.height / 2)
             context.scaleBy(x: scale, y: scale)
-            // Chrome: a dark underside, a bright specular band just above
-            // centre, and a hard shadow below (mirrors the web gradient).
-            let metal = Gradient(stops: [
-                .init(color: Color(hex: 0x1F2428), location: 0), .init(color: Color(hex: 0x6B747C), location: 0.16),
-                .init(color: Color(hex: 0xDDE2E6), location: 0.38), .init(color: Color(hex: 0xFFFFFF), location: 0.47),
-                .init(color: Color(hex: 0x9AA3AB), location: 0.6), .init(color: Color(hex: 0x3A4148), location: 0.84),
-                .init(color: Color(hex: 0x15181B), location: 1),
-            ])
             func point(_ position: Double) -> CGPoint {
                 CGPoint(x: position * scene.axisX, y: position * scene.axisY)
             }
-            func shaft(_ from: Double, _ to: Double, _ width: CGFloat) {
-                let a = point(from), b = point(to)
-                var path = Path()
-                path.move(to: a); path.addLine(to: b)
-                context.stroke(path, with: .linearGradient(metal,
-                    startPoint: CGPoint(x: a.x, y: a.y - width / 2),
-                    endPoint: CGPoint(x: a.x, y: a.y + width / 2)),
-                    style: StrokeStyle(lineWidth: width, lineCap: .round))
+            let angle = exploded ? "exploded" : "assembled"
+            // Rendered sprites (PlateSprites) placed from the shared scene: a bar
+            // part maps its two axis reference points onto two scene points.
+            // Thickness comes from the sprite's nominal span (an exploded scene's
+            // longer sleeve stretches along the bar, never fattens).
+            let axisLength = hypot(scene.axisX, scene.axisY)
+            func placeBar(_ name: String, from: CGPoint, to: CGPoint) {
+                guard case let .bar(_, _, spriteSize, a, b, spanUnits)? = PlateSprites.sprites[name] else { return }
+                let spritePx = hypot(b.x - a.x, b.y - a.y)
+                let k = spanUnits * axisLength / spritePx
+                let stretch = hypot(to.x - from.x, to.y - from.y) / (spanUnits * axisLength)
+                let image = context.resolve(Image(name))
+                context.drawLayer { layer in
+                    layer.translateBy(x: from.x, y: from.y)
+                    layer.rotate(by: .radians(atan2(to.y - from.y, to.x - from.x)))
+                    layer.scaleBy(x: k * stretch, y: k)
+                    layer.rotate(by: .radians(-atan2(b.y - a.y, b.x - a.x)))
+                    layer.translateBy(x: -a.x, y: -a.y)
+                    layer.draw(image, in: CGRect(origin: .zero, size: spriteSize))
+                }
             }
-            shaft(-scene.end, scene.end, 7)
-            shaft(-scene.end, -scene.shoulder, 12)
-            shaft(scene.shoulder, scene.end, 12)
-            for side in [-1.0, 1.0] {
-                let p = point(side * scene.shoulder)
-                let rect = CGRect(x: p.x - 4, y: p.y - 18, width: 8, height: 36)
-                context.fill(Path(ellipseIn: rect), with: .linearGradient(metal,
-                    startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                    endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
+            // The bar goes under everything: every plate bore is transparent, so
+            // the sleeves and shaft show through the hubs. The camera sits at the
+            // −x end: the far (+x) collar precedes the plates, the near one follows.
+            placeBar("bar-sleeve-\(angle)", from: point(scene.shoulder), to: point(scene.end))
+            placeBar("bar-shaft-\(angle)", from: point(-scene.shoulder), to: point(scene.shoulder))
+            placeBar("bar-sleeve-near-\(angle)", from: point(-scene.end), to: point(-scene.shoulder))
+            if solution.loadout.collarLb > 0,
+               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-\(angle)"] {
+                placeBar("bar-collar-\(angle)", from: point(scene.collar - span / 2), to: point(scene.collar + span / 2))
             }
-            // Knurl: a darker band each side of centre, then a cross-hatch so
-            // the grip reads as texture at every size, not as stripes.
-            for side in [-1.0, 1.0] {
-                let a = point(side * 42), b = point(side * (scene.shoulder - 24))
-                var band = Path()
-                band.move(to: a); band.addLine(to: b)
-                context.stroke(band, with: .color(.black.opacity(0.22)), lineWidth: 7)
-            }
-            for x in stride(from: -scene.shoulder + 24, to: scene.shoulder - 24, by: 3) where abs(x) >= 42 {
-                let p = point(x)
-                var hatch = Path()
-                hatch.move(to: CGPoint(x: p.x - 1, y: p.y - 3))
-                hatch.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3))
-                hatch.move(to: CGPoint(x: p.x + 2, y: p.y - 3))
-                hatch.addLine(to: CGPoint(x: p.x - 1, y: p.y + 3))
-                context.stroke(hatch, with: .color(Color(hex: 0x4C535B).opacity(0.8)), lineWidth: 0.6)
-            }
-            // Sleeve end caps close the cylinder.
-            for side in [-1.0, 1.0] {
-                let p = point(side * scene.end)
-                let cap = CGRect(x: p.x - 3, y: p.y - 6.5, width: 6, height: 13)
-                context.fill(Path(ellipseIn: cap), with: .linearGradient(metal,
-                    startPoint: CGPoint(x: cap.midX, y: cap.minY), endPoint: CGPoint(x: cap.midX, y: cap.maxY)))
-            }
-            let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
-            for disc in scene.discs {
+            for disc in scene.discs.sorted(by: { $0.x > $1.x }) {
                 let token = disc.plate.colorToken(for: plateStyle)
                 let colour = PlatePalette.colour(for: token)
-                let edge = colour.edgeColor
-                let x = disc.x + disc.depth / 2
-                let face = CGRect(x: x - disc.faceRadius, y: disc.y - disc.radius,
-                    width: disc.faceRadius * 2, height: disc.radius * 2)
-                let rear = face.offsetBy(dx: -disc.depth, dy: 0)
-                context.fill(Path(ellipseIn: rear), with: .color(edge))
-                context.fill(Path(CGRect(x: disc.x - disc.depth / 2, y: face.minY,
-                    width: disc.depth, height: face.height)), with: .color(edge))
+                let family = PlateGeometry.family(disc.plate, style: plateStyle)
+                let known = PlateSprites.plates["\(family):\(disc.plate.id)"].map { "plate-\($0)-\(angle)" }
+                // An unknown shape borrows the family's first sprite; geometry still scales it.
+                let name = known.flatMap { PlateSprites.sprites[$0] != nil ? $0 : nil }
+                    ?? PlateSprites.sprites.keys.sorted().first { $0.hasPrefix("plate-\(family)-") && $0.hasSuffix("-\(angle)") }
+                guard let name, case let .plate(_, _, _, spriteSize, faceCenter, faceRadius, hubRadius)? = PlateSprites.sprites[name] else { continue }
+                // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
+                let x = disc.x - disc.depth / 2
+                let k = disc.radius / faceRadius
+                let frame = CGRect(x: x - faceCenter.x * k, y: disc.y - faceCenter.y * k,
+                                   width: spriteSize.width * k, height: spriteSize.height * k)
+                let image = context.resolve(Image(name))
                 let m = PlateFaceTint(token: token, style: plateStyle).matrix.map(Float.init)
                 var matrix = ColorMatrix()
                 (matrix.r1, matrix.r2, matrix.r3, matrix.r4, matrix.r5) = (m[0], m[1], m[2], m[3], m[4])
@@ -163,26 +146,22 @@ struct BarbellView: View {
                 (matrix.a1, matrix.a2, matrix.a3, matrix.a4, matrix.a5) = (m[15], m[16], m[17], m[18], m[19])
                 context.drawLayer { tinted in
                     tinted.addFilter(.colorMatrix(matrix))
-                    tinted.draw(image, in: face)
+                    tinted.draw(image, in: frame)
                 }
-                context.drawLayer { hub in
-                    hub.clip(to: Path(ellipseIn: face.insetBy(dx: face.width * 0.3825,
-                                                             dy: face.height * 0.3825)))
-                    hub.draw(image, in: face)
+                let hub = CGRect(x: x - disc.faceRadius * hubRadius, y: disc.y - disc.radius * hubRadius,
+                                 width: disc.faceRadius * hubRadius * 2, height: disc.radius * hubRadius * 2)
+                context.drawLayer { untinted in
+                    untinted.clip(to: Path(ellipseIn: hub))
+                    untinted.draw(image, in: frame)
                 }
                 let label = Text(Weight.trim(disc.plate.value, decimals: 2))
                     .font(.system(size: exploded ? 14 : 10, weight: .heavy))
                     .foregroundColor(colour.inkColor)
                 context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
             }
-            if solution.loadout.collarLb > 0 {
-                for side in [-1.0, 1.0] {
-                    let p = point(side * scene.collar)
-                    let rect = CGRect(x: p.x - 4, y: p.y - 13, width: 8, height: 26)
-                    context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .linearGradient(metal,
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
-                }
+            if solution.loadout.collarLb > 0,
+               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
+                placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - span / 2), to: point(-scene.collar + span / 2))
             }
         }
         .frame(height: presentation == .compactSide ? 84 : nil)

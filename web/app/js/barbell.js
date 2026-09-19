@@ -2,6 +2,35 @@
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
 import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
+import { PLATE_SPRITES } from "./plate-sprites.js";
+
+// Rendered loaded-bar sprites (web/tools/render-plate-sprites.py): one per
+// plate shape and scene angle, plus shaft, sleeves, and collars. Placement
+// comes from the same BarbellScene geometry both clients share.
+const spriteURL = (name) => new URL(`../assets/plates/${name}.png`, import.meta.url).href;
+export function plateSpriteName(plate, style, exploded) {
+  const family = plateFamily(plate, style);
+  const angle = exploded ? "exploded" : "assembled";
+  const shape = PLATE_SPRITES.plates[`${family}:${plate.value}-${plate.unit}`];
+  const name = `plate-${shape}-${angle}`;
+  if (shape && PLATE_SPRITES.sprites[name]) return name;
+  // An unknown shape borrows the family's first sprite; geometry still scales it.
+  return Object.keys(PLATE_SPRITES.sprites).find((key) => key.startsWith(`plate-${family}-`) && key.endsWith(`-${angle}`));
+}
+// Map a bar sprite's axis reference points onto two scene points. Thickness
+// comes from the sprite's nominal span (so an exploded scene's longer sleeve
+// stretches along the bar, never fattens); the stretch runs along the bar axis.
+function placeBarSprite(name, from, to, axisLength) {
+  const meta = PLATE_SPRITES.sprites[name];
+  const [ax, ay] = meta.axisStart, [bx, by] = meta.axisEnd;
+  const spritePx = Math.hypot(bx - ax, by - ay);
+  const k = meta.spanUnits * axisLength / spritePx;                  // scene units per sprite px
+  const stretch = Math.hypot(to.x - from.x, to.y - from.y) / (meta.spanUnits * axisLength);
+  const sceneDeg = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI;
+  const spriteDeg = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+  return el('image', { class: `barbell-${meta.kind}`, href: spriteURL(name), width: meta.size[0], height: meta.size[1],
+    transform: `translate(${from.x} ${from.y}) rotate(${sceneDeg.toFixed(3)}) scale(${(k * stretch).toFixed(5)} ${k.toFixed(5)}) rotate(${(-spriteDeg).toFixed(3)}) translate(${-ax} ${-ay})` });
+}
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -90,17 +119,11 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     'aria-label': `${exploded ? 'Exploded' : 'Assembled'} loaded bar, ${C.both(solution.totalLb)}, ${stackLabel}`,
     'data-exploded': exploded });
   const defs = el('defs');
-  const metal = el('linearGradient', { id: `${id}-metal`, x1: 0, y1: 0, x2: 0, y2: 1 });
-  // Chrome: a dark underside, a bright specular band just above centre, and
-  // a hard shadow below — the bar reads as a turned steel cylinder.
-  for (const [offset, color] of [[0,'#1f2428'],[.16,'#6b747c'],[.38,'#dde2e6'],[.47,'#ffffff'],[.6,'#9aa3ab'],[.84,'#3a4148'],[1,'#15181b']])
-    metal.append(el('stop', { offset, 'stop-color': color }));
-  defs.append(metal);
-  const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
+  const angle = exploded ? 'exploded' : 'assembled';
   for (const token of Object.keys(C.PLATE_COLOURS)) {
     const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
-    // Colourise the approved photographic texture from its luminance; the
-    // hub is redrawn unfiltered.
+    // Colourise the rendered greyscale sprite from its luminance; the hub is
+    // redrawn unfiltered.
     filter.append(el('feColorMatrix', { type:'matrix', values: plateTintMatrix(token, style).join(' ') }));
     defs.append(filter);
   }
@@ -108,39 +131,19 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   const root = el('g', { transform: `translate(${scene.width/2} ${scene.height/2})` });
   svg.append(root);
   const point = x => ({ x: x * scene.axisX, y: x * scene.axisY });
-  const shaft = (from, to, diameter, className = '') => {
-    const a = point(from), b = point(to);
-    root.append(el('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y,
-      stroke:`url(#${id}-metal)`, 'stroke-width':diameter, 'stroke-linecap':'round', class:className }));
-  };
-  shaft(-scene.end, scene.end, 7);
-  shaft(-scene.end, -scene.shoulder, 12);
-  shaft(scene.shoulder, scene.end, 12);
-  for (const side of [-1,1]) {
-    const p = point(side * scene.shoulder);
-    root.append(el('ellipse', { cx:p.x, cy:p.y, rx:4, ry:18, fill:`url(#${id}-metal)` }));
+  // The bar goes under everything: every plate bore is transparent, so the
+  // sleeves and shaft show through the hubs. The camera sits at the −x end,
+  // so the far (+x) collar precedes the plates and the near one follows them.
+  const axisLength = Math.hypot(scene.axisX, scene.axisY);
+  root.append(placeBarSprite(`bar-sleeve-${angle}`, point(scene.shoulder), point(scene.end), axisLength));
+  root.append(placeBarSprite(`bar-shaft-${angle}`, point(-scene.shoulder), point(scene.shoulder), axisLength));
+  root.append(placeBarSprite(`bar-sleeve-near-${angle}`, point(-scene.end), point(-scene.shoulder), axisLength));
+  if (solution.collarLb > 0) {
+    const half = PLATE_SPRITES.sprites[`bar-collar-${angle}`].spanUnits / 2;
+    root.append(placeBarSprite(`bar-collar-${angle}`, point(scene.collar - half), point(scene.collar + half), axisLength));
   }
-  // Knurl: a darker band on each side of the centre, then a cross-hatch so
-  // the grip reads as texture at every size, not as stripes.
-  for (const side of [-1, 1]) {
-    const a = point(side * 42), b = point(side * (scene.shoulder - 24));
-    root.append(el('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, class:'barbell-knurl-band',
-      stroke:'#000', 'stroke-opacity':.22, 'stroke-width':7 }));
-  }
-  for (let x = -scene.shoulder + 24; x < scene.shoulder - 24; x += 3) {
-    if (Math.abs(x) < 42) continue;
-    const p = point(x);
-    root.append(el('line', { x1:p.x-1, y1:p.y-3, x2:p.x+2, y2:p.y+3,
-      class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }),
-      el('line', { x1:p.x+2, y1:p.y-3, x2:p.x-1, y2:p.y+3,
-        class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }));
-  }
-  // Sleeve end caps close the cylinder.
-  for (const side of [-1, 1]) {
-    const p = point(side * scene.end);
-    root.append(el('ellipse', { cx:p.x, cy:p.y, rx:3, ry:6.5, fill:`url(#${id}-metal)`, class:'barbell-end-cap' }));
-  }
-  for (const d of scene.discs) {
+  // Far plates first (+x), then near (−x): painter's order for that camera.
+  for (const d of [...scene.discs].sort((a, b) => b.x - a.x)) {
     const token = C.plateColorToken(d.plate, style);
     const colour = C.plateColour(token);
     const side = d.side < 0 ? 'left' : 'right';
@@ -148,19 +151,20 @@ function realisticBarbellSVG(solution, style, exploded = false) {
       'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
       'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
       'aria-label':discAccessibilityLabel(d) });
-    const x = d.x + d.depth/2;
-    // Extruded edge and recessed photographic face share the same diameter.
-    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:colour.edge }),
-      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:colour.edge }));
-    const face = el('image', { class:'barbell-plate-face', href:art, x:x-d.faceRadius, y:d.y-d.radius,
-      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', filter:`url(#${id}-${token})` });
-    group.append(face);
+    // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
+    const x = d.x - d.depth/2;
+    const name = plateSpriteName(d.plate, style, exploded);
+    const meta = PLATE_SPRITES.sprites[name];
+    const k = d.radius / meta.faceRadius;
+    const frame = { x: x - meta.faceCenter[0] * k, y: d.y - meta.faceCenter[1] * k, width: meta.size[0] * k, height: meta.size[1] * k };
+    group.append(el('image', { class:'barbell-plate-face', href:spriteURL(name), ...frame, 'data-sprite':name,
+      preserveAspectRatio:'none', filter:`url(#${id}-${token})` }));
     const clipID = `${id}-hub-${side}-${d.index}`;
     const clip = el('clipPath', { id:clipID });
-    clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*.235, ry:d.radius*.235 }));
+    clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*meta.hubRadius, ry:d.radius*meta.hubRadius }));
     defs.append(clip);
-    group.append(el('image', { class:'barbell-plate-hub', href:art, x:x-d.faceRadius, y:d.y-d.radius,
-      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
+    group.append(el('image', { class:'barbell-plate-hub', href:spriteURL(name), ...frame,
+      preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
     const labelSize = exploded ? 14 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
@@ -170,10 +174,9 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     group.append(label);
     root.append(group);
   }
-  if (solution.collarLb > 0) for (const side of [-1,1]) {
-    const p = point(side * scene.collar);
-    root.append(el('rect', { class:'barbell-lock-collar', x:p.x-4, y:p.y-13,
-      width:8, height:26, rx:2, fill:`url(#${id}-metal)`, stroke:'#515b65' }));
+  if (solution.collarLb > 0) {
+    const half = PLATE_SPRITES.sprites[`bar-collar-near-${angle}`].spanUnits / 2;
+    root.append(placeBarSprite(`bar-collar-near-${angle}`, point(-scene.collar - half), point(-scene.collar + half), axisLength));
   }
   if (!scene.discs.length) {
     const label = el('text', { x:0, y:35, fill:'currentColor', 'font-size':14, 'text-anchor':'middle' });

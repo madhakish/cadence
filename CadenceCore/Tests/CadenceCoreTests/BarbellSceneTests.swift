@@ -24,11 +24,15 @@ final class BarbellSceneTests: XCTestCase {
     /// near the palette fill, and black iron is left alone.
     func testColourisationKeepsShading() {
         let yellow = PlateFaceTint(token: "yellow", style: .steel)
-        let mid = yellow.apply(luminance: 0.305)
-        XCTAssertEqual(mid[0], 0.79, accuracy: 0.02)
-        XCTAssertEqual(mid[1], 0.62, accuracy: 0.02)
-        XCTAssertEqual(mid[2], 0.13, accuracy: 0.02)
-        let bright = yellow.apply(luminance: 0.40), dark = yellow.apply(luminance: 0.23)
+        // At the texture's median the face lands on 85% of the fill plus the grey mix.
+        let median = 0.85 / PlateFaceTint.lift(for: .steel)
+        let mid = yellow.apply(luminance: median)
+        let fill = [0xE8, 0xB0, 0x08].map { Double($0) / 255 }
+        for channel in 0..<3 {
+            let expected = min(1, 0.85 * fill[channel] + 0.85 * PlateFaceTint.greyMix * (1 - fill[channel]))
+            XCTAssertEqual(mid[channel], expected, accuracy: 0.01)
+        }
+        let bright = yellow.apply(luminance: median * 1.3), dark = yellow.apply(luminance: median * 0.75)
         for channel in 0..<3 { XCTAssertGreaterThan(bright[channel], dark[channel]) }
         XCTAssertEqual(PlateFaceTint(token: "black", style: .bumper).matrix, PlateFaceTint.identity)
         let blue = PlateFaceTint(token: "blue", style: .bumper).apply(luminance: 0.152)

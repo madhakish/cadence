@@ -110,3 +110,10 @@
 
 - Colourisation — a plate face is rebuilt from the approved texture's luminance (a 5×4 matrix shared by both clients), so its photographed shading survives and its hue comes from the palette fill. The earlier per-channel gains clamped the dark textures into one flat colour, which is what made a 35 lb steel plate read as a mustard disc. The median texel of each texture lands at 85% of the fill; highlights whiten slightly rather than saturate. Black iron stays untouched. Colour tokens are unchanged: 35 lb is still yellow by the colour-bumper convention.
 - Shaft — a chrome gradient (dark underside, specular band above centre, hard shadow), two darker knurl bands with a cross-hatch, and sleeve end caps, drawn as vectors on both clients. Geometry, the solver, and the textures' pixels are unchanged.
+
+## Loaded-bar composition, 2026-09-19
+
+- Rendered, not drawn — the bar diagram is composed from rendered sprites: one greyscale plate per shape (diameter × thickness) at each scene angle, plus shaft, far and near sleeves, and collars, produced offline by a deterministic signed-distance ray marcher with a studio rig (`web/tools/render-plate-sprites.py`). Vector strokes and the two tinted photographs are retired from the diagram; the approved photographs stay in the repository untouched.
+- One camera — sprites are rendered from the −x end of the bar at the scene's yaw (18° assembled, 38° exploded) with the elevation that reproduces `BarbellScene`'s axis slope, so the shared geometry places them without a second model; far parts paint first, near parts last, and plate bores are transparent so the shaft shows through every hub.
+- Colour at runtime — plate faces are colourised by the shared luminance matrix; hubs and bar parts stay untinted. Colour tokens, geometry, and the solver are unchanged; badges remain vector text.
+- Both clients — the same PNGs ship in the web assets and the asset catalog (byte-identical, tested), with placement metadata generated into `plate-sprites.js` and `PlateSprites.swift` from one manifest.

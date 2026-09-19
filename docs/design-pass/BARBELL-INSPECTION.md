@@ -6,16 +6,22 @@ or reverse-mode stack through `BarbellScene` / `barbell-scene.js`.
 
 ## Asset provenance
 
-The owner-approved September 6, 2026 assets are copied byte-for-byte into both
-clients. They contain no baked-in denomination, so the renderer stamps the
-actual plate value and unit without changing the underlying artwork.
+The loaded bar is composed from rendered sprites (September 19, 2026): one
+greyscale plate per shape (diameter × thickness) at each scene angle, plus a
+shaft, far and near sleeves, and collars, produced by
+`web/tools/render-plate-sprites.py` (a deterministic signed-distance ray
+marcher with a studio rig) and installed byte-for-byte into
+`web/app/assets/plates/` and `Cadence/Assets.xcassets/PlateSprites` by
+`web/tools/install-plate-sprites.mjs`, with placement metadata generated into
+`plate-sprites.js` and `PlateSprites.swift`. The sprites carry no denomination,
+so the renderer stamps the actual plate value without changing the artwork.
 
-- `PlateSteel` / `plate-steel.png` — Charcoal calibrated powerlifting plate.
-- `PlateBumper` / `plate-bumper.png` — Realistic Black Olympic Bumper Plate.
-
-These are intentional shipped source assets. No gorilla emboss is added; the
-existing Vitruvian artwork is unchanged. Coloured faces tint the texture and
-retain an untinted metal hub. SVG paint-server identifiers are unique per view.
+The owner-approved September 6, 2026 photographs (`PlateSteel` /
+`plate-steel.png`, `PlateBumper` / `plate-bumper.png`) remain in both clients
+unchanged but are no longer drawn by the diagram. No gorilla emboss is added;
+the existing Vitruvian artwork is unchanged. Coloured faces are colourised
+from the sprite's luminance by the shared matrix and retain an untinted metal
+hub. SVG paint-server identifiers are unique per view.
 
 ## Shared behavior
 
@@ -31,9 +37,11 @@ retain an untinted metal hub. SVG paint-server identifiers are unique per view.
 - The enlarged exploded scene scrolls inside its own track. Exact per-side
   denomination/count rows remain readable below it.
 - Native transition respects Reduce Motion. Web changes states immediately.
-- Compact rows use the same photographic scene as full views on both clients.
-- Native and web tint the full face with matching channel gains and restore
-  the original metal hub. Native accessibility exposes each plate's side,
+- Compact rows use the same rendered scene as full views on both clients.
+- Native and web colourise the full face with the same luminance matrix and
+  restore the untinted metal hub; the camera sits at the −x end, so far parts
+  paint first and near parts last, and every plate bore is transparent so the
+  shaft shows through. Native accessibility exposes each plate's side,
   position and exact denomination independently of the inspection button.
 - Existing plate references, inventory, and solving policy are unchanged.
 
@@ -49,8 +57,10 @@ or backup schema and needs no migration.
   exact denominations, collars, and offline asset inclusion.
 - `cd CadenceCore && swift test` verifies the same scene and shared JSON fixture.
 - `node web/tools/render-barbell-proof.mjs /absolute/output` rasterizes production
-  SVGs with the actual shipped texture bytes at 390 and 1280 pixels. These are
+  SVGs with the actual shipped sprite bytes at 390 and 1280 pixels. These are
   renderer proofs, not iPhone app screenshots.
+- `node web/tests/plate-sprites.test.mjs` proves the sprite family is
+  byte-identical on both clients and that both placement manifests agree.
 - `CadenceVisualProofUITests.test04PlateCalculatorHero` opens inspection for a
   normal load and captures both exploded and assembled native states. Use the
   iPhone visual-proof workflow to capture it.

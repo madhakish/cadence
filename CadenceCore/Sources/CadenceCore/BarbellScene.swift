@@ -11,11 +11,11 @@ public struct PlateFaceTint: Equatable, Sendable {
     public let matrix: [Double]
 
     public static let identity: [Double] = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
-    /// Median face luminance of each approved texture (measured on the
+    /// Median face luminance of each rendered sprite family (measured on the
     /// shipped PNGs, hub excluded). The lift maps it to 85% of the fill so
     /// the brighter 15% of texels keep headroom before clamping.
     public static func lift(for style: PlateVisualStyle) -> Double {
-        0.85 / (style == .bumper ? 0.152 : 0.305)
+        0.85 / (style == .bumper ? 0.451 : 0.449)
     }
     /// Fraction of the lift mixed in as grey: highlights whiten instead of
     /// saturating to a single hue.
