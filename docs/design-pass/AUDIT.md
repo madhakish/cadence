@@ -129,9 +129,6 @@ screenshots Today, the session, the exercise pane, the calculator and its
 inspection, the library, Settings, and History at 390×844 and 1280×800. The
 header comment carries the `podman run` line.
 
-Web verification runs from `web` with `npm test`. Native core, migration, device
-build, and visual proof run in GitHub Actions because the repository's local
-Linux workspace has no Xcode runtime.
 Web verification runs from `web` with `npm test`. That chain ends with an
 axe-core audit (`tests/axe.test.mjs`) over every rendered tab and pushed screen,
 so an unnamed control fails the suite instead of waiting for a VoiceOver pass.
