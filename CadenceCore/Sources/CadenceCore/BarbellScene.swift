@@ -31,27 +31,47 @@ public struct PlateGeometry: Equatable, Sendable {
         self.thickness = thickness
     }
 
+    private static let bumperTable: [String: [Double]] = [
+        "25-kg": [450, 70], "20-kg": [450, 60], "15-kg": [450, 48],
+        "10-kg": [450, 35], "5-kg": [450, 25],
+        "55-lb": [450, 75], "45-lb": [450, 65], "35-lb": [450, 52],
+        "25-lb": [450, 40], "10-lb": [450, 25],
+    ]
+    private static let steelTable: [String: [Double]] = [
+        "25-kg": [450, 27], "20-kg": [450, 22], "15-kg": [400, 21],
+        "10-kg": [325, 20], "5-kg": [230, 20],
+        "55-lb": [450, 30], "45-lb": [450, 27], "35-lb": [400, 25],
+        "25-lb": [325, 23], "10-lb": [230, 20],
+    ]
+    private static let changeTable: [String: [Double]] = [
+        "2.5-kg": [210, 19], "2-kg": [190, 19], "1.5-kg": [175, 18],
+        "1.25-kg": [160, 16], "1-kg": [160, 16], "0.5-kg": [135, 12],
+        "5-lb": [190, 19], "2.5-lb": [160, 16], "1.25-lb": [135, 12],
+    ]
+
     public static func reference(_ plate: Plate, style: PlateVisualStyle) -> PlateGeometry {
-        let bumper: [String: [Double]] = [
-            "25-kg": [450, 70], "20-kg": [450, 60], "15-kg": [450, 48],
-            "10-kg": [450, 35], "5-kg": [450, 25],
-            "55-lb": [450, 75], "45-lb": [450, 65], "35-lb": [450, 52],
-            "25-lb": [450, 40], "10-lb": [450, 25],
-        ]
-        let steel: [String: [Double]] = [
-            "25-kg": [450, 27], "20-kg": [450, 22], "15-kg": [400, 21],
-            "10-kg": [325, 20], "5-kg": [230, 20],
-            "55-lb": [450, 30], "45-lb": [450, 27], "35-lb": [400, 25],
-            "25-lb": [325, 23], "10-lb": [230, 20],
-        ]
-        let change: [String: [Double]] = [
-            "2.5-kg": [210, 19], "2-kg": [190, 19], "1.5-kg": [175, 18],
-            "1.25-kg": [160, 16], "1-kg": [160, 16], "0.5-kg": [135, 12],
-            "5-lb": [190, 19], "2.5-lb": [160, 16], "1.25-lb": [135, 12],
-        ]
-        let dimensions = (style == .bumper ? bumper : steel)[plate.id]
-            ?? change[plate.id] ?? [200, 20]
+        let dimensions = (style == .bumper ? bumperTable : steelTable)[plate.id]
+            ?? changeTable[plate.id] ?? [200, 20]
         return PlateGeometry(diameter: dimensions[0], thickness: dimensions[1])
+    }
+
+    /// The physical family a denomination belongs to in a style — a full-size
+    /// bumper, a calibrated steel disc, or a change plate. It names the cell
+    /// in the loadout summary and never changes geometry or mass. Mirrors
+    /// web `plateFamily`.
+    public static func family(_ plate: Plate, style: PlateVisualStyle) -> String {
+        if style == .bumper, bumperTable[plate.id] != nil { return "bumper" }
+        if steelTable[plate.id] != nil { return "steel" }
+        return "change"
+    }
+
+    /// "Bumpers" / "Steel" / "Change" — the cell's second line.
+    public static func familyLabel(_ family: String) -> String {
+        switch family {
+        case "bumper": return "Bumpers"
+        case "steel": return "Steel"
+        default: return "Change"
+        }
     }
 }
 

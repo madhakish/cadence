@@ -168,7 +168,7 @@ struct WorkoutPreviewView: View {
             NavigationStack {
                 ScrollView {
                     BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
-                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout)
+                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout, plateStyle: detail.style)
                         .padding(.horizontal)
                 }
                 .navigationTitle("Loaded bar")

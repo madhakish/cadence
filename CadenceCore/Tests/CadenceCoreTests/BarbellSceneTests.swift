@@ -94,6 +94,15 @@ final class BarbellSceneTests: XCTestCase {
         XCTAssertEqual(PlatePalette.hex(PlatePalette.colour(for: "blue").fill), "#2f6fed")
         XCTAssertEqual(PlatePalette.colour(for: "chartreuse"), PlatePalette.fallback)
         XCTAssertEqual(PlateFaceTint(token: "black").red, 1, "black iron is the untinted texture")
+    func testPlateFamilyNamesTheSummaryCell() {
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .kg), style: .bumper), "bumper",
+                       "a full-size 5 kg training bumper is a bumper")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .kg), style: .steel), "steel")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 2.5, unit: .kg), style: .bumper), "change")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 45, unit: .lb), style: .steel), "steel")
+        XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .lb), style: .bumper), "change")
+        XCTAssertEqual(PlateGeometry.familyLabel("bumper"), "Bumpers")
+        XCTAssertEqual(PlateGeometry.familyLabel("change"), "Change")
     }
 
     func testFiveKilogramBumperDoesNotBecomeAChangePlate() {

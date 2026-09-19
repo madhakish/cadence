@@ -1152,7 +1152,8 @@ private struct ExerciseSection: View {
                         if emphasized && isCurrent {
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                loadout: exactSolution.loadout
+                                loadout: exactSolution.loadout,
+                                plateStyle: style
                             )
                         }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
@@ -1312,7 +1313,8 @@ private struct ExerciseSection: View {
                         BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
                         LoadoutSummaryView(
                             requestedLb: detail.requestedLb,
-                            loadout: detail.solution.loadout
+                            loadout: detail.solution.loadout,
+                            plateStyle: detail.style
                         )
                             .padding(.horizontal)
                     }

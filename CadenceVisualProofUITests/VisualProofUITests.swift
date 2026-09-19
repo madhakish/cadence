@@ -66,7 +66,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let achieved = app.staticTexts["ACHIEVED — BAR INCLUDED"]
+        let achieved = app.staticTexts["ACHIEVED WITH BAR"]
         for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
         XCTAssertTrue(achieved.isHittable)
         capture("after-07-plate-calculator-iphone")

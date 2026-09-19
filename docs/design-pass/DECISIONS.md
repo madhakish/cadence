@@ -58,3 +58,5 @@
 
 - Plate colours — one token → colour table (fill, edge, ink) lives in the shared core and every renderer on both clients reads it; no plate hex is spelled outside metadata. Each disc has one spoken name built in core.
 - Renderer state — presentation (a set row's compact bar vs the current set's stage) is chosen by the surface; emphasis (current / standard / muted) is a renderer prop that changes only opacity, never geometry, order, or labels.
+
+- Loadout summary — one composition everywhere a bar is explained: "Achieved with bar" in the accent, the load numeral pounds-first with the difference from the request beside it, the bar and the per-side stack on one line, then one cell per plate family (bumpers, steel, change) counting both sleeves, plus a collars cell. The calculator opens on "Know your load." and no longer repeats the stack as a list.
