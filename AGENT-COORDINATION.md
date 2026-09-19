@@ -74,6 +74,12 @@ decisions to the task issue. Do not echo acknowledgements, paste transcripts,
 or repeat unanswered requests. When blocked, state the dependency and continue
 useful unblocked work within scope, or leave a resumable handoff.
 
+Name one canonical task thread for claims; link related PRs and cross-repo work.
+Pin review/test evidence to a commit SHA; new commits require fresh assessment.
+After verifying a fix or explaining rejection, reply and resolve the review thread.
+A green wrapper job is not a completed review: report completed/skipped/failed.
+Bots may update their own summary comment; preserve other runs' event history.
+
 ## Subagents, completion, and limits
 
 The parent owns the GitHub conversation by default. Pass its task references,

@@ -69,6 +69,11 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+      - name: Validate repository hygiene
+        run: |
+          node --test .github/scripts/test-repository-hygiene.mjs
+          node .github/scripts/check-agent-instructions.mjs
+          node .github/scripts/pr-contract.mjs --offline
       - name: Fast repository checks
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -676,3 +681,4 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
