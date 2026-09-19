@@ -79,11 +79,14 @@ class GitHub:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                data = json.load(response)
+                payload: object = json.load(response)
         except urllib.error.HTTPError as exc:
             raise CoordError(f"GitHub HTTP {exc.code}; reconcile before retrying any write") from None
         except (OSError, ValueError):
             raise CoordError("GitHub request failed; write outcome may be unknown; reconcile on retry") from None
+        if not isinstance(payload, dict):
+            raise CoordError("Unexpected GitHub response; reconcile before retrying any write")
+        data = cast("Record", payload)
         if data.get("errors") or not isinstance(data.get("data"), dict):
             raise CoordError("GraphQL failed; check access/schema; reconcile before retrying a write")
         return data["data"]
@@ -94,20 +97,28 @@ class GitHub:
         seen_cursors: set[str] = set()
         while True:
             data = self.call(query, {**variables, "after": cursor}).get(root)
-            if not data or "items" not in data:
+            if not isinstance(data, dict) or "items" not in data:
                 raise CoordError("Repository or Discussion is inaccessible; scan incomplete")
-            page = data["items"]
-            batch = page["nodes"]
-            if any(node is None for node in batch):
-                raise CoordError("Inaccessible record; scan incomplete")
+            raw_page = cast("Record", data)["items"]
+            if not isinstance(raw_page, dict):
+                raise CoordError("Unexpected GitHub page; scan incomplete")
+            page = cast("Record", raw_page)
+            raw_batch, raw_info = page.get("nodes"), page.get("pageInfo")
+            if not isinstance(raw_batch, list) or not isinstance(raw_info, dict):
+                raise CoordError("Unexpected GitHub page fields; scan incomplete")
+            values = cast("list[object]", raw_batch)
+            info = cast("Record", raw_info)
+            if any(not isinstance(node, dict) for node in values) or type(info.get("hasNextPage")) is not bool:
+                raise CoordError("Inaccessible record or invalid pagination; scan incomplete")
+            batch = cast("list[Record]", values)
             self.count += len(batch)
             if self.count > self.limit:
                 raise CoordError("Record bound reached; narrow scope or explicitly raise the limit")
             nodes.extend(batch)
-            if not page["pageInfo"]["hasNextPage"]:
+            if not info["hasNextPage"]:
                 return nodes
-            cursor = page["pageInfo"]["endCursor"]
-            if not cursor or cursor in seen_cursors:
+            cursor = info.get("endCursor")
+            if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
                 raise CoordError("Pagination made no progress; scan incomplete")
             seen_cursors.add(cursor)
 

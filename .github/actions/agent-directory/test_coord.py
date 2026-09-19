@@ -283,6 +283,34 @@ class CoordinationTests(unittest.TestCase):
 
 
 class PaginationTests(unittest.TestCase):
+    def test_unexpected_page_shapes_fail_with_coord_error(self) -> None:
+        invalid: list[coord.Record] = [
+            {"items": None},
+            {"items": []},
+            {"items": {"nodes": None, "pageInfo": {"hasNextPage": False}}},
+            {"items": {"nodes": []}},
+            {"items": {"nodes": [], "pageInfo": {"hasNextPage": "false"}}},
+            {"items": {"nodes": [3], "pageInfo": {"hasNextPage": False}}},
+        ]
+        api = coord.GitHub("fixture")
+        for response in invalid:
+            with (
+                patch.object(api, "call", return_value={"node": response}),
+                self.assertRaises(coord.CoordError),
+            ):
+                api.pages(coord.COMMENTS, {"id": "D"}, "node")
+
+    def test_non_object_graphql_response_fails_with_coord_error(self) -> None:
+        api = coord.GitHub("fixture")
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "response.json"
+            path.write_text("[]")
+            with (
+                patch("urllib.request.urlopen", return_value=path.open()),
+                self.assertRaises(coord.CoordError),
+            ):
+                api.call("query{}", {})
+
     def test_every_page_is_read_and_repeated_cursor_fails(self) -> None:
         api = coord.GitHub("fixture")
         responses = [{"node": page([node("1", "one")], True, "next")}, {"node": page([node("2", "two")])}]
