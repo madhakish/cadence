@@ -55,3 +55,6 @@
 - Completion cue — one bundled tone (the web client's 880 Hz half-second) says "done" for rest and holds alike: through an ambient session on screen, so it follows headphones and mixes with music, and on the background notification, so the phone says the same thing face-down. Foreground plays it once and cancels the alert; a background alert is never replayed on return.
 
 - Workout commands — one service changes a set's status and decides what follows (focus, the next rest's lift, whether to arm it), used by the logger's control, the hold timer, and the Lock Screen. A Lock Screen face names its set structurally and the app re-derives, at the moment the tap runs, whether that set is still the one to act on; a stale face is refused, never redirected. Ending the Live Activity remains distinct from banking the workout.
+
+- Plate colours — one token → colour table (fill, edge, ink) lives in the shared core and every renderer on both clients reads it; no plate hex is spelled outside metadata. Each disc has one spoken name built in core.
+- Renderer state — presentation (a set row's compact bar vs the current set's stage) is chosen by the surface; emphasis (current / standard / muted) is a renderer prop that changes only opacity, never geometry, order, or labels.

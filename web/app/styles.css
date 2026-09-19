@@ -179,7 +179,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .stepper { display: flex; align-items: center; gap: 12px; }
 .stepper button { width: 44px; height: 44px; border-radius: var(--radius); border: 0; background: var(--card2); color: var(--text); font-size: 22px; cursor: pointer; }
 .toggle { position: relative; width: 50px; height: 30px; border-radius: 999px; background: var(--card2); border: 0; cursor: pointer; flex: none; }
-.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform var(--short-motion); }
 .toggle.on { background: var(--good); } .toggle.on::after { transform: translateX(20px); }
 
 /* sheets & overlays */
@@ -203,7 +203,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 /* toast */
 #toast { position: fixed; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%);
   z-index: 60; background: var(--card2); color: var(--text); border: 1px solid var(--line); padding: 11px 16px; border-radius: var(--radius); font-size: 14px;
-  opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 86vw; text-align: center; }
+  opacity: 0; pointer-events: none; transition: opacity var(--short-motion); max-width: 86vw; text-align: center; }
 #toast.show { opacity: 1; }
 
 /* charts */
@@ -333,6 +333,7 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .barbell-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 0 0 8px 4px; }
 .barbell-wrap .plate-detail { flex-basis: 100%; }
 svg.barbell { height: 46px; max-width: 100%; }
+svg.barbell.emphasis-muted { opacity: .85; }
 svg.dumbbell { height: 36px; max-width: 100%; }
 .barbell-shadow { fill: #000; opacity: .14; }
 .barbell-knurl { stroke: #202225; stroke-width: .45; opacity: .45; vector-effect: non-scaling-stroke; }

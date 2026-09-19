@@ -83,7 +83,7 @@ final class VisualProofUITests: XCTestCase {
         let artwork = app.scrollViews["barbell-inspection-artwork"]
         let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
-        XCTAssertTrue(firstLeft.label.contains("Left plate 1 from inside"))
+        XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-exploded-iphone")
         toggle.tap()

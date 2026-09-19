@@ -25,20 +25,12 @@ func authoritativePlateSolution(
     )
 }
 
-private enum PlatePalette {
-    static let fill: [String: Color] = [
-        "red": Color(hex: 0xD23B3B), "blue": Color(hex: 0x2F6FED), "green": Color(hex: 0x1FAA52),
-        "yellow": Color(hex: 0xE8B008), "white": Color(hex: 0xEDEDED), "black": Color(hex: 0x1C1D22),
-    ]
-    static let stroke: [String: Color] = [
-        "red": Color(hex: 0x7A1F1F), "blue": Color(hex: 0x1B3F8F), "green": Color(hex: 0x10632F),
-        "yellow": Color(hex: 0x8A6A04), "white": Color(hex: 0x9A9A9A), "black": Color(hex: 0x3A3B42),
-    ]
-
-    static func labelColor(for token: String) -> Color {
-        token == "white" || token == "yellow" || token == "green"
-            ? Color(hex: 0x24262A) : .white
-    }
+/// Plate colours come from the one table in CadenceCore (`PlatePalette`);
+/// this only turns its hex into SwiftUI colours.
+private extension PlateColour {
+    var fillColor: Color { Color(hex: fill) }
+    var edgeColor: Color { Color(hex: edge) }
+    var inkColor: Color { Color(hex: ink) }
 }
 
 /// A readable, face-on denomination key for a plate in the calculator. The
@@ -49,15 +41,15 @@ struct PlateFaceBadge: View {
     let plate: Plate
     let style: PlateVisualStyle
 
-    private var token: String { plate.colorToken(for: style) }
+    private var colour: PlateColour { PlatePalette.colour(for: plate.colorToken(for: style)) }
 
     var body: some View {
-        let foreground = PlatePalette.labelColor(for: token)
+        let foreground = colour.inkColor
         ZStack {
             Circle()
-                .fill(PlatePalette.fill[token] ?? Color(hex: 0x888888))
+                .fill(colour.fillColor)
             Circle()
-                .stroke(PlatePalette.stroke[token] ?? .black.opacity(0.3), lineWidth: 2)
+                .stroke(colour.edgeColor, lineWidth: 2)
             Circle()
                 .stroke(foreground.opacity(0.34), lineWidth: 1)
                 .padding(7)
@@ -75,12 +67,17 @@ struct PlateFaceBadge: View {
 }
 
 /// Renders the solver's exact stack with the approved photographic plate faces.
+/// `presentation` is chosen by the SURFACE (a set row vs the current set's
+/// stage); `emphasis` is the state and changes only opacity — never geometry,
+/// order, or labels.
 struct BarbellView: View {
     enum Presentation: Equatable { case compactSide, fullBar }
+    enum Emphasis: Equatable { case current, standard, muted }
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
     var presentation: Presentation = .compactSide
     var exploded = false
+    var emphasis: Emphasis = .standard
 
     static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle) -> CGFloat {
         CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 0.55))
@@ -126,7 +123,8 @@ struct BarbellView: View {
             let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
             for disc in scene.discs {
                 let token = disc.plate.colorToken(for: plateStyle)
-                let edge = PlatePalette.stroke[token] ?? .gray
+                let colour = PlatePalette.colour(for: token)
+                let edge = colour.edgeColor
                 let x = disc.x + disc.depth / 2
                 let face = CGRect(x: x - disc.faceRadius, y: disc.y - disc.radius,
                     width: disc.faceRadius * 2, height: disc.radius * 2)
@@ -150,7 +148,7 @@ struct BarbellView: View {
                 }
                 let label = Text(Weight.trim(disc.plate.value, decimals: 2))
                     .font(.system(size: exploded ? 14 : 10, weight: .heavy))
-                    .foregroundColor(PlatePalette.labelColor(for: token))
+                    .foregroundColor(colour.inkColor)
                 context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
             }
             if solution.loadout.collarLb > 0 {
@@ -164,11 +162,12 @@ struct BarbellView: View {
             }
         }
         .frame(height: presentation == .compactSide ? 84 : nil)
+        .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
         .accessibilityChildren {
             ForEach([-1, 1], id: \.self) { side in
                 ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
-                    Text("\(side < 0 ? "Left" : "Right") plate \(disc.index + 1) from inside, \(disc.plate.label)")
+                    Text(disc.accessibilityLabel)
                         .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
                 }
             }
@@ -234,7 +233,7 @@ struct BarbellInspectionView: View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
         VStack(alignment: .leading, spacing: 12) {
             Button(exploded ? "Assemble bar" : "Explode plates") {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { exploded.toggle() }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
             }
             .buttonStyle(.bordered)
             .frame(minHeight: 44)
@@ -348,4 +347,4 @@ struct LoadoutSummaryView: View {
         .accessibilityElement(children: .combine)
     }
 }
-// Plate colours use the shared Color(hex:) from Theme.swift.
+// Colour(hex:) comes from Theme.swift; the plate hex values come from CadenceCore.

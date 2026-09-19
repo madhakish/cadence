@@ -812,7 +812,10 @@ export async function openSession(id) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
       const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
-      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle);
+      // Presentation by surface (the current set's stage vs a set row);
+      // emphasis by state. State never changes geometry.
+      const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle,
+        { emphasis: isCurrent ? "current" : "muted" });
       const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
       const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
       if (isCurrent) {

@@ -1,11 +1,9 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, plateTintGains } from "./barbell-scene.js";
+import { barbellScene, discAccessibilityLabel, plateTintGains } from "./barbell-scene.js";
 
 const NS = "http://www.w3.org/2000/svg";
-const FILL = { red: "#d23b3b", blue: "#2f6fed", green: "#1faa52", yellow: "#e8b008", white: "#ededed", black: "#1c1d22" };
-const STROKE = { red: "#7a1f1f", blue: "#1b3f8f", green: "#10632f", yellow: "#8a6a04", white: "#9a9a9a", black: "#3a3b42" };
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 
 
@@ -14,13 +12,13 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // imply physically impossible plate thickness. Decorative: callers provide
 // the adjacent denomination label. Mirrors PlateFaceBadge.
 export function plateBadgeSVG(plate, style = "steel") {
-  const token = C.plateColorToken(plate, style);
-  const foreground = ["white", "yellow", "green"].includes(token) ? "#24262a" : "#fff";
+  const colour = C.plateColour(C.plateColorToken(plate, style));
+  const foreground = colour.ink;
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
     "aria-hidden": "true", focusable: "false" });
   svg.append(
-    el("circle", { cx: 26, cy: 26, r: 24, fill: FILL[token] || "#888",
-      stroke: STROKE[token] || "#333", "stroke-width": 2 }),
+    el("circle", { cx: 26, cy: 26, r: 24, fill: colour.fill,
+      stroke: colour.edge, "stroke-width": 2 }),
     el("circle", { cx: 26, cy: 26, r: 17, fill: "none", stroke: foreground,
       "stroke-width": 1, opacity: .34 }),
   );
@@ -64,11 +62,15 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, s
 }
 
 // Render the exact domain solution through one scene in both presentations.
-export function barbellSVG(solution, presentation = "compact", plateStyle = "steel") {
+// `presentation` is chosen by the SURFACE (a set row vs the current set's
+// stage); `emphasis` is the state (current / standard / muted) and changes
+// only opacity — never geometry, order, or labels.
+export function barbellSVG(solution, presentation = "compact", plateStyle = "steel", { emphasis = "standard" } = {}) {
   if (!solution?.bar || !Array.isArray(solution?.perSide)) {
     throw new TypeError("barbellSVG requires a complete plate solution");
   }
   const rendered = realisticBarbellSVG(solution, plateStyle);
+  rendered.svg.classList.add(`emphasis-${emphasis}`);
   if (presentation !== "full") {
     rendered.svg.classList.remove("full");
     rendered.svg.classList.add("compact");
@@ -93,7 +95,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     metal.append(el('stop', { offset, 'stop-color': color }));
   defs.append(metal);
   const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
-  for (const token of Object.keys(FILL)) {
+  for (const token of Object.keys(C.PLATE_COLOURS)) {
     const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
     // Tint the approved photographic texture; the hub is redrawn unfiltered.
     const gain = plateTintGains(token);
@@ -125,15 +127,16 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   }
   for (const d of scene.discs) {
     const token = C.plateColorToken(d.plate, style);
+    const colour = C.plateColour(token);
     const side = d.side < 0 ? 'left' : 'right';
     const group = el('g', { class:'barbell-plate-body', tabindex:0, role:'img',
       'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
       'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
-      'aria-label':`${C.plateLabel(d.plate)} plate, ${d.index+1} from inside, ${side} side` });
+      'aria-label':discAccessibilityLabel(d) });
     const x = d.x + d.depth/2;
     // Extruded edge and recessed photographic face share the same diameter.
-    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:STROKE[token] }),
-      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:STROKE[token] }));
+    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:colour.edge }),
+      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:colour.edge }));
     const face = el('image', { class:'barbell-plate-face', href:art, x:x-d.faceRadius, y:d.y-d.radius,
       width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', filter:`url(#${id}-${token})` });
     group.append(face);
@@ -146,7 +149,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     const labelSize = exploded ? 14 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
-      fill:['white','yellow','green'].includes(token) ? '#17191c' : '#fff',
+      fill:colour.ink,
       'data-plate-denomination':C.plateLabel(d.plate) });
     label.textContent = C.trim(d.plate.value, 2);
     group.append(label);

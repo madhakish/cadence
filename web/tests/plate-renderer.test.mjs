@@ -83,6 +83,16 @@ ok(Number(f7Steel.querySelectorAll('[data-side="right"]')[0].getAttribute("heigh
 ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll(".barbell-lock-collar").length === 2,
   "F8: configured collars render on both mirrored sleeves");
 
+const B2 = await import("../app/js/barbell-scene.js");
+ok(B2.discAccessibilityLabel({ plate: { value: 20, unit: "kg" }, index: 0, side: -1 }) === "20 kg plate, 1 from inside, left side",
+  "one spoken plate name on both clients (mirrors BarbellScene.Disc.accessibilityLabel)");
+const muted = B.barbellSVG(fixtures.F2, "compact", "steel", { emphasis: "muted" }).svg;
+const current = B.barbellSVG(fixtures.F2, "compact", "steel", { emphasis: "current" }).svg;
+ok(muted.classList.contains("emphasis-muted") && current.classList.contains("emphasis-current")
+    && muted.getAttribute("viewBox") === current.getAttribute("viewBox")
+    && muted.querySelectorAll(".barbell-plate-body").length === current.querySelectorAll(".barbell-plate-body").length,
+  "emphasis is a state class only: geometry and plate count are identical across states");
+
 for (const value of [1.25, 2.5, 45]) {
   ok(C.plateLabel({ value, unit: "kg" }) === `${value} kg`,
     `formatter preserves exact denomination ${value}`);

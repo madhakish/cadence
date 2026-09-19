@@ -1145,7 +1145,8 @@ private struct ExerciseSection: View {
                             BarbellView(
                                 solution: exactSolution,
                                 plateStyle: style,
-                                presentation: .compactSide
+                                presentation: .compactSide,
+                                emphasis: isCurrent ? .current : .muted
                             )
                         }
                         if emphasized && isCurrent {

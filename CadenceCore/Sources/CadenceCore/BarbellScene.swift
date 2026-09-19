@@ -5,10 +5,10 @@ import Foundation
 public struct PlateFaceTint: Equatable, Sendable {
     public let red, green, blue: Double
 
+    /// Black iron is the untinted texture; every other token tints the face
+    /// with its palette fill.
     public init(token: String) {
-        let colors = ["red": 0xD23B3B, "blue": 0x2F6FED, "green": 0x1FAA52,
-                      "yellow": 0xE8B008, "white": 0xEDEDED]
-        if let hex = colors[token] {
+        if token != "black", let hex = PlatePalette.colours[token]?.fill {
             red = Double((hex >> 16) & 255) / 255 * 3.2
             green = Double((hex >> 8) & 255) / 255 * 3.2
             blue = Double(hex & 255) / 255 * 3.2
@@ -68,6 +68,13 @@ public struct BarbellScene: Sendable {
         public let radius: Double
         public let faceRadius: Double
         public let depth: Double
+
+        /// The one spoken name for a plate on the bar, on both clients:
+        /// "20 kg plate, 1 from inside, left side". Mirrors web
+        /// `discAccessibilityLabel`.
+        public var accessibilityLabel: String {
+            "\(plate.label) plate, \(index + 1) from inside, \(side < 0 ? "left" : "right") side"
+        }
     }
 
     public let discs: [Disc]
