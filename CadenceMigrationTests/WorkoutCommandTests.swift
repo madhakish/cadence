@@ -196,6 +196,7 @@ final class WorkoutCommandTests: XCTestCase {
     }
 
     func testDeleteThenAddCannotRetargetAnyStaleCommand() throws {
+        // [INV-LOCK-SCREEN-SET-IDENTITY]
         for status in [SetStatus.completed, .skipped, .planned] {
             let container = try makeContainer()
             let context = container.mainContext
@@ -291,12 +292,14 @@ final class WorkoutCommandTests: XCTestCase {
         let schema = Schema(versionedSchema: CadenceSchemaV13.self)
         let config = ModelConfiguration("command-identity", schema: schema, url: directory.appendingPathComponent("Cadence.store"))
         let command: WorkoutCommand
-        let expectedSet: PersistentIdentifier
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let expectedSet: Data
         let expectedLayout: String
         do {
             let container = try ModelContainer(for: schema, configurations: config)
             let (session, _) = try makeSession(context: container.mainContext, autoStart: false)
-            expectedSet = sets(session)[0].persistentModelID
+            expectedSet = try encoder.encode(sets(session)[0].persistentModelID)
             expectedLayout = WorkoutCommandService.layout(of: session)
             XCTAssertFalse(expectedLayout.isEmpty)
             let face = WorkoutCommand.completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: expectedLayout)
@@ -307,8 +310,24 @@ final class WorkoutCommandTests: XCTestCase {
         let context = reopened.mainContext
         let session = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutSession>()).first)
         XCTAssertEqual(WorkoutCommandService.layout(of: session), expectedLayout)
-        XCTAssertEqual(sets(session)[0].persistentModelID, expectedSet)
+        // PersistentIdentifier equality includes the container's object-ID
+        // backing; its Codable representation is the cross-launch contract.
+        XCTAssertEqual(try encoder.encode(sets(session)[0].persistentModelID), expectedSet)
         _ = try WorkoutCommandService.perform(command, settings: nil, restRunning: false, context: context)
         XCTAssertEqual(sets(session).map(\.status), [.completed, .planned, .planned])
+    }
+
+    func testLegacyAndUnavailableIdentitiesAreRefused() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let (session, settings) = try makeSession(context: context, autoStart: false)
+        for stale in ["", SetLifecycle.layoutFingerprint("Back Squat#wss")] {
+            XCTAssertThrowsError(try WorkoutCommandService.perform(
+                .completeSet(sessionID: session.id, exerciseIndex: 0, setIndex: 0, layout: stale),
+                settings: settings, restRunning: false, context: context)) { error in
+                XCTAssertEqual(error as? WorkoutCommandService.Failure, .movedOn)
+            }
+        }
+        XCTAssertEqual(sets(session).map(\.status), [.planned, .planned, .planned])
     }
 }
