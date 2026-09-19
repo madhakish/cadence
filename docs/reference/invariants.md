@@ -41,6 +41,18 @@ gate rather than being silently absent.
 
 ## Prescription and loading
 
+### INV-LOCK-SCREEN-SET-IDENTITY
+*platforms: native*
+
+A Lock Screen complete, skip, or undo command can only change the persisted
+set its face referred to. Deleting and replacing sets or reordering identical
+sets/exercise entries must invalidate the old face even when names and
+warmup/work patterns match. Refusal writes nothing. An unchanged saved
+session must still accept its command after the store is reopened.
+
+The native `WorkoutCommandTests` exercise this boundary against SwiftData,
+including a synthetic on-disk store, in the macOS CI suite.
+
 ### INV-LOAD-STORED-ACTUAL
 *platforms: core*
 
