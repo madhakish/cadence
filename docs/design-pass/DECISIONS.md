@@ -92,7 +92,7 @@
 
 ## Review fixes, 2026-09-19
 
-- Lock Screen identity — a set command carries the fingerprint of the session layout its face was built from (`SetLifecycle.layoutFingerprint`, FNV-1a, stable across launches); a command whose layout no longer matches is refused as "moved on" rather than resolved against the new order. Stable per-set ids would need a schema change and were not taken.
+- Lock Screen identity — a set command carries a versioned fingerprint of the ordered exercise-entry and set identities, plus the displayed names and warmup/work pattern. SwiftData's existing persisted identifiers are encoded canonically, so equal-shaped replacements and reorders invalidate the face while unchanged stores survive relaunch. This requires no schema change. Pre-hotfix fingerprints and unavailable identities are refused as "moved on" and the face refreshes from saved state.
 - Face after a verdict — every in-app verdict republishes the current set to the Live Activity, a refused command re-projects the saved state (or ends a banked session's activity), and the expanded island keeps Rest/Pause/End beside Complete/Skip.
 - Timed work on the face — timed and conditioning sets read as a duration ("0:30"), never as reps.
 - One cue — the display timer is suspended while the app is in the background and a rest that expired meanwhile ends quietly on return; the notification fires one second after the deadline so a foreground cancellation always wins.

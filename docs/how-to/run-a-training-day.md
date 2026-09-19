@@ -72,7 +72,7 @@ lifts appear under "Next up" with their own suggestions.
   **Complete set** and **Skip**. Completing it logs exactly that set,
   arms your rest when auto-start is on, and moves the face to the next
   set; the rest face then says what's next. If the workout has moved on
-  since the face was drawn (you logged in the app meanwhile), the button
+  since the face was drawn (you logged, replaced, or reordered sets in the app), the button
   says so instead of logging a different set. Ending the activity never
   banks the workout — **Bank it** stays in the app.
 - **Done with a session you never wanted?** **Discard session** removes
