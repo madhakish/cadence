@@ -5600,6 +5600,66 @@ await withCleanup(async (keep) => {
   }
 }
 
+// ---- session-aware warmups (issue #64): a later same-group barbell lift ----
+// does not re-climb a ramp the lifter already made this session.
+{
+  const gym = await db.Gyms.default();
+  const frontSquatEx = (await db.Exercises.all()).find((e) => e.name === "Front Squat");
+  const bar45 = C.barId(C.BARS.bar45lb);
+  const set = (order, weightLb, reps, warm, status) => ({
+    order, weightLb, reps, isWarmup: warm, isPerSide: false, enteredUnit: "lb", status,
+    prescriptionBlock: warm ? "warmup" : "work",
+    flags: [], bodyFlagSite: null, bodyFlagNote: null, durationSeconds: null, distanceMiles: null, autoregReason: null,
+  });
+  const heavySquat = { order: 0, exerciseName: "Back Squat", notes: "", phase: null, programRole: null, barId: bar45,
+    plannedWeightLb: 225, plannedSets: 5, plannedReps: 5,
+    sets: [set(0, 45, 10, true, "completed"), set(1, 90, 5, true, "completed"), set(2, 125, 3, true, "completed"),
+      set(3, 160, 2, true, "completed"), set(4, 190, 1, true, "completed"),
+      ...[5, 6, 7, 8, 9].map((order) => set(order, 225, 5, false, "completed"))] };
+  // Added ad hoc after the squat: one working set and no warmups yet — how
+  // "+ Add exercise" leaves an entry before its first weight is applied.
+  const frontSquat = { order: 1, exerciseName: "Front Squat", notes: "", phase: null, programRole: null, barId: bar45,
+    plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [set(0, 185, 5, false, "planned")] };
+  const sid = await db.Sessions.save({ date: db.iso(new Date()), notes: "", isCompleted: false,
+    gymId: gym?.id || null, gymName: gym?.name || null, exercises: [heavySquat, frontSquat] });
+  const openAndResync = async () => {
+    await session.openSession(sid); await tick();
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    const select = overlay.querySelector('section.exercise-card[aria-label^="Front Squat"] select.bar-select');
+    select.value = bar45;
+    select.dispatchEvent(new window.Event("change")); await tick();
+    overlay.querySelector("button")?.click(); await tick(); await tick(); // ‹ Back
+    return (await db.Sessions.get(sid)).exercises.find((entry) => entry.exerciseName === "Front Squat");
+  };
+  const weights = (sets) => JSON.stringify(sets.filter((s) => s.isWarmup).map((s) => s.weightLb));
+  const rungs = (priorWorkLb) => session.achievableWarmups(
+    C.warmupRamp(185, 45, 5, true, priorWorkLb), 185, C.BARS.bar45lb, gym, frontSquatEx);
+  ok(rungs(null).length === 5 && rungs(225).length === 2 && rungs(225)[0].weightLb > 100,
+    "the fixture's cold ramp is five rungs and 225 already lifted leaves the two heaviest");
+  const trimmed = await openAndResync();
+  ok(weights(trimmed.sets) === JSON.stringify(rungs(225).map((s) => s.weightLb)),
+    `a squat-group barbell lift added after completed 225 squats bridges with the two heaviest rungs instead of re-climbing from the bar (got ${weights(trimmed.sets)})`);
+  ok(trimmed.sets.filter((s) => !s.isWarmup).length === 1 && trimmed.sets.filter((s) => !s.isWarmup)[0].status === "planned",
+    "the trim never touches working sets");
+
+  // Once a warmup on the entry is resolved, the ramp is the lifter's record:
+  // a resync refreshes weights but neither trims nor rewrites it.
+  const stored = await db.Sessions.get(sid);
+  stored.exercises.find((entry) => entry.exerciseName === "Front Squat").sets = [
+    set(0, 45, 10, true, "completed"), set(1, 75, 5, true, "planned"), set(2, 100, 3, true, "planned"),
+    set(3, 130, 2, true, "planned"), set(4, 155, 1, true, "planned"), set(5, 185, 5, false, "planned")];
+  await db.Sessions.save(stored);
+  const resolved = await openAndResync();
+  const warm = resolved.sets.filter((s) => s.isWarmup);
+  ok(warm.length === 5 && warm[0].status === "completed" && warm[0].weightLb === 45,
+    `a resync on an entry with a resolved warmup keeps all five rows and never rewrites the completed one (got ${weights(resolved.sets)})`);
+  await db.Sessions.del(sid);
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
+
+
 // ---- Stage 6: corrections rebuild what is replayable (epic #155) ----
 // PR milestones are regenerated deterministically from the corrected
 // canonical sessions — never appended to — and the rebuild is idempotent.

@@ -41,7 +41,11 @@ lifts appear under "Next up" with their own suggestions.
 - **Follow “Now” through the warmups.** The highlighted row and large load
   display follow the first unfinished set in the authored plan. Complete or
   skip each warmup to advance through the ramp; working sets become current
-  after the preceding warmups are resolved.
+  after the preceding warmups are resolved. A barbell lift whose warmups are
+  all still planned drops the steps at or below a working load you have
+  already completed this session on the same movement with a bar — keeping
+  at least the last two — whenever its ramp refreshes after a bar, gym, or
+  working-weight change.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.
