@@ -94,6 +94,8 @@ final class BarbellSceneTests: XCTestCase {
         XCTAssertEqual(PlatePalette.hex(PlatePalette.colour(for: "blue").fill), "#2f6fed")
         XCTAssertEqual(PlatePalette.colour(for: "chartreuse"), PlatePalette.fallback)
         XCTAssertEqual(PlateFaceTint(token: "black").red, 1, "black iron is the untinted texture")
+    }
+
     func testPlateFamilyNamesTheSummaryCell() {
         XCTAssertEqual(PlateGeometry.family(Plate(value: 5, unit: .kg), style: .bumper), "bumper",
                        "a full-size 5 kg training bumper is a bumper")

@@ -360,6 +360,8 @@ final class VisualProofUITests: XCTestCase {
         }
         XCTAssertTrue(issues.isEmpty,
                       "\(name) failed the accessibility audit:\n" + issues.joined(separator: "\n"))
+    }
+
     /// #185: completing a set must not move the dominant block. The set track
     /// and the current-set hero keep their frames; only their content
     /// advances to the next set.
@@ -384,6 +386,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
         XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")
         XCTAssertEqual(hero.frame.height, heroBefore.height, accuracy: 0.5, "current-set hero resized on completion")
+    }
+
     /// Scrolls a DisclosureGroup's label into the window and taps it. XCUI
     /// never reports SwiftUI disclosure labels as hittable, so the tap goes
     /// through a coordinate once the label's frame sits inside the window.

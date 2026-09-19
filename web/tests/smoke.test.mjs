@@ -5656,8 +5656,6 @@ await withCleanup(async (keep) => {
   await db.Sessions.del(sid);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
 
 
 // ---- Stage 6: corrections rebuild what is replayable (epic #155) ----
