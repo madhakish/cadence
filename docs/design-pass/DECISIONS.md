@@ -102,6 +102,6 @@
 
 ## Calculator Dynamic Type, 2026-09-19
 
-- The requested target keeps its existing 40-point rounded display at the default text size and scales with the large-title curve. At accessibility sizes, the native unit selector flows below the input in the same row; the input keeps its focus and binding through the layout change.
+- The requested target keeps its existing 40-point rounded display at the default text size and scales with the large-title curve. At accessibility sizes, the native unit selector flows below the input within the same section; the input keeps its focus and binding through the layout change.
 - `test14CalculatorTargetAtAccessibilityTextSize` checks standard versus maximum accessibility text size, visible controls, growth of the editable number, and unit switching without losing the entered number. A Dynamic Type audit finding on `plate-target` is now a failure; the other #238 advisories remain tracked separately.
-- Proof starts from #239's actual iPhone capture at `e0dfba3`; the new exact-head standard/accessibility simulator captures must be inspected before this design slice is ready to merge. The larger #187 matrix remains open.
+- The standard and maximum-accessibility captures from source `bb4b07d` were inspected and retained with [artifact provenance](proof/calculator-dynamic-type/README.md). The target and unit control remain legible, and the control sits below the enlarged number. The larger #187 matrix remains open.
