@@ -18,7 +18,7 @@ Closes #
 
 ## Parity
 
-- [ ] Shared training logic changed on **both** `CadenceCore` and `web/js/core.js`, with matching test cases
+- [ ] Shared training logic changed on **both** `CadenceCore` and `web/app/js/core.js`, with matching test cases
 - [ ] Not applicable — this is platform-specific or non-domain code
 
 ## Persistence

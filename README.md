@@ -131,8 +131,9 @@ Notes:
 - CI always runs portable core/web checks, runs parallel native builds only
   when needed, and reserves full shipped-store migration reconstruction for
   persistence changes. Semantic-release cuts versioned releases with
-  installable artifacts; see `CLAUDE.md` for the safety contracts and
-  `docs/TESTFLIGHT.md` for TestFlight distribution and recovery.
+  installable artifacts; see the [engineering guide](docs/AGENT-GUIDE.md) for
+  safety contracts and [TestFlight guide](docs/TESTFLIGHT.md) for distribution
+  and recovery.
 - HealthKit is optional and in two separately granted halves, both off by
   default: writing (workouts + bodyweight), and reading walking/running/cycling
   distance to show beside a logged session. Reading never overwrites a log —

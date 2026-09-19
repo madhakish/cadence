@@ -21,11 +21,11 @@ coding agent acting on their behalf — making changes **inside** the repository
 
 ## Read these first
 
-[`AGENTS.md`](AGENTS.md) is the canonical repository guide: the repository map,
-the migration protocol, the parity contract, and the definition of done.
-[`CLAUDE.md`](CLAUDE.md) is the startup checklist and repeats the safety rules
-that must never depend on memory. Where the two differ, **follow the stricter
-rule**.
+[`AGENTS.md`](AGENTS.md) is the canonical repository guide and routes each task
+to the binding procedures in [the detailed guide](docs/AGENT-GUIDE.md).
+[`CLAUDE.md`](CLAUDE.md) imports the shared instructions rather than duplicating
+them. Coordinate through [AGENT-COORDINATION.md](AGENT-COORDINATION.md); see
+[loading and size budgets](docs/AGENT-INSTRUCTIONS.md) when editing instructions.
 
 ## What this app is
 
@@ -41,17 +41,17 @@ Predictable defaults and edits that never disappear beat clever inference.
 ## Three shapes of change
 
 **Shared training logic** lives in `CadenceCore/Sources/CadenceCore/` and is
-mirrored 1:1 by `web/js/core.js`. Never change one side alone. Add matching
+mirrored 1:1 by `web/app/js/core.js`. Never change one side alone. Add matching
 cases to `CadenceCore/Tests/CadenceCoreTests/` and `web/tests/core.test.mjs`.
 `CadenceCore` is Foundation-only — no Apple frameworks.
 
-**Platform code** is `Cadence/` (SwiftUI) and `web/js/views/` (vanilla JS).
+**Platform code** is `Cadence/` (SwiftUI) and `web/app/js/views/` (vanilla JS).
 Keep views and persistence adapters thin; new testable logic belongs in core.
 Never edit the generated `Cadence.xcodeproj` — edit `project.yml`.
 
 **Persisted state** — a SwiftData `@Model`, an IndexedDB record shape, or the
 backup contract — stops normal implementation flow. Go read the migration
-protocol in `AGENTS.md` before writing anything, and see below.
+protocol in [the detailed guide](docs/AGENT-GUIDE.md#persistence-migrations-and-semantic-versioning) before writing anything, and see below.
 
 ## If you touch persistence
 
@@ -115,9 +115,11 @@ xcodebuild test -project Cadence.xcodeproj -scheme CadenceMigrationTests -destin
 xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Without a Mac, GitHub Actions is the compiler. Wait for the exact head commit
-to pass the migration tests, the Simulator build, and the unsigned device build
-before calling app-target work done.
+Without a Mac, GitHub Actions is the authoritative compiler. Follow the
+[change-aware CI requirements](docs/AGENT-GUIDE.md#ci-and-releases) for the exact
+head commit. Native changes require the unsigned-device/Darwin checks and
+persistence changes require migration tests; the simulator release artifact is
+built on `main`.
 
 ## Commits
 

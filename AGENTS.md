@@ -1,460 +1,92 @@
 # Cadence repository guide
 
-This file applies to the entire repository. It is the canonical working guide
-for coding agents and contributors. A more deeply nested `AGENTS.md` may add or
-override instructions for its subtree.
+This is the canonical guide for the repository. Nested `AGENTS.md` files may
+add subtree guidance; user/runtime instructions retain their normal precedence.
 
-## Engineering doctrine
+## Before work
 
-Before implementing or reviewing code, read and enforce
-[`.agents/torvalds-doctrine.md`](.agents/torvalds-doctrine.md). It is an
-always-on repository instruction, not an opt-in skill. Apply its blunt language
-to code, APIs, data structures, and patches—not to people. Cadence-specific
-persistence, privacy, parity, and userspace rules below remain binding; when two
-rules differ, follow the stricter one.
+- Read [AGENT-COORDINATION.md](AGENT-COORDINATION.md). Check the task issue,
+  current comments, and overlapping PRs before claiming scope or editing.
+- Before implementation or code review, read and enforce the
+  [Torvalds doctrine](.agents/torvalds-doctrine.md). Criticize code, not people;
+  repository persistence, privacy, parity, and compatibility rules still apply.
+- Inspect the worktree and preserve unrelated work. Find the implementation,
+  tests, native/web counterpart, and affected persistence/import boundaries.
+- Read the applicable complete sections in the table below before touching that
+  area. They are binding instructions, not optional background. Do not load the
+  entire detailed guide for an unrelated task.
 
-## Project in one minute
+Cadence is a single-user, local-first training logbook with an iOS 17+ app and a
+vanilla-JavaScript PWA. There is no backend recovery source. `CadenceCore` owns
+Foundation-only deterministic logic; `web/app/js/core.js` mirrors it.
 
-Cadence is a private, local-first strength-training logbook with two clients:
+## Rules that always apply
 
-- A native iOS 17+ app built with SwiftUI, SwiftData, ActivityKit, WidgetKit,
-  App Intents, notifications, and optional write-only HealthKit integration.
-- A static web PWA built with vanilla JavaScript and IndexedDB. It has no
-  production build step and is deployed through GitHub Pages.
+- Never delete/reset/replace a store or tell a user to reinstall as a fix.
+  Preserve every shipped schema/checksum and supported backup history.
+- Before changing persisted shape or meaning, follow the migration protocol.
+  Freeze the shipped shape, add a new version, and upgrade every supported
+  history in the same PR. SwiftData changes require production on-disk migration
+  tests; fresh stores, in-memory tests, and compilation are insufficient.
+- Breaking persistence/backup changes require a SemVer major marker even with
+  automatic forward migration. Never defer required migration work.
+  Document upgrade/downgrade implications and keep recovery non-destructive.
+- Change shared domain behavior on both clients with equivalent tests. Keep
+  Apple frameworks out of `CadenceCore`; platform and persistence stay at edges.
+- Store weight in canonical pounds as `Double`; convert at input/display only.
+  Use performed set values, preserve manual edits, stable IDs, load semantics,
+  independent set ordering, and planned/completed/skipped/warmup distinctions.
+- Mutate only one side of a SwiftData inverse relationship. Surface save
+  failures through recovery paths; do not silently discard training changes.
+- Never commit or post real workouts, health/body data, gym/member identifiers,
+  backups, credentials, or signing material. Use synthetic fixtures.
+- Health permissions default off and remain independently granted. Read access
+  is device-local, never restored from a backup; health readings never silently
+  overwrite logged values.
+- Keep views thin and preserve workout usability, accessibility, Dynamic Type,
+  VoiceOver, themes, safe areas, reduced motion, and destructive confirmations.
+- Edit `project.yml`; never commit generated `Cadence.xcodeproj`, build output,
+  packaged apps, or test-result bundles. Keep changes scoped and conventional.
+- semantic-release owns tags and versions. Preserve the fail-fast CI ladder,
+  migration coverage, immutable signed-artifact promotion, and secret controls.
+- Verify the exact PR head before calling it merge-ready. Publishing fixes
+  additionally require the actual post-merge release/TestFlight evidence.
 
-There is no backend or account system. User training data is irreplaceable and
-must survive every update. The owner is the primary user, so optimize for a
-fast, trustworthy training workflow rather than speculative abstraction.
+## Required reading by task
 
-`CadenceCore` is the pure, deterministic domain layer. Equivalent behavior is
-mirrored in `web/app/js/core.js`; the Swift and JavaScript suites enforce parity.
-Platform APIs and persistence remain at the edges.
+Paths inside the detailed guide are relative to the repository root unless
+they are Markdown links. For any code change, read working approach, privacy,
+hygiene, and definition of done in addition to the relevant domain sections.
 
-## Non-negotiable rules
-
-1. Never delete, reset, or silently replace a user's persistent store to make
-   a launch or migration problem disappear.
-2. Never edit a persistence schema that has shipped. Add a new version and an
-   explicit, tested upgrade path.
-3. A breaking persisted-schema change is a semantic-versioning breaking
-   change, even when the forward migration is automatic. Mark it with `!` or a
-   `BREAKING CHANGE:` footer so semantic-release produces a major version.
-4. A schema-changing PR is incomplete without an on-disk old-to-new migration
-   test using the production schema and migration plan.
-5. Put deterministic training math in `CadenceCore`, add Swift tests, mirror it
-   in `web/app/js/core.js`, and add equivalent JavaScript assertions.
-6. Store weights canonically in pounds as `Double`. Convert kilograms only at
-   input and display boundaries.
-7. Never commit personal workouts, body metrics, health signals, gym barcodes,
-   membership identifiers, backups, credentials, signing material, or tokens.
-8. Generate `Cadence.xcodeproj` from `project.yml`; never edit or commit the
-   generated project.
-
-## Repository map
-
-| Path | Responsibility |
+| Task | Read before changing it |
 | --- | --- |
-| `CadenceCore/Sources/CadenceCore/` | Foundation-only domain logic: programs, progression, warmups, rest, units, plates, load semantics, PRs, set lifecycle, backup contract |
-| `CadenceCore/Tests/CadenceCoreTests/` | Linux- and Darwin-compatible domain tests and compile-regression fixtures |
-| `Cadence/Models/` | Live SwiftData models plus immutable historical schema snapshots |
-| `Cadence/Services/` | Import/export, completion, clocks, notifications, HealthKit, and persistence error handling |
-| `Cadence/Seed/` | Generic exercise/reference data and program templates; never personal state |
-| `Cadence/Views/` | SwiftUI screens and reusable presentation components |
-| `Cadence/LiveActivity/` | Shared ActivityKit attributes, controller, and intents compiled into app and widget targets |
-| `CadenceWidgets/` | Live Activity and Control Center/widget extension surfaces |
-| `CadenceMigrationTests/` | Hostless macOS tests that create and migrate real SwiftData SQLite stores |
-| `web/app/js/` | PWA domain mirror, IndexedDB, application orchestration, and views |
-| `web/*.html`, `web/site/` | Public product site served at the Pages root; marketing, onboarding, iOS/beta routes, privacy. Links the docs, never restates their rules |
-| `web/sw.js` | Retirement worker holding the app's former root scope; must keep unregistering itself, never cache, never redirect, and evict only the legacy `cadence-<build>` shells it owns |
-| `web/tests/` | Core parity, runtime smoke tests, site/app-mount structure, and cross-platform fixtures |
-| `web/tools/` | Deterministic fixture generators |
-| `docs/` | Diátaxis user documentation and data-contract references |
-| `project.yml` | XcodeGen source of truth for targets, schemes, settings, entitlements, and Info.plist values |
-| `.github/workflows/` | Required CI, Pages deployment, semantic release, and optional TestFlight automation |
-| `fastlane/` | Headless signing and TestFlight upload flow |
-
-## Working approach
-
-Before editing:
-
-1. Read the relevant models, service, domain function, tests, and user docs.
-2. Check the worktree and preserve unrelated user changes.
-3. Identify whether the change affects SwiftData, IndexedDB, the portable
-   backup contract, Swift/JavaScript parity, the widget extension, or release
-   semantics.
-4. For behavior shared by both clients, define the behavior in deterministic
-   terms and update both implementations in the same change.
-
-While editing:
-
-- Keep views thin. Compute prescriptions, progression, load semantics, timers,
-  classification, and other testable decisions in `CadenceCore`.
-- Prefer small, named functions and explicit domain types over view-local
-  conditionals and stringly typed rules.
-- Preserve stable exercise, program-slot, gym, and session identities. Display
-  names are not reliable database keys unless the model explicitly defines
-  them that way.
-- Mutate exactly one side of a SwiftData inverse relationship. Assigning the
-  child inverse and appending the same child to the parent collection can
-  persist duplicate references that render as mirrored rows. Startup repair
-  may deduplicate existing aliases, but new code must not create them.
-- Surface persistence failures through the existing error/recovery paths. Do
-  not use `try?` where failure would mean lost training changes.
-- Update user documentation when behavior or a data contract changes.
-
-## Persistence, migrations, and semantic versioning
-
-Persistence is a public compatibility contract. Treat an existing user's store
-and backup as inputs from a released API version, not as development data that
-can be recreated.
-
-### What counts as a schema change
-
-For SwiftData, assume the schema changes when a persisted model changes in any
-way, including:
-
-- adding, removing, renaming, or changing the type/default of a property;
-- changing optionality, uniqueness, external storage, or transformable data;
-- adding or changing a relationship, inverse, ordering expectation, or delete
-  rule; or
-- changing the set of models registered in the schema.
-
-For the web app, changes to object stores, key paths, indexes, persisted record
-shape, required fields, or interpretation of stored values require an IndexedDB
-upgrade review. Changes to exported JSON require a backup-schema review too.
-
-### SwiftData release process
-
-The current schema is declared in `Cadence/Models/PersistenceSchema.swift`.
-Historical snapshots live in `PersistenceSchemaV*.swift`. V1 and the alternate
-schema accidentally written by PR #72 are both supported histories; do not
-remove either path.
-
-Before modifying any live `@Model` declaration:
-
-1. Determine the newest schema that has actually shipped from `main`.
-2. Freeze its exact model shape and checksum in an immutable versioned schema
-   file if it is not already frozen. Once committed in a release, that file is
-   append-only history and must never be edited.
-3. Introduce a new, monotonically increasing `Schema.Version`. Never reuse a
-   version identifier for a different checksum.
-4. Add a linear `SchemaMigrationPlan` from every supported shipped checksum to
-   the new current schema. SwiftData plans cannot branch inside one plan, so
-   retain separate production plans and the `AppBootstrap` fallback when
-   historical checksums require separate paths.
-5. Use a lightweight migration only when SwiftData can express the conversion
-   safely. Use a custom stage when values, relationships, constraints, or
-   identities require transformation.
-6. Backfill migration-safe literal defaults after the container opens when
-   necessary. Backfills must be idempotent, preserve valid existing values,
-   repair invalid/duplicate identities, and save errors visibly.
-7. Keep the recovery screen non-destructive. A temporary in-memory session is
-   an escape hatch, not a replacement for the persistent store.
-
-Never solve a checksum mismatch by mutating an old `VersionedSchema`, pointing
-the same version at new models, deleting SQLite files, or instructing the user
-to reinstall.
-
-### Required SwiftData migration test
-
-Every SwiftData schema change must extend `CadenceMigrationTests` and CI. The
-test must:
-
-1. Create a real on-disk store with each affected released schema/checksum.
-2. Insert representative records, including relationships and user-edited
-   values relevant to the change.
-3. Close that container and open the same URL with the production current
-   schema and migration plan used by the app.
-4. Assert that records, relationships, adjusted weights/reps, identities,
-   settings, and relevant defaults survived correctly.
-5. Run any production post-open backfill and assert its invariants and
-   idempotence.
-
-An in-memory test, a fresh-store test, model compilation, or a successful app
-build does not prove upgrade compatibility. The `CadenceMigrationTests` scheme
-must remain in `project.yml` and the macOS CI job.
-
-### IndexedDB upgrades
-
-`web/app/js/db.js` owns `DB_VERSION` and `onupgradeneeded`.
-
-- Bump `DB_VERSION` for an IndexedDB schema or persisted-shape upgrade.
-- Migrate old records during the upgrade transaction; seeding fresh defaults
-  is not a migration.
-- Make transformations deterministic and safe to run once from every supported
-  older version.
-- Add fake-indexeddb coverage that creates the prior database version, opens it
-  with current code, and verifies user data and indexes.
-- Coordinate service-worker cache changes when deployed assets or startup
-  assumptions change.
-
-### Pages layout and app scope
-
-`web/` is the whole Pages artifact: the public product site at the root and the
-PWA mounted at `web/app/`, served at `/cadence/app/`.
-
-- Keep the app self-relative. Its HTML, manifest `start_url`/`scope`, and worker
-  registration are all directory-relative so the app can be remounted without
-  edits. Never hard-code `/cadence/`.
-- Add every new `web/app/js/` module to the `ASSETS` precache list in
-  `web/app/sw.js`. An unlisted module deploys green and then fails offline.
-- Each worker deletes only caches carrying its own name prefix. Cache Storage is
-  per-ORIGIN, so an unfiltered `caches.keys()` sweep reaches every project
-  published under the same github.io account. `web/app/sw.js` owns
-  `cadence-app-`; `web/sw.js` retires legacy `cadence-<build>` shells and
-  excludes the app prefix. See `INV-WEB-CACHE-OWNERSHIP`.
-- `web/sw.js` retires the app's former root scope for installs that predate the
-  move: it unregisters, deletes the legacy shells it owns, registers no `fetch`
-  handler, and redirects nobody. Do not delete it while any install could still
-  hold that registration, and do not let a site page register a worker that
-  reclaims the scope.
-- The hand-off to `app/` belongs to the `display-mode: standalone` check in
-  `web/index.html`, not to a worker. `Client` exposes no display mode, so a
-  worker cannot tell an installed launch from a browser tab and will drag site
-  readers into the logbook. See `INV-WEB-APP-SCOPE`.
-- The site links `docs/` rather than restating rules, so a behaviour change needs
-  one docs edit, not two. Site copy that does state behaviour must be true of
-  both clients.
-- `web/tests/site.test.mjs` holds the above: link resolution, app-mount
-  integrity, precache completeness, and the retirement worker's contract.
-
-### Portable backup contract
-
-The JSON backup is the cross-platform recovery and interchange format.
-
-- Keep `CadenceCore/BackupContract.currentSchemaVersion` and
-  `web/app/js/db.js` `BACKUP_SCHEMA_VERSION` equal.
-- Importers must continue to accept every documented older version and reject
-  unsupported newer versions before destructive writes.
-- A backup-schema change requires native and web import/export updates,
-  `BackupContractTests`, web validation/smoke tests, regenerated synthetic
-  fixtures, and `docs/reference/backup-schema.md` updates.
-- Restore must be transactional or validation-first. Never partially replace
-  good data with an invalid bundle.
-
-### Semantic-release contract
-
-Commits on `main` drive releases:
-
-| Commit | Release |
-| --- | --- |
-| `fix:` | patch |
-| `feat:` | minor |
-| `fix!:` / `feat!:` or `BREAKING CHANGE:` | major |
-| `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:` | no release |
-
-If persisted data written by the new release cannot be opened by the previous
-release, or an old store cannot be opened without conversion, the change is
-breaking and must use a major-release marker. The same PR must contain the
-upgrade path, migration tests, compatibility/recovery notes, and any backup
-contract updates. Do not defer migration work to a follow-up.
-
-Do not manually create version tags/releases or hand-bump release versions.
-semantic-release owns them. Avoid `#word` tokens in commit subjects because the
-release-note generator can misread them as issue references.
-
-## Cross-platform domain parity
-
-The following pairs are lockstep contracts:
-
-- `CadenceCore` domain math ↔ `web/app/js/core.js`
-- `ProgramTemplateData.swift` ↔ `web/app/js/templates.js` ↔
-  `web/tests/fixtures/program-templates.json`
-- `AnatomyData.swift` ↔ `web/app/js/anatomy.js` ↔
-  `web/tests/fixtures/anatomy.json`
-- `BackupContract.currentSchemaVersion` ↔ `BACKUP_SCHEMA_VERSION`
-- Native seed names ↔ template exercise names and web seed names
-
-When one side changes, update the other implementation and equivalent tests in
-the same PR. Regenerate fixtures only after reviewing the semantic diff; do not
-update snapshots merely to silence a failure.
-
-`CadenceCore` must remain Foundation-only and Linux-testable. Do not import
-SwiftUI, SwiftData, UIKit, ActivityKit, HealthKit, or other Apple-only frameworks
-into it. Guard genuinely Darwin-only tests with `#if canImport(Darwin)`.
-
-## Training-data invariants
-
-- Planned prescriptions and performed work are different. History, goals,
-  progression, summaries, and PR detection must use the final performed set
-  values, including in-session weight/repetition edits.
-- Editing reps must not overwrite an adjusted weight, and editing weight must
-  not silently reset other set state.
-- Users can add and remove individual sets. Preserve deterministic ordering and
-  do not conflate removing a set with removing an exercise.
-- Program days, lifts, accessories, session exercises, and sets must contain
-  each persistent model reference once. Two visible editor rows must always be
-  two independently editable models with distinct stable slot identities.
-- Set lifecycle is explicit: planned, completed, and skipped are not
-  interchangeable. Warmups do not count as working sets unless a rule says so.
-- Load semantics are explicit (`totalBar`, per implement/per hand, bodyweight,
-  assisted, duration/distance). Do not infer historical meaning from a display
-  label when persisted semantics exist.
-- Main dumbbell work progresses in practical per-hand increments and receives
-  warmups according to the production warmup policy.
-- Program progression is pure and deterministic. It consumes completed
-  performance summaries and preserves manual in-session adjustments.
-- Exercise definitions are generic reference data. Keep canonical names,
-  categories, movement groups, equipment/load basis, unilateral state, and
-  aliases coherent across seed data, templates, search, and swap rules.
-
-## Product and UI principles
-
-- Gym arrival is a primary use case. The membership tag must be trivially and
-  prominently accessible at launch, through its shortcut/control surfaces, and
-  without navigating a settings hierarchy.
-- Optimize for minimal interaction during training: prefill predictable values,
-  preserve edits, use large targets, and keep primary actions reachable with
-  one hand.
-- Guide rather than interrogate. Ask only when an incorrect inference would
-  corrupt the log.
-- Make planned versus actual state visually clear without requiring the user to
-  manage implementation details.
-- Accessibility, Dynamic Type, safe areas, light/dark themes, reduced motion,
-  VoiceOver labels, and destructive-action confirmation are part of done.
-- Keep native and web information architecture conceptually aligned while using
-  platform-appropriate controls.
-
-## Privacy and security
-
-- Seed only generic exercises, equipment defaults, and optional program-style
-  templates. No real user values or exported backups belong in fixtures.
-- Synthetic fixtures must be obviously artificial and deterministic.
-- HealthKit is optional and split into two independently granted halves:
-  writing workouts/bodyweight, and reading conditioning distance to compare
-  against a logged session. Both default off. Reading never merges — it
-  reports both numbers and the lifter adopts one explicitly
-  ([INV-HEALTH-IS-A-SECOND-OPINION]). Widening either half requires updating
-  permissions, privacy text, documentation, and tests in the same change.
-- The Health read opt-in lives in `UserDefaults`, never in SwiftData or a
-  backup: it mirrors a device-local OS grant, and restoring a backup on a new
-  phone must not imply a permission that device never gave.
-- Never log full backups, membership barcodes, body/health records, or secrets.
-- Keep GitHub Actions permissions least-privilege and pin third-party actions to
-  immutable commit SHAs.
-- Signing keys, `.p8` files, match credentials, Apple IDs, PATs, and passwords
-  belong only in the documented secret stores.
-
-## Build and test commands
-
-Core tests, from any supported Swift toolchain:
-
-```bash
-cd CadenceCore
-swift test
-```
-
-Web parity and smoke tests:
-
-```bash
-cd web
-npm ci
-npm test
-```
-
-Native project and builds, on macOS with the required Xcode:
-
-```bash
-brew install xcodegen
-xcodegen generate
-xcodebuild test -project Cadence.xcodeproj -scheme CadenceMigrationTests -destination 'platform=macOS'
-xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
-xcodebuild build -project Cadence.xcodeproj -scheme Cadence -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
-```
-
-This Linux workspace cannot compile the app target; GitHub Actions is the
-authoritative compiler for SwiftUI/SwiftData changes. Do not claim native
-validation for a PR until the unsigned-device build (which carries the Darwin
-unit tests) and, when persistence changed, the macOS migration test have
-completed successfully; the simulator release artifact is built on `main`
-before a release is published.
-
-## CI and releases
-
-The pipeline is a fail-fast ladder: cheap ubuntu suites first, expensive macOS
-builds only behind them. The Linux CadenceCore job also PARSES all app-target
-Swift (`swiftc -parse`), so a bare syntax error dies in seconds instead of
-minutes later in every macOS build at once.
-
-Pull requests always run Linux CadenceCore tests (with the app-target parse
-gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
-check. Native validation is change-aware behind that aggregate:
-
-- repository hygiene, shell/JavaScript/Ruby/workflow syntax, and CI topology
-  contracts must pass before either portable suite starts;
-- the macOS jobs start only after the Linux core and web suites pass, so a
-  red fast test costs zero macOS runner minutes;
-- the unsigned-device build (Darwin unit tests + production-SDK Release
-  compile) runs for native, shared-core, project, or CI-workflow changes;
-- the same pinned conventional-commit analyzer used by semantic-release plans
-  release artifacts after the fast suites; a pending release builds the
-  simulator download and one signed App Store IPA, while non-release and
-  already-tagged commits build neither;
-- the signed IPA is checksummed, version/bundle/signature verified, retained as
-  an immutable workflow artifact, and promoted byte-for-byte to both the GitHub
-  release and TestFlight; publisher jobs must never call a build lane;
-- the stable aggregate directly requires both portable suites, so a skipped
-  native tier can never hide a core or web failure;
-- docs/web-only changes do not consume macOS runners; and
-- the real shipped-store migration suite runs for persistence-affecting paths
-  only. Its generic historical stores are cached by immutable shipped lineage,
-  but a cache miss must regenerate them from the actually shipped apps.
-
-New commits cancel the entire stale workflow for the same pull request. Main
-and manually dispatched production runs remain serialized and are never
-cancelled by a newer run. Every job has an explicit timeout so a hung toolchain
-cannot consume the platform's six-hour default.
-Do not remove the fast-test dependencies or restore both iOS builds on pull
-requests: recent failures proved they reported the same compiler error, while a
-doomed build kept running minutes after CadenceCore had failed. If PRs compile
-one target, keep the production device target; it is both faster and stricter.
-
-Never broaden the migration skip list to make schema CI faster. If a model,
-Seeder, migration test, project definition, or shipped-store generator can
-affect compatibility, `.github/scripts/classify-ci-paths.sh` must classify it
-as a migration change and its classifier tests must be updated.
-
-Green pushes to `main` run semantic-release only after the signed artifact is
-sealed. The release tag is the handoff to promotion, not permission to rebuild.
-GitHub release uploads run independently with retries and must never suppress
-TestFlight. `workflow_dispatch` with `force_testflight=true` re-downloads the
-latest release's signed IPA and checksum and promotes those exact bytes. Web
-deploys reuse the CI web-test result. `verify_signed_artifact=true` is the
-non-publishing proof path for signing/Fastlane changes and builds only the
-signed IPA. `pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do
-not weaken
-signing, migration, or secret controls to make CI convenient.
-
-## Code and repository hygiene
-
-- Follow existing Swift and JavaScript style. Do not reformat unrelated code.
-- Add a regression test for every reproduced bug at the lowest deterministic
-  layer that can express it.
-- Capture recurring Swift compiler hazards in
-  `CompileRegressionTests.swift` when CadenceCore can represent them.
-- Preserve the user's dirty worktree and unrelated changes.
-- Do not commit generated `Cadence.xcodeproj`, `.build/`, `DerivedData/`, test
-  result bundles, packaged apps, secrets, or personal exports.
-- Update `README.md` for developer-facing setup/feature changes and `docs/` for
-  user-facing or data-contract behavior.
-- Use Conventional Commits intentionally. The final merge/squash subject must
-  carry the correct semantic-release meaning.
-
-## Definition of done
-
-A change is done only when:
-
-- behavior matches the training and product invariants above;
-- native and web implementations remain in parity where applicable;
-- regression tests cover the change and all relevant suites pass;
-- every persisted-schema change has a version, upgrade path, real-store test,
-  and correct major semantic-version marker;
-- backup compatibility and documentation are updated when needed;
-- no personal data or secret was introduced;
-- generated artifacts are absent from the diff; and
-- CI is green for the exact commit proposed for merge.
-
-A publishing fix is not proven by pull-request CI. After merge, verify the
-actual `main` run creates or reconciles the release tag and that the TestFlight
-job runs to completion. Do not report publishing fixed while that job is
-skipped, pending, or unobserved.
+| Any code change | [Working approach](docs/AGENT-GUIDE.md#working-approach), [privacy](docs/AGENT-GUIDE.md#privacy-and-security), [hygiene](docs/AGENT-GUIDE.md#code-and-repository-hygiene), [done](docs/AGENT-GUIDE.md#definition-of-done) |
+| Persisted models, records, imports, backups, schema releases | [Complete migration and versioning protocol](docs/AGENT-GUIDE.md#persistence-migrations-and-semantic-versioning) |
+| Training logic, seeds, templates, anatomy, load semantics | [Parity](docs/AGENT-GUIDE.md#cross-platform-domain-parity), [training invariants](docs/AGENT-GUIDE.md#training-data-invariants), [invariant registry](docs/reference/invariants.md) |
+| PWA mount, modules, caching, site copy | [Pages layout and app scope](docs/AGENT-GUIDE.md#pages-layout-and-app-scope) |
+| UI, widgets, Live Activities, accessibility | [Product/UI rules](docs/AGENT-GUIDE.md#product-and-ui-principles), [training invariants](docs/AGENT-GUIDE.md#training-data-invariants) |
+| CI, signing, publishing, releases | [CI/release rules](docs/AGENT-GUIDE.md#ci-and-releases), [build commands](docs/AGENT-GUIDE.md#build-and-test-commands), [TestFlight](docs/TESTFLIGHT.md) |
+| New area or uncertain ownership | [Repository map](docs/AGENT-GUIDE.md#repository-map) |
+| Changing these instructions | [Loading, budgets, and verification](docs/AGENT-INSTRUCTIONS.md) |
+
+## Validation and handoff
+
+- Core: `cd CadenceCore && swift test`.
+- Web: `cd web && npm ci && npm test`.
+- On macOS, use the [native commands](docs/AGENT-GUIDE.md#build-and-test-commands).
+  CI is the normal authoritative native compiler when Xcode is unavailable.
+  Check the unsigned-device/Darwin jobs and migrations when applicable; report
+  pending work plainly. PRs do not require the main-only simulator artifact.
+- Add meaningful regression coverage for reproduced behavior bugs, synchronize
+  mirrored contracts, and update developer/user docs for relevant changes.
+- Review `git diff --check`, privacy, generated files, scope, and commit meaning.
+  Run checks appropriate to changed behavior; docs-only work needs link,
+  instruction-size, and diff checks plus the existing required CI.
+- Leave branch/PR/SHA, observed results, remaining work, and claim release in
+  the task thread. Opening a PR is a handoff, not proof of green CI or a release.
+
+## Code Review Rules
+
+Prioritize persistence loss, missing migrations, parity regressions, incorrect
+performed/load semantics, privacy leaks, and unverified completion claims.
+Read the applicable rules above and report concrete evidence and impact.
