@@ -105,3 +105,8 @@
 - The requested target keeps its existing 40-point rounded display at the default text size and scales with the large-title curve. At accessibility sizes, the native unit selector flows below the input within the same section; the input keeps its focus and binding through the layout change.
 - `test14CalculatorTargetAtAccessibilityTextSize` checks standard versus maximum accessibility text size, visible controls, growth of the editable number, and unit switching without losing the entered number. A Dynamic Type audit finding on `plate-target` is now a failure; the other #238 advisories remain tracked separately.
 - The standard and maximum-accessibility captures from source `bb4b07d` were inspected and retained with [artifact provenance](proof/calculator-dynamic-type/README.md). The target and unit control remain legible, and the control sits below the enlarged number. The larger #187 matrix remains open.
+
+## Plate material, 2026-09-19
+
+- Colourisation — a plate face is rebuilt from the approved texture's luminance (a 5×4 matrix shared by both clients), so its photographed shading survives and its hue comes from the palette fill. The earlier per-channel gains clamped the dark textures into one flat colour, which is what made a 35 lb steel plate read as a mustard disc. The median texel of each texture lands at 85% of the fill; highlights whiten slightly rather than saturate. Black iron stays untouched. Colour tokens are unchanged: 35 lb is still yellow by the colour-bumper convention.
+- Shaft — a chrome gradient (dark underside, specular band above centre, hard shadow), two darker knurl bands with a cross-hatch, and sleeve end caps, drawn as vectors on both clients. Geometry, the solver, and the textures' pixels are unchanged.

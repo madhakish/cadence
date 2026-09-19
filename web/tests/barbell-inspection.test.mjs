@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { plateGeometry, barbellScene, plateTintGains } from '../app/js/barbell-scene.js';
+import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
@@ -29,12 +29,22 @@ for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
     `${plate.dataset.plateDenomination} plate, ${Number(plate.dataset.stackIndex)+1} from inside, ${plate.dataset.side} side`);
 }
 const tints = JSON.parse(readFileSync(new URL('./fixtures/plate-tints.json', import.meta.url), 'utf8'));
-for (const {token, gains} of tints) assert.deepEqual(plateTintGains(token), gains);
+assert.equal(tints.length, 12, 'every token in both styles');
+for (const {token, style, matrix} of tints) assert.deepEqual(plateTintMatrix(token, style), matrix);
 for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
   const token = matrix.parentNode.id.split('-').at(-1);
   const values = matrix.getAttribute('values').split(' ').map(Number);
-  assert.deepEqual([values[0],values[6],values[12]], plateTintGains(token));
+  assert.deepEqual(values, plateTintMatrix(token, 'bumper'), 'the face filter is the style-specific colourisation');
 }
+// Luminance-driven: shading survives, the median lands near the fill, black iron is untouched.
+const yellow = plateTintMatrix('yellow', 'steel');
+const mid = plateTintApply(yellow, 0.305);
+assert.ok(Math.abs(mid[0] - 0.79) < 0.02 && Math.abs(mid[1] - 0.62) < 0.02 && Math.abs(mid[2] - 0.13) < 0.02, `yellow steel median → ${mid}`);
+const [bright, dark] = [plateTintApply(yellow, 0.40), plateTintApply(yellow, 0.23)];
+assert.ok(bright.every((v, i) => v > dark[i]), 'brighter texels stay brighter');
+assert.deepEqual(plateTintMatrix('black', 'bumper'), PLATE_TINT_IDENTITY);
+assert.ok(compact.svg.querySelectorAll('.barbell-knurl-band').length === 2 && compact.svg.querySelectorAll('.barbell-end-cap').length === 2,
+  'the shaft carries two knurl bands and two end caps');
 assert.ok([...compact.svg.querySelectorAll('.barbell-plate-hub')].every(hub=>!hub.hasAttribute('filter')),
   'the photographic hub keeps its original metal color');
 assert.deepEqual(open.discs.filter(d=>d.side===1).map(d=>d.plate.value), [45,10,25,2.5]);

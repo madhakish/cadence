@@ -3,16 +3,36 @@ import XCTest
 
 final class BarbellSceneTests: XCTestCase {
     func testPhotographicTintMatchesWeb() throws {
-        struct Tint: Decodable { let token: String; let gains: [Double] }
+        struct Tint: Decodable { let token: String; let style: String; let matrix: [Double] }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let data = try Data(contentsOf: root.appendingPathComponent("web/tests/fixtures/plate-tints.json"))
-        for expected in try JSONDecoder().decode([Tint].self, from: data) {
-            let actual = PlateFaceTint(token: expected.token)
-            for (value, gain) in zip([actual.red, actual.green, actual.blue], expected.gains) {
-                XCTAssertEqual(value, gain, accuracy: 1e-8)
+        let tints = try JSONDecoder().decode([Tint].self, from: data)
+        XCTAssertEqual(tints.count, 12, "every token in both styles")
+        for expected in tints {
+            let style: PlateVisualStyle = expected.style == "bumper" ? .bumper : .steel
+            let actual = PlateFaceTint(token: expected.token, style: style).matrix
+            XCTAssertEqual(actual.count, 20)
+            for (value, mirror) in zip(actual, expected.matrix) {
+                XCTAssertEqual(value, mirror, accuracy: 1e-9)
             }
         }
+    }
+
+    /// The colourisation is luminance-driven: a plate keeps its photographed
+    /// shading (brighter texels stay brighter), the texture's median lands
+    /// near the palette fill, and black iron is left alone.
+    func testColourisationKeepsShading() {
+        let yellow = PlateFaceTint(token: "yellow", style: .steel)
+        let mid = yellow.apply(luminance: 0.305)
+        XCTAssertEqual(mid[0], 0.79, accuracy: 0.02)
+        XCTAssertEqual(mid[1], 0.62, accuracy: 0.02)
+        XCTAssertEqual(mid[2], 0.13, accuracy: 0.02)
+        let bright = yellow.apply(luminance: 0.40), dark = yellow.apply(luminance: 0.23)
+        for channel in 0..<3 { XCTAssertGreaterThan(bright[channel], dark[channel]) }
+        XCTAssertEqual(PlateFaceTint(token: "black", style: .bumper).matrix, PlateFaceTint.identity)
+        let blue = PlateFaceTint(token: "blue", style: .bumper).apply(luminance: 0.152)
+        XCTAssertGreaterThan(blue[2], blue[1]); XCTAssertGreaterThan(blue[1], blue[0])
     }
     func testInspectionPreservesDimensionsOrderAndMirrors() {
         let loadout = Loadout(bar: .bar45lb, perSide: [45, 10, 25, 2.5].map {
@@ -93,7 +113,7 @@ final class BarbellSceneTests: XCTestCase {
         XCTAssertEqual(PlatePalette.colour(for: "red").ink, 0xFFFFFF)
         XCTAssertEqual(PlatePalette.hex(PlatePalette.colour(for: "blue").fill), "#2f6fed")
         XCTAssertEqual(PlatePalette.colour(for: "chartreuse"), PlatePalette.fallback)
-        XCTAssertEqual(PlateFaceTint(token: "black").red, 1, "black iron is the untinted texture")
+        XCTAssertEqual(PlateFaceTint(token: "black", style: .steel).matrix, PlateFaceTint.identity, "black iron is the untinted texture")
     }
 
     func testPlateFamilyNamesTheSummaryCell() {

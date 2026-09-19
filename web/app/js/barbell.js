@@ -1,7 +1,7 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintGains } from "./barbell-scene.js";
+import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -91,16 +91,17 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     'data-exploded': exploded });
   const defs = el('defs');
   const metal = el('linearGradient', { id: `${id}-metal`, x1: 0, y1: 0, x2: 0, y2: 1 });
-  for (const [offset, color] of [[0,'#535b64'],[.22,'#c2c9cc'],[.43,'#f2f3f0'],[.6,'#8b959e'],[1,'#343b43']])
+  // Chrome: a dark underside, a bright specular band just above centre, and
+  // a hard shadow below — the bar reads as a turned steel cylinder.
+  for (const [offset, color] of [[0,'#1f2428'],[.16,'#6b747c'],[.38,'#dde2e6'],[.47,'#ffffff'],[.6,'#9aa3ab'],[.84,'#3a4148'],[1,'#15181b']])
     metal.append(el('stop', { offset, 'stop-color': color }));
   defs.append(metal);
   const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
   for (const token of Object.keys(C.PLATE_COLOURS)) {
     const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
-    // Tint the approved photographic texture; the hub is redrawn unfiltered.
-    const gain = plateTintGains(token);
-    filter.append(el('feColorMatrix', { type:'matrix', values:
-      `${gain[0]} 0 0 0 0 0 ${gain[1]} 0 0 0 0 0 ${gain[2]} 0 0 0 0 0 1 0` }));
+    // Colourise the approved photographic texture from its luminance; the
+    // hub is redrawn unfiltered.
+    filter.append(el('feColorMatrix', { type:'matrix', values: plateTintMatrix(token, style).join(' ') }));
     defs.append(filter);
   }
   svg.append(defs);
@@ -119,11 +120,25 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     const p = point(side * scene.shoulder);
     root.append(el('ellipse', { cx:p.x, cy:p.y, rx:4, ry:18, fill:`url(#${id}-metal)` }));
   }
-  for (let x = -scene.shoulder + 24; x < scene.shoulder - 24; x += 4) {
+  // Knurl: a darker band on each side of the centre, then a cross-hatch so
+  // the grip reads as texture at every size, not as stripes.
+  for (const side of [-1, 1]) {
+    const a = point(side * 42), b = point(side * (scene.shoulder - 24));
+    root.append(el('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, class:'barbell-knurl-band',
+      stroke:'#000', 'stroke-opacity':.22, 'stroke-width':7 }));
+  }
+  for (let x = -scene.shoulder + 24; x < scene.shoulder - 24; x += 3) {
     if (Math.abs(x) < 42) continue;
     const p = point(x);
     root.append(el('line', { x1:p.x-1, y1:p.y-3, x2:p.x+2, y2:p.y+3,
-      class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }));
+      class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }),
+      el('line', { x1:p.x+2, y1:p.y-3, x2:p.x-1, y2:p.y+3,
+        class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }));
+  }
+  // Sleeve end caps close the cylinder.
+  for (const side of [-1, 1]) {
+    const p = point(side * scene.end);
+    root.append(el('ellipse', { cx:p.x, cy:p.y, rx:3, ry:6.5, fill:`url(#${id}-metal)`, class:'barbell-end-cap' }));
   }
   for (const d of scene.discs) {
     const token = C.plateColorToken(d.plate, style);

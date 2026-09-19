@@ -89,8 +89,14 @@ struct BarbellView: View {
             let scale = min(size.width / scene.width, size.height / scene.height)
             context.translateBy(x: size.width / 2, y: size.height / 2)
             context.scaleBy(x: scale, y: scale)
-            let metal = Gradient(colors: [Color(hex: 0x535B64), Color(hex: 0xC2C9CC),
-                Color(hex: 0xF2F3F0), Color(hex: 0x8B959E), Color(hex: 0x343B43)])
+            // Chrome: a dark underside, a bright specular band just above
+            // centre, and a hard shadow below (mirrors the web gradient).
+            let metal = Gradient(stops: [
+                .init(color: Color(hex: 0x1F2428), location: 0), .init(color: Color(hex: 0x6B747C), location: 0.16),
+                .init(color: Color(hex: 0xDDE2E6), location: 0.38), .init(color: Color(hex: 0xFFFFFF), location: 0.47),
+                .init(color: Color(hex: 0x9AA3AB), location: 0.6), .init(color: Color(hex: 0x3A4148), location: 0.84),
+                .init(color: Color(hex: 0x15181B), location: 1),
+            ])
             func point(_ position: Double) -> CGPoint {
                 CGPoint(x: position * scene.axisX, y: position * scene.axisY)
             }
@@ -113,12 +119,29 @@ struct BarbellView: View {
                     startPoint: CGPoint(x: rect.midX, y: rect.minY),
                     endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
             }
-            for x in stride(from: -scene.shoulder + 24, to: scene.shoulder - 24, by: 4) where abs(x) >= 42 {
+            // Knurl: a darker band each side of centre, then a cross-hatch so
+            // the grip reads as texture at every size, not as stripes.
+            for side in [-1.0, 1.0] {
+                let a = point(side * 42), b = point(side * (scene.shoulder - 24))
+                var band = Path()
+                band.move(to: a); band.addLine(to: b)
+                context.stroke(band, with: .color(.black.opacity(0.22)), lineWidth: 7)
+            }
+            for x in stride(from: -scene.shoulder + 24, to: scene.shoulder - 24, by: 3) where abs(x) >= 42 {
                 let p = point(x)
-                var line = Path()
-                line.move(to: CGPoint(x: p.x - 1, y: p.y - 3))
-                line.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3))
-                context.stroke(line, with: .color(Color(hex: 0x4C535B)), lineWidth: 0.6)
+                var hatch = Path()
+                hatch.move(to: CGPoint(x: p.x - 1, y: p.y - 3))
+                hatch.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3))
+                hatch.move(to: CGPoint(x: p.x + 2, y: p.y - 3))
+                hatch.addLine(to: CGPoint(x: p.x - 1, y: p.y + 3))
+                context.stroke(hatch, with: .color(Color(hex: 0x4C535B).opacity(0.8)), lineWidth: 0.6)
+            }
+            // Sleeve end caps close the cylinder.
+            for side in [-1.0, 1.0] {
+                let p = point(side * scene.end)
+                let cap = CGRect(x: p.x - 3, y: p.y - 6.5, width: 6, height: 13)
+                context.fill(Path(ellipseIn: cap), with: .linearGradient(metal,
+                    startPoint: CGPoint(x: cap.midX, y: cap.minY), endPoint: CGPoint(x: cap.midX, y: cap.maxY)))
             }
             let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
             for disc in scene.discs {
@@ -132,11 +155,12 @@ struct BarbellView: View {
                 context.fill(Path(ellipseIn: rear), with: .color(edge))
                 context.fill(Path(CGRect(x: disc.x - disc.depth / 2, y: face.minY,
                     width: disc.depth, height: face.height)), with: .color(edge))
-                let gains = PlateFaceTint(token: token)
+                let m = PlateFaceTint(token: token, style: plateStyle).matrix.map(Float.init)
                 var matrix = ColorMatrix()
-                matrix.r1 = Float(gains.red)
-                matrix.g2 = Float(gains.green)
-                matrix.b3 = Float(gains.blue)
+                (matrix.r1, matrix.r2, matrix.r3, matrix.r4, matrix.r5) = (m[0], m[1], m[2], m[3], m[4])
+                (matrix.g1, matrix.g2, matrix.g3, matrix.g4, matrix.g5) = (m[5], m[6], m[7], m[8], m[9])
+                (matrix.b1, matrix.b2, matrix.b3, matrix.b4, matrix.b5) = (m[10], m[11], m[12], m[13], m[14])
+                (matrix.a1, matrix.a2, matrix.a3, matrix.a4, matrix.a5) = (m[15], m[16], m[17], m[18], m[19])
                 context.drawLayer { tinted in
                     tinted.addFilter(.colorMatrix(matrix))
                     tinted.draw(image, in: face)
