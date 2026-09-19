@@ -99,3 +99,9 @@
 - Sound preference — the completion tone has a device-local switch (UserDefaults, like the Health read opt-in); haptics and the announcement are independent of it. The cue releases its audio session when the half second is over.
 - Scaled display sizes — the current-set numeral, the achieved total, and the calculator hero use `@ScaledMetric` so they keep their proportion and still follow Dynamic Type, with a minimum scale factor as the floor.
 - Pushed lists — the library browser, the exercise pane, and the signals timeline reserve the plate-button band like the tab roots.
+
+## Calculator Dynamic Type, 2026-09-19
+
+- The requested target keeps its existing 40-point rounded display at the default text size and scales with the large-title curve. At accessibility sizes, the native unit selector flows below the input in the same row; the input keeps its focus and binding through the layout change.
+- `test14CalculatorTargetAtAccessibilityTextSize` checks standard versus maximum accessibility text size, visible controls, growth of the editable number, and unit switching without losing the entered number. A Dynamic Type audit finding on `plate-target` is now a failure; the other #238 advisories remain tracked separately.
+- Proof starts from #239's actual iPhone capture at `e0dfba3`; the new exact-head standard/accessibility simulator captures must be inspected before this design slice is ready to merge. The larger #187 matrix remains open.
