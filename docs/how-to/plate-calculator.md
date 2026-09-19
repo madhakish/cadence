@@ -13,6 +13,9 @@ on a complete bar and lists the count for one side. Load from each collar
 outward in the listed order; the drawing mirrors that same order on the other
 sleeve.
 
+On iOS, the target number follows your text-size setting. At accessibility
+sizes, the **lb / kg** selector sits below the number so both remain usable.
+
 In **On the bar** mode, enter the count of each denomination on one side.
 Cadence mirrors the stack and totals the bar, both sides, and configured
 collars. Plate colours follow the competition denomination scheme; the plate
