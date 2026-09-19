@@ -1256,12 +1256,13 @@ export async function openSession(id) {
         // The shared picker surface (issues #63/#66): search, equipment
         // filters, and a detail preview that opens over the sheet so the
         // search/filter state survives the inspection.
-        c.append(exercisePickerList(all.filter((exercise) => C.equipmentPolicyAllows(sessionProgram?.equipmentPolicy, exercise.type)), (e) => {
+        c.append(exercisePickerList(all, (e) => {
+          exMap.set(e.name, e);
           session.exercises.push({ order: session.exercises.length, exerciseName: e.name, notes: "", phase: null,
             barId: barStamp(e, C.barById(gymState.value?.defaultBarId)),
             plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
           api.close(); save(); renderBody(body);
-        }));
+        }, { equipmentPolicy: sessionProgram?.equipmentPolicy }));
       },
     });
   }

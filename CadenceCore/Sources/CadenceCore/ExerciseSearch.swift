@@ -52,6 +52,27 @@ public enum ExerciseSearch {
             .contains { normalized($0).contains(term) }
     }
 
+    /// The lifter's recent lifts — the browser's entry point above the
+    /// category groups, never a category of its own. Distinct names from the
+    /// most recent completed sessions, newest session first and in performed
+    /// order within a session, capped at `limit`. A name appears once, at
+    /// its most recent position. Sessions arrive newest-first; the sequence
+    /// is walked only as far as the cap needs. Mirrors `recentExerciseNames`
+    /// in core.js.
+    public static func recentNames<S: Sequence>(sessionsNewestFirst: S, limit: Int = 6) -> [String]
+    where S.Element == [String] {
+        guard limit > 0 else { return [] }
+        var seen = Set<String>()
+        var recent: [String] = []
+        for names in sessionsNewestFirst {
+            for name in names where !name.isEmpty && seen.insert(name).inserted {
+                recent.append(name)
+                if recent.count == limit { return recent }
+            }
+        }
+        return recent
+    }
+
     private static func normalized(_ value: String) -> String {
         value.folding(
             options: [.caseInsensitive, .diacriticInsensitive],
