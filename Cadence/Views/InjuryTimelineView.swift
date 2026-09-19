@@ -87,6 +87,7 @@ struct InjuryTimelineView: View {
                                     if item.isHardStop {
                                         Image(systemName: "hand.raised.fill")
                                             .foregroundStyle(Theme.hardStop)
+                                            .accessibilityLabel("Hard stop")
                                     }
                                 }
                                 if !item.detail.isEmpty {
@@ -150,6 +151,7 @@ struct CheckInSheet: View {
                 }
                 Section("Note") {
                     TextField("Optional", text: $note, axis: .vertical)
+                        .accessibilityLabel("Note")
                 }
             }
             .navigationTitle(site.rawValue)

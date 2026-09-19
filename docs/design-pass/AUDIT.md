@@ -132,3 +132,11 @@ header comment carries the `podman run` line.
 Web verification runs from `web` with `npm test`. Native core, migration, device
 build, and visual proof run in GitHub Actions because the repository's local
 Linux workspace has no Xcode runtime.
+Web verification runs from `web` with `npm test`. That chain ends with an
+axe-core audit (`tests/axe.test.mjs`) over every rendered tab and pushed screen,
+so an unnamed control fails the suite instead of waiting for a VoiceOver pass.
+The iPhone workflow's `test12AccessibilityAudit` runs Xcode's accessibility
+audit over Today, Settings, the active session, and the calculator and reports
+every issue on a surface together. Native core, migration, device build, and
+visual proof run in GitHub Actions because the repository's local Linux
+workspace has no Xcode runtime.

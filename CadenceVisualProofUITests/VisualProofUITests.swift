@@ -273,6 +273,80 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
     }
 
+    /// Xcode's accessibility audit over the surfaces a lifter touches most.
+    /// Every issue on a surface is collected and reported together, so one
+    /// run names the whole list instead of the first unlabeled control (#61).
+    func test12AccessibilityAudit() throws {
+        continueAfterFailure = true
+        try auditSurface("today")
+
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+        try auditSurface("settings")
+
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        try auditSurface("current-session")
+
+        // The session is a full-screen cover with no floating button; a fresh
+        // launch lands on Today, where the calculator is one tap away.
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        let calculator = app.buttons["Plate calculator"]
+        XCTAssertTrue(calculator.waitForExistence(timeout: 3))
+        calculator.tap()
+        XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+        try auditSurface("plate-calculator")
+    }
+
+    private func auditSurface(_ name: String) throws {
+        var issues: [String] = []
+        var advisories: [String] = []
+        // Judged against the app's surface, not system chrome or artwork:
+        // - contrast under the translucent tab bar / floating plate button
+        //   measures chrome (the first device run flagged exactly those);
+        // - contrast of a plate badge measures the photographic plate face
+        //   behind it, not the badge's own ink/fill pair;
+        // - hit-region findings on non-interactive nodes (static text, a
+        //   progress bar, plain containers) are not tap targets;
+        // - clipping is left out because SwiftUI Labels audit as clipped
+        //   while the captures show them intact;
+        // - Dynamic Type findings are reported as advisories, not failures:
+        //   the fixed-size numerals and eyebrows are a tracked follow-up.
+        let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
+        let types: XCUIAccessibilityAuditType = [
+            .sufficientElementDescription, .hitRegion, .contrast, .dynamicType,
+            .trait, .elementDetection,
+        ]
+        try app.performAccessibilityAudit(for: types) { issue in
+            let element = issue.element
+            let identifier = element?.identifier ?? ""
+            if issue.auditType == .contrast, let frame = element?.frame,
+               chrome.contains(where: { $0.intersects(frame) }) || identifier.hasPrefix("barbell-plate-") {
+                return true
+            }
+            if issue.auditType == .hitRegion, let element, nonInteractive.contains(element.elementType) {
+                return true
+            }
+            let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
+            if issue.auditType == .dynamicType { advisories.append(line) } else { issues.append(line) }
+            return true // keep collecting; the assertion below reports the full list
+        }
+        capture("after-12-audit-\(name)-iphone")
+        if !advisories.isEmpty {
+            let note = XCTAttachment(string: advisories.joined(separator: "\n"))
+            note.name = "dynamic-type-advisories-\(name)"
+            note.lifetime = .keepAlways
+            add(note)
+            print("Dynamic Type advisories on \(name):\n" + advisories.joined(separator: "\n"))
+        }
+        XCTAssertTrue(issues.isEmpty,
+                      "\(name) failed the accessibility audit:\n" + issues.joined(separator: "\n"))
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }

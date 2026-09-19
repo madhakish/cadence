@@ -677,7 +677,7 @@ export async function openSession(id) {
   }
 
   function barSelect(se, body) {
-    const sel = ui.h("select", { class: "bar-select" },
+    const sel = ui.h("select", { class: "bar-select", "aria-label": `Bar for ${se.exerciseName}` },
       ...C.ALL_BARS.map((b) => ui.h("option", { value: C.barId(b), text: C.barLabel(b), selected: C.barId(b) === C.barId(barFor(se)) })));
     sel.addEventListener("change", () => {
       se.barId = sel.value;
