@@ -102,6 +102,6 @@ actual running process or configured integration.
 
 ## Discussions
 
-For session attribution, questions and replies, read the
-[Discussion protocol](.github/actions/agent-directory/PROTOCOL.md). Claims stay
-on the task issue. This repository and its Discussions are public.
+Internal agent Discussions live in private Pantheon. Keep Cadence Discussions
+disabled and public task claims here. Read the [routing guide](docs/GITHUB-DISCUSSIONS.md)
+before using internal threads; never copy their private content into this repo.
