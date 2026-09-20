@@ -46,13 +46,16 @@ Tests use the actual browser IndexedDB, Cache Storage and service worker. Only
 the deployment build token is stamped; no worker or persistence mocks replace
 production code. Workouts are synthetic and created/edited through visible UI
 controls. Repository reads assert saved state in addition to rendered output.
+Restore comparisons ignore only the export timestamp and explicitly expect
+the documented backfill of missing legacy exercise IDs, checked against the
+synthetic catalog. Identity and performed values stay in the comparison.
 
 | Requirement ID | Behavioral assertion |
 | --- | --- |
 | WEB-WORKOUT-REOPEN | Edit reps, complete/undo/re-complete, retain planned work; reload and reopen in a new tab with identical session data |
 | WEB-OFFLINE-RESUME | Disable the network; reload from the worker, resume and bank work, inspect History, export it offline |
 | WEB-UPDATE-RESUME | Install a second worker build, accept the production Refresh prompt; preserve active work and another project's cache while retiring the old app cache |
-| WEB-BACKUP-ROUNDTRIP | Download JSON, import into a fresh browser context, reload and re-export all portable content; an identical import reports no change |
+| WEB-BACKUP-ROUNDTRIP | Download JSON, import into a fresh browser context, reload and re-export all portable content with explicit legacy-ID repair assertions; an identical re-export reports no change |
 | WEB-RESTORE-CONTENT | Same IDs/counts with changed reps require confirmation; Cancel preserves the original, Restore persists the changed value |
 
 The committed `web/tests/browser/requirements.json` lists required IDs and

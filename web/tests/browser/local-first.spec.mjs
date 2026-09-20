@@ -40,6 +40,7 @@ async function startWorkout(page) {
   await expect.poll(async () => (await sets(page))[0].status).toBe('completed');
   await page.getByRole('button', { name: '+ Set', exact: true }).click();
   await expect.poll(async () => (await sets(page)).length).toBe(2);
+  await page.getByRole('button', { name: 'Show all sets', exact: true }).click();
   const workout = await snapshot(page);
   expect(workout.isCompleted).toBe(false);
   expect(workout.exercises[0].sets.map((set) => set.status)).toEqual(['completed', 'planned']);
@@ -50,6 +51,7 @@ async function startWorkout(page) {
 async function resume(page) {
   await page.getByRole('button', { name: /Resume workout/ }).click();
   await expect(page.getByRole('region', { name: /Push-ups/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Show all sets', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Set status: completed', exact: true })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Set status: planned', exact: true })).toHaveCount(1);
 }
@@ -82,6 +84,20 @@ async function chooseBackup(page, bundle) {
   await page.getByRole('button', { name: 'Import JSON', exact: true }).click();
   await page.getByLabel('Backup file').setInputFiles({ name: 'synthetic-acceptance.json',
     mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
+}
+
+// Compatibility import fills absent legacy IDs. Assert the precise repair
+// against this synthetic catalog; never drop identity from the comparison.
+function restoredContent(bundle) {
+  const expected = structuredClone(bundle);
+  const ids = new Map(expected.exercises.map((exercise) => [exercise.name, exercise.id]));
+  for (const session of expected.sessions) for (const exercise of session.exercises) {
+    if (exercise.exerciseId == null) exercise.exerciseId = ids.get(exercise.name);
+  }
+  for (const milestone of expected.milestones) {
+    if (milestone.exerciseId == null && milestone.exercise) milestone.exerciseId = ids.get(milestone.exercise);
+  }
+  return portableContent(expected);
 }
 
 function portableContent(bundle) {
@@ -156,8 +172,8 @@ test('[WEB-BACKUP-ROUNDTRIP] exported work restores in a fresh browser context',
     await expect.poll(async () => (await sessions(restored)).length).toBe(1);
     await restored.reload();
     const roundtrip = await downloadBackup(restored);
-    expect(portableContent(roundtrip)).toEqual(portableContent(original));
-    await chooseBackup(restored, original);
+    expect(portableContent(roundtrip)).toEqual(restoredContent(original));
+    await chooseBackup(restored, roundtrip);
     await expect(restored.locator('#toast')).toContainText('Nothing to restore');
     await expect(restored.getByRole('dialog', { name: 'Restore this backup?', exact: true })).toHaveCount(0);
   } finally { await fresh.close(); }
@@ -171,7 +187,7 @@ test('[WEB-RESTORE-CONTENT] same counts with different reps require confirmation
   changed.sessions[0].exercises[0].sets[0].reps += 2;
   await chooseBackup(page, changed);
   const confirmation = page.getByRole('dialog', { name: 'Restore this backup?', exact: true });
-  await expect(confirmation).toContainText('changed');
+  await expect(confirmation).toContainText('Recorded values or settings differ');
   await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
   expect(portableContent(await downloadBackup(page))).toEqual(portableContent(original));
@@ -179,5 +195,5 @@ test('[WEB-RESTORE-CONTENT] same counts with different reps require confirmation
   await confirmation.getByRole('button', { name: 'Restore', exact: true }).click();
   await expect.poll(async () => (await sets(page))[0].reps).toBe(changed.sessions[0].exercises[0].sets[0].reps);
   await page.reload();
-  expect(portableContent(await downloadBackup(page))).toEqual(portableContent(changed));
+  expect(portableContent(await downloadBackup(page))).toEqual(restoredContent(changed));
 });
