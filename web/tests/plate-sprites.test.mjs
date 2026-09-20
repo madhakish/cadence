@@ -13,9 +13,42 @@ const root = new URL("../../", import.meta.url);
 const webDir = new URL("web/app/assets/plates/", root);
 const iosDir = new URL("Cadence/Assets.xcassets/PlateSprites/", root);
 const sha = (buffer) => createHash("sha256").update(buffer).digest("hex");
+const toNumber = (value) => Number.parseFloat(value);
+const parseNativeManifest = (source) => {
+  const unitMatch = source.match(/static let unit: Double = ([0-9.]+)/);
+  assert.ok(unitMatch, "native manifest declares scene unit");
+  const plates = Object.fromEntries([...source.matchAll(/"([^"]+)": "([^"]+)"/g)].map(([, key, value]) => [key, value]));
+  const sprites = {};
+  const barEntry = /"([^"]+)": \.bar\(kind: "([^"]+)", angle: "([^"]+)", size: CGSize\(width: ([0-9.]+), height: ([0-9.]+)\), axisStart: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), axisEnd: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), spanUnits: ([0-9.]+)\),/g;
+  for (const [, key, kind, angle, width, height, axisStartX, axisStartY, axisEndX, axisEndY, spanUnits] of source.matchAll(barEntry)) {
+    sprites[key] = {
+      kind,
+      angle,
+      size: [toNumber(width), toNumber(height)],
+      axisStart: [toNumber(axisStartX), toNumber(axisStartY)],
+      axisEnd: [toNumber(axisEndX), toNumber(axisEndY)],
+      spanUnits: toNumber(spanUnits),
+    };
+  }
+  const plateEntry = /"([^"]+)": \.plate\(family: "([^"]+)", shape: "([^"]+)", angle: "([^"]+)", size: CGSize\(width: ([0-9.]+), height: ([0-9.]+)\), faceCenter: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), faceRadius: ([0-9.]+), hubRadius: ([0-9.]+)\),/g;
+  for (const [, key, family, shape, angle, width, height, faceCenterX, faceCenterY, faceRadius, hubRadius] of source.matchAll(plateEntry)) {
+    sprites[key] = {
+      family,
+      shape,
+      angle,
+      size: [toNumber(width), toNumber(height)],
+      faceCenter: [toNumber(faceCenterX), toNumber(faceCenterY)],
+      faceRadius: toNumber(faceRadius),
+      hubRadius: toNumber(hubRadius),
+    };
+  }
+  return { unit: toNumber(unitMatch[1]), plates, sprites };
+};
 
 const files = readdirSync(webDir).filter((f) => f.endsWith(".png")).sort();
 assert.ok(files.length >= 16, "the sprite family is installed");
+const swift = readFileSync(new URL("Cadence/Views/PlateSprites.swift", root), "utf8");
+const native = parseNativeManifest(swift);
 for (const file of files) {
   const name = file.replace(/\.png$/, "");
   const twin = new URL(`${name}.imageset/${file}`, iosDir);
@@ -23,9 +56,33 @@ for (const file of files) {
   assert.equal(sha(readFileSync(twin)), sha(readFileSync(new URL(file, webDir))), `${file} is byte-identical on both clients`);
   assert.ok(PLATE_SPRITES.sprites[name], `${file} is in the web manifest`);
 }
-const swift = readFileSync(new URL("Cadence/Views/PlateSprites.swift", root), "utf8");
-for (const name of Object.keys(PLATE_SPRITES.sprites)) assert.ok(swift.includes(`"${name}":`), `${name} is in the native manifest`);
-assert.ok(swift.includes(`static let unit: Double = ${PLATE_SPRITES.unit}`), "both manifests share the scene unit");
+assert.deepEqual(Object.keys(native.sprites).sort(), Object.keys(PLATE_SPRITES.sprites).sort(), "native/web manifests share the exact sprite key set");
+assert.deepEqual(native.plates, PLATE_SPRITES.plates, "native/web manifests share plate-to-shape mapping");
+assert.equal(native.unit, PLATE_SPRITES.unit, "both manifests share the scene unit");
+for (const [key, meta] of Object.entries(PLATE_SPRITES.sprites)) {
+  const nativeMeta = native.sprites[key];
+  assert.ok(nativeMeta, `${key} is in the native manifest`);
+  if (meta.kind) {
+    assert.deepEqual(nativeMeta, {
+      kind: meta.kind,
+      angle: meta.angle,
+      size: meta.size,
+      axisStart: meta.axisStart,
+      axisEnd: meta.axisEnd,
+      spanUnits: meta.spanUnits,
+    }, `${key} placement metadata matches native`);
+  } else {
+    assert.deepEqual(nativeMeta, {
+      family: meta.family,
+      shape: meta.shape,
+      angle: meta.angle,
+      size: meta.size,
+      faceCenter: meta.faceCenter,
+      faceRadius: meta.faceRadius,
+      hubRadius: meta.hubRadius,
+    }, `${key} placement metadata matches native`);
+  }
+}
 const worker = readFileSync(new URL("web/app/sw.js", root), "utf8");
 for (const file of files) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} is precached`);
 
