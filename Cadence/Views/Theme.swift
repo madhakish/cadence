@@ -93,6 +93,10 @@ enum Theme {
     /// Subtle top edge on the current-set card. Web twin: `--edge`.
     static let edge = Color.primary.opacity(0.07)
     static let forgedSteel = Color(hex: 0xA6ABB2)
+    /// 3D inspector backdrops: the studio's charcoal cyclorama, near black, and warm paper.
+    static let sceneStudio = Color(hex: 0x1B1D21)
+    static let sceneDark = Color(hex: 0x0A0B0D)
+    static let scenePaper = Color(hex: 0xE6E2DA)
 
     /// Industrial geometry: almost square, but not sharp enough to snag a
     /// thumb-sized control. Shared by the few surfaces that genuinely need a

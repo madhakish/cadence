@@ -66,7 +66,7 @@ struct PlateFaceBadge: View {
     }
 }
 
-/// Renders the solver's exact stack with the approved photographic plate faces.
+/// Renders the solver's exact stack from the rendered plate and bar sprites.
 /// `presentation` is chosen by the SURFACE (a set row vs the current set's
 /// stage); `emphasis` is the state and changes only opacity — never geometry,
 /// order, or labels.
@@ -89,93 +89,102 @@ struct BarbellView: View {
             let scale = min(size.width / scene.width, size.height / scene.height)
             context.translateBy(x: size.width / 2, y: size.height / 2)
             context.scaleBy(x: scale, y: scale)
-            let metal = Gradient(colors: [Color(hex: 0x535B64), Color(hex: 0xC2C9CC),
-                Color(hex: 0xF2F3F0), Color(hex: 0x8B959E), Color(hex: 0x343B43)])
             func point(_ position: Double) -> CGPoint {
                 CGPoint(x: position * scene.axisX, y: position * scene.axisY)
             }
-            func shaft(_ from: Double, _ to: Double, _ width: CGFloat) {
-                let a = point(from), b = point(to)
-                var path = Path()
-                path.move(to: a); path.addLine(to: b)
-                context.stroke(path, with: .linearGradient(metal,
-                    startPoint: CGPoint(x: a.x, y: a.y - width / 2),
-                    endPoint: CGPoint(x: a.x, y: a.y + width / 2)),
-                    style: StrokeStyle(lineWidth: width, lineCap: .round))
+            let angle = exploded ? "exploded" : "assembled"
+            // Rendered sprites (PlateSprites) placed from the shared scene: a bar
+            // part maps its two axis reference points onto two scene points.
+            // Thickness comes from the sprite's nominal span (an exploded scene's
+            // longer sleeve stretches along the bar, never fattens).
+            let axisLength = hypot(scene.axisX, scene.axisY)
+            func placeBar(_ name: String, from: CGPoint, to: CGPoint) {
+                guard case let .bar(_, _, spriteSize, a, b, spanUnits)? = PlateSprites.sprites[name] else { return }
+                let spritePx = hypot(b.x - a.x, b.y - a.y)
+                let k = spanUnits * axisLength / spritePx
+                let stretch = hypot(to.x - from.x, to.y - from.y) / (spanUnits * axisLength)
+                let image = context.resolve(Image(name))
+                context.drawLayer { layer in
+                    layer.translateBy(x: from.x, y: from.y)
+                    layer.rotate(by: .radians(atan2(to.y - from.y, to.x - from.x)))
+                    layer.scaleBy(x: k * stretch, y: k)
+                    layer.rotate(by: .radians(-atan2(b.y - a.y, b.x - a.x)))
+                    layer.translateBy(x: -a.x, y: -a.y)
+                    layer.draw(image, in: CGRect(origin: .zero, size: spriteSize))
+                }
             }
-            shaft(-scene.end, scene.end, 7)
-            shaft(-scene.end, -scene.shoulder, 12)
-            shaft(scene.shoulder, scene.end, 12)
-            for side in [-1.0, 1.0] {
-                let p = point(side * scene.shoulder)
-                let rect = CGRect(x: p.x - 4, y: p.y - 18, width: 8, height: 36)
-                context.fill(Path(ellipseIn: rect), with: .linearGradient(metal,
-                    startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                    endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
+            // The bar goes under everything: every plate bore is open in the sprites,
+            // so the sleeves and shaft show through wherever the plate's thickness lets them. The camera sits at the
+            // −x end: the far (+x) collar precedes the plates, the near one follows.
+            placeBar("bar-sleeve-\(angle)", from: point(scene.shoulder), to: point(scene.end))
+            placeBar("bar-shaft-\(angle)", from: point(-scene.shoulder), to: point(scene.shoulder))
+            placeBar("bar-sleeve-near-\(angle)", from: point(-scene.end), to: point(-scene.shoulder))
+            if solution.loadout.collarLb > 0,
+               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-\(angle)"] {
+                placeBar("bar-collar-\(angle)", from: point(scene.collar - span / 2), to: point(scene.collar + span / 2))
             }
-            for x in stride(from: -scene.shoulder + 24, to: scene.shoulder - 24, by: 4) where abs(x) >= 42 {
-                let p = point(x)
-                var line = Path()
-                line.move(to: CGPoint(x: p.x - 1, y: p.y - 3))
-                line.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3))
-                context.stroke(line, with: .color(Color(hex: 0x4C535B)), lineWidth: 0.6)
-            }
-            let image = context.resolve(Image(plateStyle == .bumper ? "PlateBumper" : "PlateSteel"))
-            for disc in scene.discs {
+            for disc in scene.discs.sorted(by: { $0.x > $1.x }) {
                 let token = disc.plate.colorToken(for: plateStyle)
                 let colour = PlatePalette.colour(for: token)
-                let edge = colour.edgeColor
-                let x = disc.x + disc.depth / 2
-                let face = CGRect(x: x - disc.faceRadius, y: disc.y - disc.radius,
-                    width: disc.faceRadius * 2, height: disc.radius * 2)
-                let rear = face.offsetBy(dx: -disc.depth, dy: 0)
-                context.fill(Path(ellipseIn: rear), with: .color(edge))
-                context.fill(Path(CGRect(x: disc.x - disc.depth / 2, y: face.minY,
-                    width: disc.depth, height: face.height)), with: .color(edge))
-                let gains = PlateFaceTint(token: token)
+                let family = PlateGeometry.family(disc.plate, style: plateStyle)
+                let known = PlateSprites.plates["\(family):\(disc.plate.id)"].map { "plate-\($0)-\(angle)" }
+                // An unknown shape borrows the family's first sprite; geometry still scales it.
+                let name = known.flatMap { PlateSprites.sprites[$0] != nil ? $0 : nil }
+                    ?? PlateSprites.sprites.keys.sorted().first { $0.hasPrefix("plate-\(family)-") && $0.hasSuffix("-\(angle)") }
+                guard let name, case let .plate(_, _, _, spriteSize, faceCenter, faceRadius, hubRadius)? = PlateSprites.sprites[name] else { continue }
+                // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
+                let x = disc.x - disc.depth / 2
+                let k = disc.radius / faceRadius
+                let frame = CGRect(x: x - faceCenter.x * k, y: disc.y - faceCenter.y * k,
+                                   width: spriteSize.width * k, height: spriteSize.height * k)
+                let image = context.resolve(Image(name))
+                let m = PlateFaceTint(token: token, style: plateStyle).matrix.map(Float.init)
                 var matrix = ColorMatrix()
-                matrix.r1 = Float(gains.red)
-                matrix.g2 = Float(gains.green)
-                matrix.b3 = Float(gains.blue)
+                (matrix.r1, matrix.r2, matrix.r3, matrix.r4, matrix.r5) = (m[0], m[1], m[2], m[3], m[4])
+                (matrix.g1, matrix.g2, matrix.g3, matrix.g4, matrix.g5) = (m[5], m[6], m[7], m[8], m[9])
+                (matrix.b1, matrix.b2, matrix.b3, matrix.b4, matrix.b5) = (m[10], m[11], m[12], m[13], m[14])
+                (matrix.a1, matrix.a2, matrix.a3, matrix.a4, matrix.a5) = (m[15], m[16], m[17], m[18], m[19])
                 context.drawLayer { tinted in
                     tinted.addFilter(.colorMatrix(matrix))
-                    tinted.draw(image, in: face)
+                    tinted.draw(image, in: frame)
                 }
-                context.drawLayer { hub in
-                    hub.clip(to: Path(ellipseIn: face.insetBy(dx: face.width * 0.3825,
-                                                             dy: face.height * 0.3825)))
-                    hub.draw(image, in: face)
+                let hub = CGRect(x: x - disc.faceRadius * hubRadius, y: disc.y - disc.radius * hubRadius,
+                                 width: disc.faceRadius * hubRadius * 2, height: disc.radius * hubRadius * 2)
+                context.drawLayer { untinted in
+                    untinted.clip(to: Path(ellipseIn: hub))
+                    untinted.draw(image, in: frame)
                 }
                 let label = Text(Weight.trim(disc.plate.value, decimals: 2))
                     .font(.system(size: exploded ? 14 : 10, weight: .heavy))
                     .foregroundColor(colour.inkColor)
                 context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
             }
-            if solution.loadout.collarLb > 0 {
-                for side in [-1.0, 1.0] {
-                    let p = point(side * scene.collar)
-                    let rect = CGRect(x: p.x - 4, y: p.y - 13, width: 8, height: 26)
-                    context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .linearGradient(metal,
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
-                }
+            if solution.loadout.collarLb > 0,
+               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
+                placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - span / 2), to: point(-scene.collar + span / 2))
             }
         }
         .frame(height: presentation == .compactSide ? 84 : nil)
         .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
-        .accessibilityChildren {
-            ForEach([-1, 1], id: \.self) { side in
-                ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
-                    Text(disc.accessibilityLabel)
-                        .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
-                }
+        .accessibilityChildren { Self.plateChildren(scene: scene, loadout: solution.loadout) }
+    }
+
+    /// Every plate as its own element, each side from the collar outward, then
+    /// the bar-only or collar note — the same order web's focusable plate
+    /// groups take. Shared with the 3D inspector.
+    @ViewBuilder
+    static func plateChildren(scene: BarbellScene, loadout: Loadout) -> some View {
+        ForEach([-1, 1], id: \.self) { side in
+            ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
+                Text(disc.accessibilityLabel)
+                    .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
             }
-            if solution.loadout.perSide.isEmpty {
-                Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
-            } else if solution.loadout.collarLb > 0 {
-                Text("Collars, \(Weight.both(lb: solution.loadout.collarLb)) total")
-            }
+        }
+        if loadout.perSide.isEmpty {
+            Text(loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+        } else if loadout.collarLb > 0 {
+            Text("Collars, \(Weight.both(lb: loadout.collarLb)) total")
         }
     }
 }
@@ -229,26 +238,52 @@ struct BarbellInspectionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
-    @State private var exploded = true
+    @State private var exploded = false
+    @State private var camera = BarbellInspector.Camera.initial(exploded: false)
+    @State private var backdrop: BarbellBackdrop = .studio
+    @State private var resetToken = 0
+    @State private var dragBase: BarbellInspector.Camera?
+    @State private var zoomBase: BarbellInspector.Camera?
+    private let solid = BarbellSceneView.isSupported
 
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
         VStack(alignment: .leading, spacing: 12) {
-            GeometryReader { proxy in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
-                        .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
-                               height: exploded ? scene.height : 230)
+            Group {
+                if solid {
+                    // The solid: drag orbits, pinch zooms, double tap resets, a
+                    // single tap explodes or assembles like the sprite view.
+                    BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, exploded: exploded,
+                                     backdrop: backdrop, camera: camera, resetToken: resetToken, reduceMotion: reduceMotion)
+                        .frame(height: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                         .contentShape(Rectangle())
+                        .simultaneousGesture(orbitGesture)
+                        .simultaneousGesture(zoomGesture)
+                        .onTapGesture(count: 2) { resetView() }
                         .onTapGesture { toggle() }
+                } else {
+                    GeometryReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
+                                .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
+                                       height: exploded ? scene.height : 230)
+                                .contentShape(Rectangle())
+                                .onTapGesture { toggle() }
+                        }
+                    }
+                    .frame(height: exploded ? scene.height + 20 : 250)
                 }
             }
-            .frame(height: exploded ? scene.height + 20 : 250)
             .accessibilityIdentifier("barbell-inspection-artwork")
+            .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
+            .accessibilityHint(solid ? "Drag to rotate, pinch to zoom, double tap to reset the view" : "")
+            .accessibilityChildren { BarbellView.plateChildren(scene: scene, loadout: solution.loadout) }
             // One quiet line says which view this is and what a tap does; the
             // same control is the accessible toggle.
             HStack {
-                Button(exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect") { toggle() }
+                Button(exploded ? (solid ? "Exploded · tap to assemble" : "38° inspection · tap to collapse")
+                                : (solid ? "Assembled · tap to explode" : "Front view · tap to inspect")) { toggle() }
                     .buttonStyle(.plain)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -257,8 +292,24 @@ struct BarbellInspectionView: View {
                     .accessibilityValue(exploded ? "Exploded" : "Assembled")
                     .accessibilityIdentifier("barbell-explode-toggle")
                 Spacer()
-                if exploded {
+                if exploded && !solid {
                     Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if solid {
+                // Backdrop and reset are the keyboard/VoiceOver path for what
+                // drag and pinch do by hand.
+                HStack(spacing: 12) {
+                    Picker("Backdrop", selection: $backdrop) {
+                        ForEach(BarbellBackdrop.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("barbell-backdrop")
+                    Button("Reset view") { resetView() }
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .accessibilityHint("Returns the camera to the front view")
+                        .accessibilityIdentifier("barbell-reset-view")
                 }
             }
             Text("Plates per side").font(.headline)
@@ -282,8 +333,41 @@ struct BarbellInspectionView: View {
         .padding(.horizontal)
     }
 
+    /// Straight ahead and whole-bar when assembled; the 35° blow-up on the near
+    /// stack when exploded. The solid animates the cut itself.
     private func toggle() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) {
+            exploded.toggle()
+            camera = BarbellInspector.Camera.initial(exploded: exploded)
+        }
+    }
+
+    private func resetView() {
+        camera = BarbellInspector.Camera.initial(exploded: exploded)
+        resetToken += 1
+    }
+
+    /// Horizontal drag turns the bar, vertical drag raises the eye; the shared
+    /// model wraps yaw and clamps pitch so the bar never leaves the frame.
+    private var orbitGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let base = dragBase ?? camera
+                dragBase = base
+                camera = base.orbiting(yaw: Double(value.translation.width) * 0.35,
+                                       pitch: Double(-value.translation.height) * 0.3)
+            }
+            .onEnded { _ in dragBase = nil }
+    }
+
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let base = zoomBase ?? camera
+                zoomBase = base
+                camera = base.zoomed(by: Double(value.magnification))
+            }
+            .onEnded { _ in zoomBase = nil }
     }
 }
 

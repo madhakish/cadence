@@ -1,7 +1,10 @@
 name: iPhone visual proof
 
 # Deliberate visual QA, manually or on a same-repository PR with visual-proof.
-# Ordinary PRs retain one native build. Opted-in captures wait for green CI.
+# Ordinary PRs retain one native build. Opted-in captures start once the exact
+# head has passed CI's fast Linux suites; the macOS build stays the merge gate.
+# (A DerivedData cache was measured at no gain: the UI tests, not the compile,
+# are the capture's cost.)
 
 on:
   workflow_dispatch:
@@ -36,7 +39,7 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Verify gate behavior
         run: node .github/scripts/test-visual-ci.mjs
-      - name: Wait for exact-head CI
+      - name: Wait for exact-head fast suites
         if: github.event_name == 'pull_request'
         env:
           GH_REPO: ${{ github.repository }}
