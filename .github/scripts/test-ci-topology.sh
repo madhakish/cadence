@@ -58,7 +58,7 @@ assert_job_not_contains core-tests "container:"
 assert_job_contains core-tests "xcrun swiftc -parse"
 assert_job_contains core-tests "run: xcrun swift test"
 assert_job_contains web-tests "needs: changes"
-for job in core-tests web-tests simulator-build device-build store-build migration-tests testflight deploy-web; do
+for job in core-tests web-tests simulator-build device-build store-build migration-tests native-smoke testflight deploy-web; do
   assert_job_contains "$job" "runs-on: macos-latest"
   assert_job_not_contains "$job" "container:"
 done
@@ -118,8 +118,17 @@ assert_job_contains migration-tests "timeout-minutes: 45"
 # Preserve the stable aggregate check and route its policy through the
 # scenario-tested executable gate. The portable suites are direct dependencies
 # so their failures cannot disappear when every conditional native job skips.
-assert_job_contains app-build "needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests]"
+assert_job_contains app-build "needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests, native-smoke]"
 assert_job_contains app-build "if: always()"
+assert_job_contains native-smoke "needs: [changes, core-tests, web-tests]"
+assert_job_contains native-smoke "if: needs.changes.outputs.native == 'true'"
+assert_job_contains native-smoke "test07FinalSetAdvancesToNextAuthoredExercise"
+assert_job_contains native-smoke "test10PlankCountdownAndLog"
+assert_job_contains native-smoke "test13SetCompletionKeepsDominantBlockStill"
+assert_job_contains native-smoke "test14CalculatorTargetAtAccessibilityTextSize"
+assert_job_contains native-smoke "node .github/scripts/verify-native-smoke.mjs"
+assert_job_contains app-build 'NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}'
+assert_job_contains deploy-web "needs: [changes, web-tests, app-build]"
 assert_job_contains app-build 'CORE_RESULT: ${{ needs.core-tests.result }}'
 assert_job_contains app-build 'WEB_RESULT: ${{ needs.web-tests.result }}'
 assert_job_contains app-build "DEVICE_REQUIRED: \${{ github.event_name == 'pull_request' && needs.changes.outputs.native == 'true' }}"
@@ -145,6 +154,9 @@ fi
 # Build-capable recovery and visual workflows use the same hosted tier.
 workflow=".github/workflows/pages.yml"
 assert_job_contains test "runs-on: macos-latest"
+assert_job_contains test "if: github.ref == 'refs/heads/main'"
+assert_job_contains test "run: npm test"
+assert_job_contains test "run: node .github/scripts/verify-pages-recovery.mjs"
 assert_job_contains deploy "runs-on: macos-latest"
 workflow=".github/workflows/visual-proof.yml"
 assert_job_contains capture "runs-on: macos-latest"

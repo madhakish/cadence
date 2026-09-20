@@ -81,4 +81,27 @@ assert_classification \
   $'native=true\nmigrations=false\nweb=false' \
   '.github/scripts/verify-native-jobs.sh'
 
+assert_classification \
+  "native UI regression changes cannot skip interaction tests" \
+  $'native=true\nmigrations=false\nweb=false' \
+  'CadenceVisualProofUITests/VisualProofUITests.swift'
+
+# Test each production source independently. A combined fixture can pass
+# because one recognized path masks another missing classification.
+sources="$(ruby -ryaml -e '
+  spec = YAML.load_file("project.yml")
+  spec.fetch("targets").fetch("CadenceMigrationTests").fetch("sources").each do |source|
+    puts(source.is_a?(Hash) ? source.fetch("path") : source)
+  end
+')"
+test -n "$sources"
+while IFS= read -r source; do
+  probe="$source"
+  [[ "$source" == *.swift ]] || probe="$source/classifier-fixture.swift"
+  assert_classification \
+    "hostless target source $source" \
+    $'native=true\nmigrations=true\nweb=false' \
+    "$probe"
+done <<< "$sources"
+
 echo "CI path classifier tests passed"

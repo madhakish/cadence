@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -18,6 +19,7 @@ jobs:
   # its already-passing web-tests job instead of running this suite twice.
   test:
     name: Web tests
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
@@ -29,18 +31,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Require successful validation for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node .github/scripts/verify-pages-recovery.mjs
       - name: Install pinned test deps
         working-directory: web
         run: npm ci
-      - name: Core math parity tests
+      - name: Full web regression suite
         working-directory: web
-        run: node tests/core.test.mjs
-      - name: Runtime smoke test (jsdom + fake-indexeddb)
-        working-directory: web
-        run: node tests/smoke.test.mjs
-      - name: Site and app-mount structure
-        working-directory: web
-        run: node tests/site.test.mjs
+        run: npm test
 
   deploy:
     name: Deploy to GitHub Pages
