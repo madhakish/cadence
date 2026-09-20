@@ -94,6 +94,10 @@ and becomes selectable, configure a main-branch ruleset with these values:
 | Require branch up to date | Enabled |
 | Block force pushes and deletions | Enabled |
 
+The `CadenceCore tests (Linux)` context is a retained compatibility name. It
+runs on GitHub-hosted macOS; changing the context requires a coordinated
+branch-protection migration.
+
 Do not require an optional reviewer job that can skip for missing credentials.
 When independent authorized reviewers are available, choose an approval count
 and dismiss stale approvals. Agents sharing an account are not independent

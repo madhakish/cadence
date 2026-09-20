@@ -362,19 +362,24 @@ before a release is published.
 
 ## CI and releases
 
-The pipeline is a fail-fast ladder: cheap ubuntu suites first, expensive macOS
-builds only behind them. The Linux CadenceCore job also PARSES all app-target
+The pipeline is a fail-fast ladder: Ubuntu preflight first, then macOS core
+and web suites, with app builds behind both. CadenceCore also PARSES all app-target
 Swift (`swiftc -parse`), so a bare syntax error dies in seconds instead of
 minutes later in every macOS build at once.
 
-Pull requests always run Linux CadenceCore tests (with the app-target parse
+Pull requests always run macOS CadenceCore tests (with the app-target parse
 gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
-check. Native validation is change-aware behind that aggregate:
+check. The core check retains its historical `CadenceCore tests (Linux)` name
+for branch-protection compatibility; its runner and Xcode toolchain are macOS.
+Core/web validation, native builds, migration tests, visual captures, and Pages
+artifact staging use explicit GitHub-hosted `macos-latest` runners. Metadata-only
+jobs use GitHub-hosted Ubuntu. No job selects a self-hosted runner.
+Native validation is change-aware behind that aggregate:
 
 - repository hygiene, shell/JavaScript/Ruby/workflow syntax, and CI topology
   contracts must pass before either portable suite starts;
-- the macOS jobs start only after the Linux core and web suites pass, so a
-  red fast test costs zero macOS runner minutes;
+- the app builds start only after core and web suites pass; the core job uses
+  the runner's selected Xcode Swift toolchain and reports its version;
 - the unsigned-device build (Darwin unit tests + production-SDK Release
   compile) runs for native, shared-core, project, or CI-workflow changes;
 - the same pinned conventional-commit analyzer used by semantic-release plans
@@ -386,7 +391,7 @@ check. Native validation is change-aware behind that aggregate:
   release and TestFlight; publisher jobs must never call a build lane;
 - the stable aggregate directly requires both portable suites, so a skipped
   native tier can never hide a core or web failure;
-- docs/web-only changes do not consume macOS runners; and
+- docs/web-only changes still run the macOS core/web suites but skip app builds; and
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
   but a cache miss must regenerate them from the actually shipped apps.

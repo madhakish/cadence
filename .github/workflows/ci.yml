@@ -136,37 +136,35 @@ jobs:
           bash .github/scripts/classify-ci-paths.sh < "$paths" | tee -a "$GITHUB_OUTPUT"
 
   core-tests:
+    # Preserve the required-check context; execution uses macOS below.
     name: CadenceCore tests (Linux)
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
-    container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Linux cannot COMPILE the app target (SwiftUI/SwiftData), but it can
-      # PARSE it. A bare syntax error in app-target Swift used to survive
-      # every fast job and surface minutes later in all the macOS builds at
-      # once; this catches that class in seconds, in the container this job
-      # already pays for. Parse-only: macros, property wrappers, and Apple
-      # attributes are syntactically valid here even though they cannot
-      # type-check off-Darwin. If app code ever adopts syntax newer than this
-      # container's Swift, bump the container (CadenceCore needs the same).
+      - name: Show Xcode Swift toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+      # Catch syntax errors before the downstream production app builds.
+      # Parsing alone does not type-check SwiftUI or SwiftData usage.
       - name: Parse app-target Swift (syntax fail-fast)
         run: |
           find Cadence CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
-            | xargs -0 swiftc -parse
+            | xargs -0 xcrun swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
-        run: swift test
+        run: xcrun swift test
 
   # The CadenceCore↔core.js parity mandate is enforced pre-merge: a PR that
   # touches either side without its mirror fails these suites.
   web-tests:
     name: Web tests (parity + smoke)
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
     outputs:
       simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}
@@ -211,12 +209,8 @@ jobs:
           VERIFY_SIGNED_ARTIFACT: ${{ inputs.verify_signed_artifact || 'false' }}
         run: node .github/scripts/plan-release.mjs
 
-  # The macOS jobs are the expensive tier, so they sit BEHIND the fast Linux
-  # suites: a red core/web/parse failure costs zero macOS minutes, and every
-  # build that does start already has the cheap proofs behind it. The ~40s of
-  # added green-path latency buys a strictly rising pass rate through the
-  # pipeline. Workflow-only PRs still exercise the builds; docs/web-only PRs
-  # do not spend macOS runner minutes.
+  # App builds wait for core, web, and syntax checks. Workflow-only PRs
+  # exercise this tier; docs/web-only PRs run core on macOS but skip app builds.
   # The simulator download and signed App Store IPA are release artifacts.
   # Build them only when the pinned semantic-release analyzer finds a pending
   # release. Already-tagged retries reuse the published IPA; docs:/ci:/test:
@@ -655,7 +649,7 @@ jobs:
     name: Deploy site + web app (Pages)
     needs: [changes, web-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
     concurrency:
       group: pages
@@ -673,7 +667,9 @@ jobs:
           persist-credentials: false
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Stamp build version into the service worker
-        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+        run: |
+          sed -i.bak "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+          rm web/app/sw.js.bak
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
