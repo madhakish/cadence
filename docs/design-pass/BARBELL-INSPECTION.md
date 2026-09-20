@@ -92,8 +92,10 @@ or backup schema and needs no migration.
 
 Add the `visual-proof` label to a same-repository PR to capture the current-set,
 exercise-detail, calculator (steel and bumper), and workout-preview screens.
-The workflow waits for the latest CI attempt for that exact head to succeed
-before starting the simulator. New commits cancel stale captures. Removing
+The workflow waits for the latest CI attempt for that exact head to pass its
+fast Linux suites before starting the simulator (the macOS device build stays
+the merge gate), and restores the previous capture's simulator build so only
+changed sources recompile. New commits cancel stale captures. Removing
 the label stops captures on future updates. Ordinary PRs keep one native build.
 Manual dispatch remains available.
 

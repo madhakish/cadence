@@ -1,7 +1,9 @@
 name: iPhone visual proof
 
 # Deliberate visual QA, manually or on a same-repository PR with visual-proof.
-# Ordinary PRs retain one native build. Opted-in captures wait for green CI.
+# Ordinary PRs retain one native build. Opted-in captures start once the exact
+# head has passed CI's fast Linux suites (the macOS build stays the merge
+# gate) and reuse the previous capture's simulator build.
 
 on:
   workflow_dispatch:
@@ -36,7 +38,7 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Verify gate behavior
         run: node .github/scripts/test-visual-ci.mjs
-      - name: Wait for exact-head CI
+      - name: Wait for exact-head fast suites
         if: github.event_name == 'pull_request'
         env:
           GH_REPO: ${{ github.repository }}
@@ -57,6 +59,15 @@ jobs:
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Restore the previous capture's simulator build
+        # One entry per captured commit; the newest matching entry restores,
+        # so only changed sources recompile.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/visual-proof
+          key: visual-proof-derived-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('project.yml') }}-${{ needs.gate.outputs.sha }}
+          restore-keys: |
+            visual-proof-derived-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('project.yml') }}-
       - name: Select and boot an iPhone
         id: simulator
         run: |
