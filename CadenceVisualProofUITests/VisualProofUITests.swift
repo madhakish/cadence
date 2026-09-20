@@ -93,12 +93,24 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         XCTAssertEqual(toggle.value as? String, "Exploded")
         // The calculator beneath this sheet has its own accessible bar.
-        let artwork = app.scrollViews["barbell-inspection-artwork"]
+        // The artwork is the SceneKit solid where Metal is available and the
+        // sprite scroll view otherwise; both expose the same plate children.
+        let artwork = element("barbell-inspection-artwork")
         let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
         XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-exploded-iphone")
+        if app.buttons["barbell-reset-view"].exists {
+            // Orbit by hand, switch the backdrop, then return to the front view
+            // through the control that VoiceOver and keyboards use.
+            artwork.swipeLeft()
+            capture("barbell-orbit-iphone")
+            app.buttons["Paper"].tap()
+            capture("barbell-paper-backdrop-iphone")
+            app.buttons["Studio"].tap()
+            app.buttons["barbell-reset-view"].tap()
+        }
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "Assembled")
         capture("barbell-assembled-iphone")

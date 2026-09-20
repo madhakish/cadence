@@ -167,18 +167,24 @@ struct BarbellView: View {
         .frame(height: presentation == .compactSide ? 84 : nil)
         .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
-        .accessibilityChildren {
-            ForEach([-1, 1], id: \.self) { side in
-                ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
-                    Text(disc.accessibilityLabel)
-                        .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
-                }
+        .accessibilityChildren { Self.plateChildren(scene: scene, loadout: solution.loadout) }
+    }
+
+    /// Every plate as its own element, each side from the collar outward, then
+    /// the bar-only or collar note — the same order web's focusable plate
+    /// groups take. Shared with the 3D inspector.
+    @ViewBuilder
+    static func plateChildren(scene: BarbellScene, loadout: Loadout) -> some View {
+        ForEach([-1, 1], id: \.self) { side in
+            ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
+                Text(disc.accessibilityLabel)
+                    .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
             }
-            if solution.loadout.perSide.isEmpty {
-                Text(solution.loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
-            } else if solution.loadout.collarLb > 0 {
-                Text("Collars, \(Weight.both(lb: solution.loadout.collarLb)) total")
-            }
+        }
+        if loadout.perSide.isEmpty {
+            Text(loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+        } else if loadout.collarLb > 0 {
+            Text("Collars, \(Weight.both(lb: loadout.collarLb)) total")
         }
     }
 }
@@ -233,25 +239,50 @@ struct BarbellInspectionView: View {
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
     @State private var exploded = true
+    @State private var camera = BarbellInspector.Camera.initial(exploded: true)
+    @State private var backdrop: BarbellBackdrop = .studio
+    @State private var dragBase: BarbellInspector.Camera?
+    @State private var zoomBase: BarbellInspector.Camera?
+    private let solid = BarbellSceneView.isSupported
 
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
         VStack(alignment: .leading, spacing: 12) {
-            GeometryReader { proxy in
-                ScrollView(.horizontal, showsIndicators: true) {
-                    BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
-                        .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
-                               height: exploded ? scene.height : 230)
+            Group {
+                if solid {
+                    // The solid: drag orbits, pinch zooms, double tap resets, a
+                    // single tap explodes or assembles like the sprite view.
+                    BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, exploded: exploded,
+                                     backdrop: backdrop, camera: camera, reduceMotion: reduceMotion)
+                        .frame(height: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                         .contentShape(Rectangle())
+                        .simultaneousGesture(orbitGesture)
+                        .simultaneousGesture(zoomGesture)
+                        .onTapGesture(count: 2) { resetView() }
                         .onTapGesture { toggle() }
+                } else {
+                    GeometryReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
+                                .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
+                                       height: exploded ? scene.height : 230)
+                                .contentShape(Rectangle())
+                                .onTapGesture { toggle() }
+                        }
+                    }
+                    .frame(height: exploded ? scene.height + 20 : 250)
                 }
             }
-            .frame(height: exploded ? scene.height + 20 : 250)
             .accessibilityIdentifier("barbell-inspection-artwork")
+            .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
+            .accessibilityHint(solid ? "Drag to rotate, pinch to zoom, double tap to reset the view" : "")
+            .accessibilityChildren { BarbellView.plateChildren(scene: scene, loadout: solution.loadout) }
             // One quiet line says which view this is and what a tap does; the
             // same control is the accessible toggle.
             HStack {
-                Button(exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect") { toggle() }
+                Button(exploded ? (solid ? "Exploded · tap to assemble" : "38° inspection · tap to collapse")
+                                : (solid ? "Assembled · tap to explode" : "Front view · tap to inspect")) { toggle() }
                     .buttonStyle(.plain)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -260,8 +291,24 @@ struct BarbellInspectionView: View {
                     .accessibilityValue(exploded ? "Exploded" : "Assembled")
                     .accessibilityIdentifier("barbell-explode-toggle")
                 Spacer()
-                if exploded {
+                if exploded && !solid {
                     Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if solid {
+                // Backdrop and reset are the keyboard/VoiceOver path for what
+                // drag and pinch do by hand.
+                HStack(spacing: 12) {
+                    Picker("Backdrop", selection: $backdrop) {
+                        ForEach(BarbellBackdrop.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("barbell-backdrop")
+                    Button("Reset view") { resetView() }
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .accessibilityHint("Returns the camera to the front view")
+                        .accessibilityIdentifier("barbell-reset-view")
                 }
             }
             Text("Plates per side").font(.headline)
@@ -287,6 +334,35 @@ struct BarbellInspectionView: View {
 
     private func toggle() {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
+    }
+
+    private func resetView() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) {
+            camera = BarbellInspector.Camera.initial(exploded: exploded)
+        }
+    }
+
+    /// Horizontal drag turns the bar, vertical drag raises the eye; the shared
+    /// model wraps yaw and clamps pitch so the bar never leaves the frame.
+    private var orbitGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let base = dragBase ?? camera
+                dragBase = base
+                camera = base.orbiting(yaw: Double(value.translation.width) * 0.35,
+                                       pitch: Double(-value.translation.height) * 0.3)
+            }
+            .onEnded { _ in dragBase = nil }
+    }
+
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let base = zoomBase ?? camera
+                zoomBase = base
+                camera = base.zoomed(by: Double(value.magnification))
+            }
+            .onEnded { _ in zoomBase = nil }
     }
 }
 
