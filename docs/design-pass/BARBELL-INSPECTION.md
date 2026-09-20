@@ -77,7 +77,12 @@ or backup schema and needs no migration.
   the lathe meshes, the camera fit, and the no-WebGL fallback.
 - `web/tools/capture-web-proof.mjs` runs Chromium with software WebGL, reports
   which renderer produced `web-plate-inspection-*.png`, and also captures the
-  orbited and Paper-backdrop states.
+  exploded, orbited, and Paper-backdrop states.
+- Captured proofs of the solid live under `docs/design-pass/after/` as
+  `plate-inspector-3d-{assembled,exploded,orbit,paper}-{web,iphone}.png`
+  (iPhone from run `0810ca0` of the visual-proof workflow). Known gap on the
+  simulator captures: the floor shadow and the knurl normal map do not show
+  there, while the web solid renders both; device verification is pending.
 - `CadenceVisualProofUITests.test04PlateCalculatorHero` opens inspection for a
   normal load, captures the exploded and assembled states, and — when the solid
   is present — orbits it, switches to the Paper backdrop, and resets through the
