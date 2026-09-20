@@ -21,9 +21,10 @@ while IFS= read -r path; do
   case "$path" in
     # Every source compiled into the hostless CadenceMigrationTests target
     # (see project.yml) is compatibility-bearing: the backup and program-file
-    # codecs plus the template/seed catalogs are proven only by that suite,
+    # codecs plus the template/seed catalogs and shared core dependency are
+    # proven together only by that suite,
     # so a change to any of them must run it.
-    Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|Cadence/Services/SessionCorrectionService.swift|Cadence/Services/ActivitySession.swift|Cadence/Services/ProgramActivationService.swift|Cadence/Services/TFHProgramService.swift|Cadence/Services/ProgramSession.swift|Cadence/Services/TFHSession.swift|Cadence/Services/ProgramEquipmentService.swift|Cadence/Services/WorkoutCommandService.swift|Cadence/Services/MilestoneProjection.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
+    CadenceCore/*|Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|Cadence/Services/SessionCorrectionService.swift|Cadence/Services/ActivitySession.swift|Cadence/Services/ProgramActivationService.swift|Cadence/Services/TFHProgramService.swift|Cadence/Services/ProgramSession.swift|Cadence/Services/TFHSession.swift|Cadence/Services/ProgramEquipmentService.swift|Cadence/Services/WorkoutCommandService.swift|Cadence/Services/MilestoneProjection.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
       migrations=true
       ;;
   esac

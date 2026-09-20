@@ -11,7 +11,7 @@ The broader requirements audit is tracked in [#254](https://github.com/madhakish
 | Core and web | Every CI run | Full existing suites on GitHub-hosted macOS |
 | Production device compile | Native-affecting PR | Release build of the iOS device target |
 | iPhone interactions | Native-affecting CI run | Four XCTest interactions; xcresult summary must show exactly four passed and zero failed/skipped |
-| Native integration/migrations | Persistence-bearing production sources | Hostless SwiftData suite, with required actual shipped-store fixtures |
+| Native integration/migrations | Persistence-bearing production sources and shared CadenceCore | Hostless SwiftData suite, with required actual shipped-store fixtures |
 | Release promotion | Successful full aggregate | Verified signed IPA, no rebuild during promotion |
 | Normal Pages | Successful full aggregate | Same commit as tested; stamped Pages artifact |
 | Manual Pages recovery | Main only; exact commit has successful validation | Full web regression suite before deployment |

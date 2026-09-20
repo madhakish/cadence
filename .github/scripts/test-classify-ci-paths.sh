@@ -37,8 +37,8 @@ assert_classification \
   $'Cadence/Models/SessionModels.swift\nCadenceMigrationTests/PersistenceMigrationTests.swift'
 
 assert_classification \
-  "shared core changes" \
-  $'native=true\nmigrations=false\nweb=true' \
+  "shared core dependency changes run native integration" \
+  $'native=true\nmigrations=true\nweb=true' \
   'CadenceCore/Sources/CadenceCore/Progression.swift'
 
 assert_classification \
