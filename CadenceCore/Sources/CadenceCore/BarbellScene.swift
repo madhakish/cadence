@@ -9,6 +9,13 @@ import Foundation
 /// face, then restores the metal hub.
 public struct PlateFaceTint: Equatable, Sendable {
     public let matrix: [Double]
+    private let gains: [Double]
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var red: Double { gains[0] }
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var green: Double { gains[1] }
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var blue: Double { gains[2] }
 
     public static let identity: [Double] = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
     /// Median face luminance of each rendered sprite family (measured on the
@@ -21,14 +28,27 @@ public struct PlateFaceTint: Equatable, Sendable {
     /// saturating to a single hue.
     public static let greyMix = 0.12
 
+    private static func channelGains(token: String) -> [Double] {
+        guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
+            return [1, 1, 1]
+        }
+        return [Double((hex >> 16) & 255) / 255, Double((hex >> 8) & 255) / 255, Double(hex & 255) / 255]
+    }
+
+    /// Source-compatible initializer kept for CadenceCore library consumers.
+    public init(token: String) {
+        self.init(token: token, style: .steel)
+    }
+
     /// Black iron is the untinted texture; every other token colourises the
     /// face from the palette fill.
     public init(token: String, style: PlateVisualStyle) {
+        gains = PlateFaceTint.channelGains(token: token)
         guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
             matrix = PlateFaceTint.identity
             return
         }
-        let fill = [Double((hex >> 16) & 255) / 255, Double((hex >> 8) & 255) / 255, Double(hex & 255) / 255]
+        let fill = gains
         let lift = PlateFaceTint.lift(for: style)
         let grey = lift * PlateFaceTint.greyMix
         let luma = [0.2126, 0.7152, 0.0722]

@@ -38,6 +38,17 @@ final class BarbellSceneTests: XCTestCase {
         let blue = PlateFaceTint(token: "blue", style: .bumper).apply(luminance: 0.152)
         XCTAssertGreaterThan(blue[2], blue[1]); XCTAssertGreaterThan(blue[1], blue[0])
     }
+
+    func testPlateFaceTintLegacyAPICompatibility() {
+        let yellow = PlateFaceTint(token: "yellow")
+        XCTAssertEqual(yellow.red, Double(0xE8) / 255, accuracy: 1e-12)
+        XCTAssertEqual(yellow.green, Double(0xB0) / 255, accuracy: 1e-12)
+        XCTAssertEqual(yellow.blue, Double(0x08) / 255, accuracy: 1e-12)
+        let black = PlateFaceTint(token: "black")
+        XCTAssertEqual(black.red, 1)
+        XCTAssertEqual(black.green, 1)
+        XCTAssertEqual(black.blue, 1)
+    }
     func testInspectionPreservesDimensionsOrderAndMirrors() {
         let loadout = Loadout(bar: .bar45lb, perSide: [45, 10, 25, 2.5].map {
             PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)
