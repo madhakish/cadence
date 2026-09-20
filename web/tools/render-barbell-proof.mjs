@@ -6,6 +6,7 @@ import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as C from '../app/js/core.js';
 import { barbellScene } from '../app/js/barbell-scene.js';
+import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera } from '../app/js/barbell-inspector.js';
 const dom = new JSDOM('<html><body></body></html>');
 global.document = dom.window.document;
 const B = await import('../app/js/barbell.js');
@@ -34,4 +35,14 @@ for (const [style,solution] of profiles) for (const exploded of [false,true]) {
 }
 // Intentional generator output consumed by both clients' deterministic tests.
 await writeFile(new URL('../tests/fixtures/barbell-scene.json',import.meta.url),JSON.stringify(fixtures,null,2)+'\n');
+// The 3D inspector model: one half-exploded layout, the lathe profiles per
+// family, and camera positions, pinned for CadenceCore's BarbellInspector.
+const inspector = { solution: { bar: fixtures[0].loadout.bar, perSide: fixtures[0].loadout.perSide }, style: 'steel', explode: 0.5 };
+inspector.layout = barbellLayout(inspector.solution, inspector.style, inspector.explode);
+inspector.profiles = [['bumper', 450, 60], ['steel', 450, 27], ['change', 160, 16]]
+  .map(([family, diameter, thickness]) => ({ family, diameter, thickness, points: plateProfile(family, diameter, thickness) }));
+inspector.cameras = [{ camera: inspectorCamera(true), distance: 1600 }, { camera: inspectorCamera(false), distance: 1600 },
+  { camera: { yaw: 90, pitch: 0, zoom: 2 }, distance: 1000 }, { camera: { yaw: -120, pitch: 60, zoom: 0.7 }, distance: 1000 }]
+  .map((c) => ({ ...c, position: cameraOrbitPosition(c.camera, c.distance) }));
+await writeFile(new URL('../tests/fixtures/barbell-3d.json',import.meta.url),JSON.stringify(inspector,null,2)+'\n');
 console.log(`Production SVG proofs written to ${output}`);
