@@ -50,8 +50,12 @@ assert_workflow_contains() {
 }
 
 # Preflight is the only entry to the portable suites, which are the only entry
-# to expensive Darwin work.
+# to expensive app builds.
 assert_job_contains core-tests "needs: changes"
+assert_job_contains core-tests "runs-on: macos-latest"
+assert_job_not_contains core-tests "container:"
+assert_job_contains core-tests "xcrun swiftc -parse"
+assert_job_contains core-tests "run: xcrun swift test"
 assert_job_contains web-tests "needs: changes"
 assert_job_contains simulator-build "needs: [changes, core-tests, web-tests]"
 assert_job_contains store-build "needs: [changes, core-tests, web-tests]"
