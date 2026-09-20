@@ -41,7 +41,7 @@ export function plateGeometry(plate, style = 'steel') {
 export const PLATE_TINT_IDENTITY = [1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0];
 // Median face luminance of each rendered sprite family (measured, hub excluded);
 // the lift maps it to 85% of the fill so highlights keep headroom.
-export const plateTintLift = (style) => 0.85 / (style === "bumper" ? 0.451 : 0.449);
+export const plateTintLift = (style) => 0.85 / (style === "bumper" ? 0.459 : 0.453);
 export const PLATE_TINT_GREY_MIX = 0.12;
 export function plateTintMatrix(token, style = "steel") {
   const fill = token === "black" ? null : C.PLATE_COLOURS[token]?.fill;

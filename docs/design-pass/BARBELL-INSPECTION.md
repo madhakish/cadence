@@ -40,8 +40,8 @@ hub. SVG paint-server identifiers are unique per view.
 - Compact rows use the same rendered scene as full views on both clients.
 - Native and web colourise the full face with the same luminance matrix and
   restore the untinted metal hub; the camera sits at the −x end, so far parts
-  paint first and near parts last, and every plate bore is transparent so the
-  shaft shows through. Native accessibility exposes each plate's side,
+  paint first and near parts last, and every plate bore is open in the sprites
+  so the shaft shows through wherever the plate's own thickness lets it. Native accessibility exposes each plate's side,
   position and exact denomination independently of the inspection button.
 - Existing plate references, inventory, and solving policy are unchanged.
 

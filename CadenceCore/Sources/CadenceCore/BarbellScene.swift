@@ -15,7 +15,7 @@ public struct PlateFaceTint: Equatable, Sendable {
     /// shipped PNGs, hub excluded). The lift maps it to 85% of the fill so
     /// the brighter 15% of texels keep headroom before clamping.
     public static func lift(for style: PlateVisualStyle) -> Double {
-        0.85 / (style == .bumper ? 0.451 : 0.449)
+        0.85 / (style == .bumper ? 0.459 : 0.453)
     }
     /// Fraction of the lift mixed in as grey: highlights whiten instead of
     /// saturating to a single hue.

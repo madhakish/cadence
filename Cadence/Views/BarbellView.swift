@@ -113,8 +113,8 @@ struct BarbellView: View {
                     layer.draw(image, in: CGRect(origin: .zero, size: spriteSize))
                 }
             }
-            // The bar goes under everything: every plate bore is transparent, so
-            // the sleeves and shaft show through the hubs. The camera sits at the
+            // The bar goes under everything: every plate bore is open in the sprites,
+            // so the sleeves and shaft show through wherever the plate's thickness lets them. The camera sits at the
             // −x end: the far (+x) collar precedes the plates, the near one follows.
             placeBar("bar-sleeve-\(angle)", from: point(scene.shoulder), to: point(scene.end))
             placeBar("bar-shaft-\(angle)", from: point(-scene.shoulder), to: point(scene.shoulder))

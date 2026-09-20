@@ -40,13 +40,15 @@ def sd_cyl_x(p, r, h):
 def sd_round_cyl_x(p, r, h, e):
     return sd_cyl_x(p, r - e, h - e) - e
 
-def plate_sdf(family, r_mm, t_mm):
+def plate_sdf(family, d_mm, t_mm):
     """Returns (distance, material) for a plate of radius 1 with proportional
-    thickness. Materials: 0 body (rubber or steel), 1 chrome hub, 2 bore."""
+    thickness. `d_mm` is the plate DIAMETER (the shape key is diameter×thickness);
+    every proportion below is in plate radii. Materials: 0 body (rubber or
+    steel), 1 chrome hub, 2 bore."""
     R = 1.0
-    h = (t_mm / 2) / (r_mm)          # half thickness in plate radii
-    bore = 50.5 / r_mm / 2 * 2       # 50.5 mm bore → radius
-    bore_r = 25.25 / r_mm
+    r_mm = d_mm / 2
+    h = (t_mm / 2) / r_mm            # half thickness in plate radii
+    bore_r = 25.25 / r_mm            # 50.5 mm Olympic bore → radius
     hub_r = 0.235 if family == "bumper" else 0.2
     edge = 0.06 if family == "bumper" else 0.018
 
@@ -313,8 +315,8 @@ def framing(extent, distance):
     return math.degrees(2 * math.atan(extent * 1.08 / distance))
 
 def render_plate(family, key, angle_name, size=512):
-    r_mm, t_mm = (int(v) for v in key.split("x"))
-    sdf, h = plate_sdf(family, r_mm, t_mm)
+    d_mm, t_mm = (int(v) for v in key.split("x"))
+    sdf, h = plate_sdf(family, d_mm, t_mm)
     yaw = ANGLES[angle_name]
     distance = 16.0
     fov = framing(1.05, distance)
@@ -353,6 +355,7 @@ if __name__ == "__main__":
     prototype = "--prototype" in args
     QUICK = "--quick" in args
     bars_only = "--bars-only" in args
+    plates_only = "--plates-only" in args
     out = [a for a in args if not a.startswith("--")][0]
     os.makedirs(out, exist_ok=True)
     manifest = []
@@ -371,7 +374,7 @@ if __name__ == "__main__":
             name = f"plate-{family}-{key}-{angle}.png"
             img.save(os.path.join(out, name), optimize=True)
             manifest.append(dict(file=name, **meta)); print("rendered", name, flush=True)
-    kinds = ("sleeve-near", "collar-near") if "--near-only" in args else ("shaft", "sleeve", "collar", "sleeve-near", "collar-near")
+    kinds = () if plates_only else ("sleeve-near", "collar-near") if "--near-only" in args else ("shaft", "sleeve", "collar", "sleeve-near", "collar-near")
     for kind in kinds:
         for angle in angles:
             img, meta = render_bar(kind, angle)

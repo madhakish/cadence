@@ -131,8 +131,8 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   const root = el('g', { transform: `translate(${scene.width/2} ${scene.height/2})` });
   svg.append(root);
   const point = x => ({ x: x * scene.axisX, y: x * scene.axisY });
-  // The bar goes under everything: every plate bore is transparent, so the
-  // sleeves and shaft show through the hubs. The camera sits at the −x end,
+  // The bar goes under everything: every plate bore is open in the sprites, so
+  // the sleeves and shaft show through wherever the plate's thickness lets them. The camera sits at the −x end,
   // so the far (+x) collar precedes the plates and the near one follows them.
   const axisLength = Math.hypot(scene.axisX, scene.axisY);
   root.append(placeBarSprite(`bar-sleeve-${angle}`, point(scene.shoulder), point(scene.end), axisLength));

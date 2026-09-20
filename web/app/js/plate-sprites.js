@@ -224,10 +224,10 @@ export const PLATE_SPRITES = {
    "shape": "450x25",
    "angle": "assembled",
    "faceCenter": [
-    250.03,
-    256.47
+    244.06,
+    256.93
    ],
-   "faceRadius": 222.6,
+   "faceRadius": 222.71,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -240,10 +240,10 @@ export const PLATE_SPRITES = {
    "shape": "450x25",
    "angle": "exploded",
    "faceCenter": [
-    251.05,
-    256.93
+    246.1,
+    257.86
    ],
-   "faceRadius": 222.71,
+   "faceRadius": 222.93,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -256,10 +256,10 @@ export const PLATE_SPRITES = {
    "shape": "450x35",
    "angle": "assembled",
    "faceCenter": [
-    247.64,
-    256.65
+    239.28,
+    257.3
    ],
-   "faceRadius": 222.64,
+   "faceRadius": 222.8,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -272,10 +272,10 @@ export const PLATE_SPRITES = {
    "shape": "450x35",
    "angle": "exploded",
    "faceCenter": [
-    249.07,
-    257.3
+    242.12,
+    258.6
    ],
-   "faceRadius": 222.8,
+   "faceRadius": 223.11,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -288,10 +288,10 @@ export const PLATE_SPRITES = {
    "shape": "450x40",
    "angle": "assembled",
    "faceCenter": [
-    246.45,
-    256.74
+    236.88,
+    257.49
    ],
-   "faceRadius": 222.67,
+   "faceRadius": 222.84,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -304,10 +304,10 @@ export const PLATE_SPRITES = {
    "shape": "450x40",
    "angle": "exploded",
    "faceCenter": [
-    248.08,
-    257.48
+    240.13,
+    258.97
    ],
-   "faceRadius": 222.84,
+   "faceRadius": 223.2,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -320,10 +320,10 @@ export const PLATE_SPRITES = {
    "shape": "450x48",
    "angle": "assembled",
    "faceCenter": [
-    244.54,
-    256.89
+    233.05,
+    257.79
    ],
-   "faceRadius": 222.7,
+   "faceRadius": 222.91,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -336,10 +336,10 @@ export const PLATE_SPRITES = {
    "shape": "450x48",
    "angle": "exploded",
    "faceCenter": [
-    246.49,
-    257.78
+    236.95,
+    259.57
    ],
-   "faceRadius": 222.91,
+   "faceRadius": 223.34,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -352,10 +352,10 @@ export const PLATE_SPRITES = {
    "shape": "450x52",
    "angle": "assembled",
    "faceCenter": [
-    243.58,
-    256.97
+    231.14,
+    257.94
    ],
-   "faceRadius": 222.72,
+   "faceRadius": 222.95,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -368,10 +368,10 @@ export const PLATE_SPRITES = {
    "shape": "450x52",
    "angle": "exploded",
    "faceCenter": [
-    245.7,
-    257.93
+    235.35,
+    259.87
    ],
-   "faceRadius": 222.95,
+   "faceRadius": 223.41,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -384,10 +384,10 @@ export const PLATE_SPRITES = {
    "shape": "450x60",
    "angle": "assembled",
    "faceCenter": [
-    241.67,
-    257.12
+    227.3,
+    258.24
    ],
-   "faceRadius": 222.75,
+   "faceRadius": 223.02,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -400,10 +400,10 @@ export const PLATE_SPRITES = {
    "shape": "450x60",
    "angle": "exploded",
    "faceCenter": [
-    244.11,
-    258.23
+    232.16,
+    260.47
    ],
-   "faceRadius": 223.02,
+   "faceRadius": 223.55,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -416,10 +416,10 @@ export const PLATE_SPRITES = {
    "shape": "450x65",
    "angle": "assembled",
    "faceCenter": [
-    240.47,
-    257.21
+    224.9,
+    258.42
    ],
-   "faceRadius": 222.78,
+   "faceRadius": 223.07,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -432,10 +432,10 @@ export const PLATE_SPRITES = {
    "shape": "450x65",
    "angle": "exploded",
    "faceCenter": [
-    243.12,
-    258.42
+    230.16,
+    260.84
    ],
-   "faceRadius": 223.06,
+   "faceRadius": 223.64,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -448,10 +448,10 @@ export const PLATE_SPRITES = {
    "shape": "450x70",
    "angle": "assembled",
    "faceCenter": [
-    239.28,
-    257.3
+    222.5,
+    258.61
    ],
-   "faceRadius": 222.8,
+   "faceRadius": 223.11,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -464,10 +464,10 @@ export const PLATE_SPRITES = {
    "shape": "450x70",
    "angle": "exploded",
    "faceCenter": [
-    242.12,
-    258.6
+    228.17,
+    261.22
    ],
-   "faceRadius": 223.11,
+   "faceRadius": 223.73,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -480,10 +480,10 @@ export const PLATE_SPRITES = {
    "shape": "450x75",
    "angle": "assembled",
    "faceCenter": [
-    238.08,
-    257.4
+    220.1,
+    258.8
    ],
-   "faceRadius": 222.82,
+   "faceRadius": 223.15,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -496,10 +496,10 @@ export const PLATE_SPRITES = {
    "shape": "450x75",
    "angle": "exploded",
    "faceCenter": [
-    241.13,
-    258.79
+    226.17,
+    261.59
    ],
-   "faceRadius": 223.15,
+   "faceRadius": 223.82,
    "hubRadius": 0.235,
    "size": [
     512,
@@ -512,10 +512,10 @@ export const PLATE_SPRITES = {
    "shape": "135x12",
    "angle": "assembled",
    "faceCenter": [
-    246.45,
-    256.74
+    236.88,
+    257.49
    ],
-   "faceRadius": 222.67,
+   "faceRadius": 222.84,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -528,10 +528,10 @@ export const PLATE_SPRITES = {
    "shape": "135x12",
    "angle": "exploded",
    "faceCenter": [
-    248.08,
-    257.48
+    240.13,
+    258.97
    ],
-   "faceRadius": 222.84,
+   "faceRadius": 223.2,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -544,10 +544,10 @@ export const PLATE_SPRITES = {
    "shape": "160x16",
    "angle": "assembled",
    "faceCenter": [
-    245.25,
-    256.84
+    234.49,
+    257.68
    ],
-   "faceRadius": 222.69,
+   "faceRadius": 222.89,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -560,10 +560,10 @@ export const PLATE_SPRITES = {
    "shape": "160x16",
    "angle": "exploded",
    "faceCenter": [
-    247.09,
-    257.67
+    238.14,
+    259.35
    ],
-   "faceRadius": 222.89,
+   "faceRadius": 223.28,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -576,10 +576,10 @@ export const PLATE_SPRITES = {
    "shape": "175x18",
    "angle": "assembled",
    "faceCenter": [
-    244.95,
-    256.86
+    233.87,
+    257.73
    ],
-   "faceRadius": 222.69,
+   "faceRadius": 222.9,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -592,10 +592,10 @@ export const PLATE_SPRITES = {
    "shape": "175x18",
    "angle": "exploded",
    "faceCenter": [
-    246.83,
-    257.72
+    237.63,
+    259.44
    ],
-   "faceRadius": 222.9,
+   "faceRadius": 223.31,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -608,10 +608,10 @@ export const PLATE_SPRITES = {
    "shape": "190x19",
    "angle": "assembled",
    "faceCenter": [
-    245.25,
-    256.84
+    234.49,
+    257.68
    ],
-   "faceRadius": 222.69,
+   "faceRadius": 222.89,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -624,10 +624,10 @@ export const PLATE_SPRITES = {
    "shape": "190x19",
    "angle": "exploded",
    "faceCenter": [
-    247.09,
-    257.67
+    238.14,
+    259.35
    ],
-   "faceRadius": 222.89,
+   "faceRadius": 223.28,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -640,10 +640,10 @@ export const PLATE_SPRITES = {
    "shape": "210x19",
    "angle": "assembled",
    "faceCenter": [
-    246.28,
-    256.76
+    236.54,
+    257.52
    ],
-   "faceRadius": 222.67,
+   "faceRadius": 222.85,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -656,10 +656,10 @@ export const PLATE_SPRITES = {
    "shape": "210x19",
    "angle": "exploded",
    "faceCenter": [
-    247.94,
-    257.51
+    239.85,
+    259.03
    ],
-   "faceRadius": 222.85,
+   "faceRadius": 223.21,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -672,10 +672,10 @@ export const PLATE_SPRITES = {
    "shape": "230x20",
    "angle": "assembled",
    "faceCenter": [
-    246.66,
-    256.73
+    237.3,
+    257.46
    ],
-   "faceRadius": 222.66,
+   "faceRadius": 222.84,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -688,10 +688,10 @@ export const PLATE_SPRITES = {
    "shape": "230x20",
    "angle": "exploded",
    "faceCenter": [
-    248.25,
-    257.45
+    240.48,
+    258.91
    ],
-   "faceRadius": 222.83,
+   "faceRadius": 223.18,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -704,10 +704,10 @@ export const PLATE_SPRITES = {
    "shape": "325x20",
    "angle": "assembled",
    "faceCenter": [
-    249.39,
-    256.52
+    242.77,
+    257.03
    ],
-   "faceRadius": 222.61,
+   "faceRadius": 222.73,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -720,10 +720,10 @@ export const PLATE_SPRITES = {
    "shape": "325x20",
    "angle": "exploded",
    "faceCenter": [
-    250.52,
-    257.03
+    245.03,
+    258.06
    ],
-   "faceRadius": 222.73,
+   "faceRadius": 222.98,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -736,10 +736,10 @@ export const PLATE_SPRITES = {
    "shape": "325x23",
    "angle": "assembled",
    "faceCenter": [
-    248.4,
-    256.59
+    240.79,
+    257.19
    ],
-   "faceRadius": 222.63,
+   "faceRadius": 222.77,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -752,10 +752,10 @@ export const PLATE_SPRITES = {
    "shape": "325x23",
    "angle": "exploded",
    "faceCenter": [
-    249.7,
-    257.18
+    243.38,
+    258.37
    ],
-   "faceRadius": 222.77,
+   "faceRadius": 223.05,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -768,10 +768,10 @@ export const PLATE_SPRITES = {
    "shape": "400x21",
    "angle": "assembled",
    "faceCenter": [
-    250.36,
-    256.44
+    244.72,
+    256.88
    ],
-   "faceRadius": 222.59,
+   "faceRadius": 222.7,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -784,10 +784,10 @@ export const PLATE_SPRITES = {
    "shape": "400x21",
    "angle": "exploded",
    "faceCenter": [
-    251.33,
-    256.88
+    246.64,
+    257.75
    ],
-   "faceRadius": 222.7,
+   "faceRadius": 222.91,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -800,10 +800,10 @@ export const PLATE_SPRITES = {
    "shape": "400x25",
    "angle": "assembled",
    "faceCenter": [
-    249.29,
-    256.52
+    242.57,
+    257.05
    ],
-   "faceRadius": 222.61,
+   "faceRadius": 222.74,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -816,10 +816,10 @@ export const PLATE_SPRITES = {
    "shape": "400x25",
    "angle": "exploded",
    "faceCenter": [
-    250.43,
-    257.04
+    244.86,
+    258.09
    ],
-   "faceRadius": 222.74,
+   "faceRadius": 222.99,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -832,10 +832,10 @@ export const PLATE_SPRITES = {
    "shape": "450x22",
    "angle": "assembled",
    "faceCenter": [
-    250.75,
-    256.41
+    245.49,
+    256.82
    ],
-   "faceRadius": 222.59,
+   "faceRadius": 222.68,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -848,10 +848,10 @@ export const PLATE_SPRITES = {
    "shape": "450x22",
    "angle": "exploded",
    "faceCenter": [
-    251.65,
-    256.82
+    247.29,
+    257.63
    ],
-   "faceRadius": 222.68,
+   "faceRadius": 222.88,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -864,10 +864,10 @@ export const PLATE_SPRITES = {
    "shape": "450x27",
    "angle": "assembled",
    "faceCenter": [
-    249.56,
-    256.5
+    243.1,
+    257.01
    ],
-   "faceRadius": 222.61,
+   "faceRadius": 222.73,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -880,10 +880,10 @@ export const PLATE_SPRITES = {
    "shape": "450x27",
    "angle": "exploded",
    "faceCenter": [
-    250.66,
-    257
+    245.3,
+    258.01
    ],
-   "faceRadius": 222.73,
+   "faceRadius": 222.97,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -896,10 +896,10 @@ export const PLATE_SPRITES = {
    "shape": "450x30",
    "angle": "assembled",
    "faceCenter": [
-    248.84,
-    256.56
+    241.67,
+    257.12
    ],
-   "faceRadius": 222.62,
+   "faceRadius": 222.75,
    "hubRadius": 0.2,
    "size": [
     512,
@@ -912,10 +912,10 @@ export const PLATE_SPRITES = {
    "shape": "450x30",
    "angle": "exploded",
    "faceCenter": [
-    250.06,
-    257.11
+    244.11,
+    258.23
    ],
-   "faceRadius": 222.75,
+   "faceRadius": 223.02,
    "hubRadius": 0.2,
    "size": [
     512,
