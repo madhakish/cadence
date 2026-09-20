@@ -382,6 +382,11 @@ Native validation is change-aware behind that aggregate:
   the runner's selected Xcode Swift toolchain and reports its version;
 - the unsigned-device build (Darwin unit tests + production-SDK Release
   compile) runs for native, shared-core, project, or CI-workflow changes;
+- the same native paths require focused iPhone interaction tests for next-lift
+  advancement, plank timing, set-layout stability, and accessible calculator
+  input. All four must execute with zero skips; result bundles survive failures;
+- production services compiled into the hostless test target must trigger that
+  suite independently; classifier tests derive their path list from project.yml;
 - the same pinned conventional-commit analyzer used by semantic-release plans
   release artifacts after the fast suites; a pending release builds the
   simulator download and one signed App Store IPA, while non-release and
@@ -400,7 +405,7 @@ New commits cancel the entire stale workflow for the same pull request. Main
 and manually dispatched production runs remain serialized and are never
 cancelled by a newer run. Every job has an explicit timeout so a hung toolchain
 cannot consume the platform's six-hour default.
-Do not remove the fast-test dependencies or restore both iOS builds on pull
+Do not remove the fast-test dependencies or restore both release artifact builds on pull
 requests: recent failures proved they reported the same compiler error, while a
 doomed build kept running minutes after CadenceCore had failed. If PRs compile
 one target, keep the production device target; it is both faster and stricter.
@@ -415,7 +420,9 @@ sealed. The release tag is the handoff to promotion, not permission to rebuild.
 GitHub release uploads run independently with retries and must never suppress
 TestFlight. `workflow_dispatch` with `force_testflight=true` re-downloads the
 latest release's signed IPA and checksum and promotes those exact bytes. Web
-deploys reuse the CI web-test result. `verify_signed_artifact=true` is the
+deploys wait for the full aggregate and reuse the CI web-test result. Manual
+Pages recovery is main-only, requires a successful validation aggregate for that exact commit,
+and reruns the full web regression suite. See [CI acceptance](CI-ACCEPTANCE.md). `verify_signed_artifact=true` is the
 non-publishing proof path for signing/Fastlane changes and builds only the
 signed IPA. `pages.yml` is manual recovery only. See `docs/TESTFLIGHT.md`; do
 not weaken

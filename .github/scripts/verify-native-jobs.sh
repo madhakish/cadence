@@ -45,4 +45,6 @@ require_job_result "iOS Simulator build" "${SIMULATOR_REQUIRED:-}" "${SIMULATOR_
 require_job_result "signed release artifact" "${STORE_REQUIRED:-}" "${STORE_RESULT:-}"
 require_job_result "shipped-store migration tests" "${MIGRATIONS_REQUIRED:-}" "${MIGRATION_RESULT:-}"
 
+require_job_result "native interaction tests" "${NATIVE_SMOKE_REQUIRED:-}" "${NATIVE_SMOKE_RESULT:-}"
+
 echo "Required CI jobs passed"

@@ -18,6 +18,8 @@ run_gate() {
     STORE_RESULT="$9" \
     MIGRATIONS_REQUIRED="${10}" \
     MIGRATION_RESULT="${11}" \
+    NATIVE_SMOKE_REQUIRED="${12:-false}" \
+    NATIVE_SMOKE_RESULT="${13:-skipped}" \
     bash "$gate"
 }
 
@@ -76,5 +78,14 @@ expect_fail "required migration tests skipped" \
   success success success false skipped false skipped false skipped true skipped
 expect_fail "invalid requirement value" \
   success success success required success false skipped false skipped false skipped
+
+expect_pass "required native interactions passed" \
+  success success success true success false skipped false skipped false skipped true success
+expect_fail "required native interactions skipped" \
+  success success success true success false skipped false skipped false skipped true skipped
+expect_fail "required native interactions failed" \
+  success success success true success false skipped false skipped false skipped true failure
+expect_fail "unexpected native interactions ran" \
+  success success success false skipped false skipped false skipped false skipped false success
 
 echo "CI job aggregate contract tests passed ($scenarios scenarios)"
