@@ -157,6 +157,12 @@ fi
 assert_job_contains web-tests 'run: npx --no-install playwright install chromium webkit'
 assert_job_contains web-tests 'run: npm run test:browser'
 assert_job_contains web-tests 'path: web/test-results/'
+browser_command="$(node -p "JSON.parse(require('fs').readFileSync('web/package.json', 'utf8')).scripts['test:browser']")"
+if [[ "$browser_command" != 'playwright test && node tools/verify-feature-coverage.mjs' ]]; then
+  echo 'browser acceptance must validate the executed requirement report' >&2
+  exit 1
+fi
+
 if ! grep -Fq 'run: npm run test:browser' .github/workflows/pages.yml; then
   echo 'manual Pages must execute browser acceptance' >&2
   exit 1

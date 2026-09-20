@@ -13,7 +13,9 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 // alternate worker, storage stubs or production test hooks.
 export async function startServer() {
   let build = 'acceptance-a';
+  let disconnected = false;
   const server = createServer(async (req, res) => {
+    if (disconnected) { req.socket.destroy(); return; }
     const pathname = new URL(req.url, 'http://localhost').pathname;
     if (!pathname.startsWith('/cadence/')) { res.writeHead(404).end(); return; }
     const relative = decodeURIComponent(pathname.slice('/cadence/'.length));
@@ -32,6 +34,7 @@ export async function startServer() {
   return {
     url: `http://127.0.0.1:${server.address().port}/cadence/app/`,
     deploy: () => { build = 'acceptance-b'; },
+    disconnect: () => { disconnected = true; server.closeAllConnections(); },
     close: () => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }),
   };
 }

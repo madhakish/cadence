@@ -121,12 +121,15 @@ test('[WEB-WORKOUT-REOPEN] edited work survives reload and a new tab', async ({ 
   expect(await snapshot(reopened)).toEqual(before);
 });
 
-test('[WEB-OFFLINE-RESUME] cached app resumes and banks work without a network', async ({ page, context, app }) => {
+test('[WEB-OFFLINE-RESUME] cached app resumes and banks work without a network', async ({ page, app }) => {
   const before = await startWorkout(page);
-  await context.setOffline(true);
-  const response = await page.reload();
-  expect(await page.evaluate(() => navigator.onLine)).toBe(false);
-  expect(response.fromServiceWorker()).toBe(true);
+  // Cut the actual transport instead of Playwright's WebKit offline emulation
+  // (which fails navigation internally). The server sends no HTTP response;
+  // a direct Node request proves it is unreachable before trusting the cache.
+  app.disconnect();
+  await expect(fetch(app.url, { signal: AbortSignal.timeout(3000) })).rejects.toThrow();
+  await page.reload();
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await resume(page);
   expect(await snapshot(page)).toEqual(before);
   await bank(page);

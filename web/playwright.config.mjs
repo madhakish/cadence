@@ -5,7 +5,6 @@ export default defineConfig({
   testMatch: '**/*.spec.mjs',
   forbidOnly: true,
   retries: 0,
-  maxFailures: 1,
   workers: 2,
   timeout: 45_000,
   expect: { timeout: 10_000 },
