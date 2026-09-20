@@ -146,15 +146,23 @@ final class BarbellSolid {
         SCNTransaction.commit()
     }
 
-    /// Fit the whole bar at zoom 1 for the view's aspect, then orbit.
+    /// A long lens keeps the solid close to the sprites' near-orthographic look.
+    static let fieldOfView = 22.0
+
+    /// Fit the whole bar at zoom 1 for the view's aspect and the camera's yaw,
+    /// then orbit: a yawed bar reaches toward the eye by extent·sin(yaw), so
+    /// the near end must still fit the frame and clear the lens (same rule as
+    /// barbell-gl.js fitDistance).
     private func place(camera: BarbellInspector.Camera) {
         let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: explodedNow == true ? 1 : 0)
         let aspect = max(0.5, viewSize.width / max(1, viewSize.height))
-        let vertical = 30.0 * Double.pi / 180
+        let vertical = Self.fieldOfView * Double.pi / 180
         let horizontal = 2 * atan(tan(vertical / 2) * Double(aspect))
-        let fitWidth = layout.extent * 1.12 / tan(horizontal / 2)
-        let fitHeight = layout.maxRadius * 1.6 / tan(vertical / 2)
-        let eye = camera.position(distance: max(fitWidth, fitHeight))
+        let yaw = camera.yaw * Double.pi / 180
+        let reach = layout.extent * abs(sin(yaw)), across = layout.extent * abs(cos(yaw))
+        let fitWidth = across * 1.12 / tan(horizontal / 2)
+        let fitHeight = layout.maxRadius * 1.7 / tan(vertical / 2)
+        let eye = camera.position(distance: reach + max(fitWidth, fitHeight))
         cameraNode.position = SCNVector3(Float(eye.x), Float(eye.y), Float(eye.z))
         cameraNode.look(at: SCNVector3(0, 0, 0))
     }
@@ -184,7 +192,8 @@ final class BarbellSolid {
             geometry.materials = [Materials.chrome, Materials.plate(family: disc.family, fill: colour.fill)]
             let node = SCNNode(geometry: geometry)
             node.position = SCNVector3(Float(disc.centerX), 0, 0)
-            node.addChildNode(denomination(for: disc, ink: colour.ink))
+            // Real plates are marked on both faces.
+            for face in [-1, 1] { node.addChildNode(denomination(for: disc, face: face, ink: colour.ink)) }
             scene.rootNode.addChildNode(node)
             discNodes.append((disc, node))
         }
@@ -229,9 +238,9 @@ final class BarbellSolid {
         scene.rootNode.addChildNode(floor)
 
         let camera = SCNCamera()
-        camera.fieldOfView = 30
+        camera.fieldOfView = CGFloat(Self.fieldOfView)
         camera.zNear = 20
-        camera.zFar = 40000
+        camera.zFar = 60000
         cameraNode.camera = camera
         scene.rootNode.addChildNode(cameraNode)
     }
@@ -251,9 +260,10 @@ final class BarbellSolid {
         scene.rootNode.addChildNode(node)
     }
 
-    /// The plate value as flat printed text on the outward face, sized to the
-    /// annulus between hub and rim; unit and count stay in the list below.
-    private func denomination(for disc: BarbellInspector.Disc, ink: UInt32) -> SCNNode {
+    /// The plate value as flat printed text on one face (`face` −1 or +1),
+    /// sized to the annulus between hub and rim; unit and count stay in the
+    /// list below.
+    private func denomination(for disc: BarbellInspector.Disc, face: Int, ink: UInt32) -> SCNNode {
         let radius = disc.radius
         let hub = disc.family == "bumper" ? 0.235 * radius : disc.family == "steel" ? 0.2 * radius : max(BarbellInspector.boreRadius + 8, 0.25 * radius)
         let rim = disc.family == "bumper" ? 0.9 * radius : disc.family == "steel" ? 0.86 * radius : radius
@@ -270,8 +280,8 @@ final class BarbellSolid {
         let (minB, maxB) = text.boundingBox
         node.pivot = SCNMatrix4MakeTranslation((minB.x + maxB.x) / 2, (minB.y + maxB.y) / 2, 0)
         let faceOffset = disc.family == "bumper" ? disc.thickness / 2 - 0.14 * disc.thickness : disc.thickness / 2
-        node.position = SCNVector3(Float(Double(disc.side) * (faceOffset + 0.4)), Float((hub + rim) / 2), 0)
-        node.eulerAngles = SCNVector3(0, Float(disc.side) * Float.pi / 2, 0)
+        node.position = SCNVector3(Float(Double(face) * (faceOffset + 0.4)), Float((hub + rim) / 2), 0)
+        node.eulerAngles = SCNVector3(0, Float(face) * Float.pi / 2, 0)
         return node
     }
 }

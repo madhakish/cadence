@@ -78,7 +78,10 @@ async function seed() {
 
 const browser = await puppeteer.launch({
   executablePath: "/usr/bin/chromium-browser",
-  args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--font-render-hinting=none"],
+  // Software WebGL2 (SwiftShader through ANGLE) so the 3D inspector renders
+  // in the GPU-less container instead of falling back to the sprite SVG.
+  args: ["--no-sandbox", "--disable-dev-shm-usage", "--font-render-hinting=none",
+    "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
 try {
   fs.mkdirSync(OUT, { recursive: true });
@@ -117,7 +120,30 @@ try {
     });
     await shot("plate-calculator");
     await page.evaluate(() => document.querySelector("#overlays .overlay:last-child .barbell-expand")?.click());
-    await settle(200); await shot("plate-inspection");
+    await settle(600);
+    // Say which renderer the proof shows; a missing WebGL context must not
+    // pass silently as a screenshot of the fallback.
+    const solid = await page.evaluate(() => Boolean(document.querySelector("#overlays .overlay:last-child .barbell-stage.solid canvas.barbell-gl")));
+    console.log(`[${viewport.name}] plate-inspection renderer: ${solid ? "WebGL solid" : "sprite SVG fallback"}`);
+    await shot("plate-inspection");
+    if (solid) {
+      // Orbit by drag, switch the backdrop, and reset, like the iPhone capture.
+      const box = await (await page.$("#overlays .overlay:last-child canvas.barbell-gl")).boundingBox();
+      await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.35, { steps: 12 });
+      await page.mouse.up();
+      await settle(300);
+      await shot("plate-inspection-orbit");
+      await page.evaluate(() => document.querySelector("#overlays .overlay:last-child .barbell-backdrop button[data-backdrop='paper']")?.click());
+      await settle(300);
+      await shot("plate-inspection-paper");
+      await page.evaluate(() => {
+        document.querySelector("#overlays .overlay:last-child .barbell-backdrop button[data-backdrop='studio']")?.click();
+        document.querySelector("#overlays .overlay:last-child .barbell-reset-view")?.click();
+      });
+      await settle(300);
+    }
     await closeTop(); await settle(200); await closeTop(); await settle(200);
 
     await page.evaluate(async () => {

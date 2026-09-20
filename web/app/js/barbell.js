@@ -3,6 +3,7 @@
 import * as C from "./core.js";
 import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
 import { PLATE_SPRITES } from "./plate-sprites.js";
+import { barbellGL, BACKDROPS } from "./barbell-gl.js";
 
 // Rendered loaded-bar sprites (web/tools/render-plate-sprites.py): one per
 // plate shape and scene angle, plus shaft, sleeves, and collars. Placement
@@ -213,9 +214,20 @@ export function barbellStage(rendered, {
   const footer = uiText("div", "barbell-stage-footer", "");
   const inspection = emphasis === "expanded";
   let exploded = inspection;
+  // The inspection shows the solid where WebGL2 exists; the sprite SVG then
+  // becomes the focusable, spoken layer over it (same plates, same order).
+  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
+  const live = solid?.supported ? solid : null;
+  stage.classList.toggle("solid", Boolean(live));
   const paint = () => {
     const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
-    track.replaceChildren(drawing.svg);
+    if (live) {
+      drawing.svg.classList.add("barbell-a11y-layer");
+      track.replaceChildren(live.canvas, drawing.svg);
+      live.setExploded(exploded);
+    } else {
+      track.replaceChildren(drawing.svg);
+    }
     track.style.setProperty("--barbell-natural-width", `${exploded ? drawing.scene.width : 0}px`);
     stage.classList.toggle("exploded", exploded);
   };
@@ -224,24 +236,61 @@ export function barbellStage(rendered, {
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.
-    const toggle = uiText("button", "btn ghost sm barbell-explode", "38° inspection · tap to collapse");
+    const wording = () => live
+      ? (exploded ? "Exploded · tap to assemble" : "Assembled · tap to explode")
+      : (exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect");
+    const toggle = uiText("button", "btn ghost sm barbell-explode", wording());
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "true");
     toggle.setAttribute("aria-label", `${toggle.textContent}. Assemble bar`);
     const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    swipe.hidden = Boolean(live);
+    const focusNote = uiText("span", "sub barbell-focus-note", "");
+    focusNote.setAttribute("aria-hidden", "true");
     const flip = () => {
       exploded = !exploded;
       paint();
-      toggle.textContent = exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect";
+      toggle.textContent = wording();
       toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
-      swipe.hidden = !exploded;
+      swipe.hidden = !exploded || Boolean(live);
     };
     toggle.addEventListener("click", flip);
     // A plate is focusable so its name can be read; activating it must not
     // flip the view under a screen-reader user.
     track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
-    footer.append(toggle, swipe);
+    // Keyboard users see which hidden plate holds focus over the solid.
+    track.addEventListener("focusin", (event) => { focusNote.textContent = event.target.getAttribute?.("aria-label") || ""; });
+    track.addEventListener("focusout", () => { focusNote.textContent = ""; });
+    footer.append(toggle, swipe, focusNote);
+    if (live) {
+      // Backdrop and reset are the keyboard path for what drag, wheel, and
+      // pinch do by hand; the solid itself is not a control.
+      live.canvas.setAttribute("aria-hidden", "true");
+      const controls = uiText("div", "barbell-scene-controls", "");
+      const group = uiText("div", "barbell-backdrop", "");
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "Backdrop");
+      let current = "studio";
+      for (const [name, preset] of Object.entries(BACKDROPS)) {
+        const button = uiText("button", "btn ghost sm", preset.label);
+        button.type = "button";
+        button.dataset.backdrop = name;
+        button.setAttribute("aria-pressed", String(name === current));
+        button.addEventListener("click", () => {
+          current = name;
+          live.setBackdrop(name);
+          for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other.dataset.backdrop === name));
+        });
+        group.append(button);
+      }
+      const reset = uiText("button", "btn ghost sm barbell-reset-view", "Reset view");
+      reset.type = "button";
+      reset.setAttribute("aria-label", "Reset view. Returns the camera to the front view");
+      reset.addEventListener("click", () => live.reset());
+      controls.append(group, reset);
+      stage.append(controls);
+    }
   } else if (onExpand) {
     const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";
