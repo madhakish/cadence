@@ -363,13 +363,18 @@ before a release is published.
 ## CI and releases
 
 The pipeline is a fail-fast ladder: Ubuntu preflight first, then macOS core
-and Ubuntu web suites, with app builds behind both. CadenceCore also PARSES all app-target
+and web suites, with app builds behind both. CadenceCore also PARSES all app-target
 Swift (`swiftc -parse`), so a bare syntax error dies in seconds instead of
 minutes later in every macOS build at once.
 
 Pull requests always run macOS CadenceCore tests (with the app-target parse
 gate), web parity/runtime tests, and the stable `App build (macOS)` aggregate
-check. Native validation is change-aware behind that aggregate:
+check. The core check retains its historical `CadenceCore tests (Linux)` name
+for branch-protection compatibility; its runner and Xcode toolchain are macOS.
+Core/web validation, native builds, migration tests, visual captures, and Pages
+artifact staging use explicit GitHub-hosted `macos-latest` runners. Metadata-only
+jobs use GitHub-hosted Ubuntu. No job selects a self-hosted runner.
+Native validation is change-aware behind that aggregate:
 
 - repository hygiene, shell/JavaScript/Ruby/workflow syntax, and CI topology
   contracts must pass before either portable suite starts;
@@ -386,7 +391,7 @@ check. Native validation is change-aware behind that aggregate:
   release and TestFlight; publisher jobs must never call a build lane;
 - the stable aggregate directly requires both portable suites, so a skipped
   native tier can never hide a core or web failure;
-- docs/web-only changes still run the macOS core suite but skip app builds; and
+- docs/web-only changes still run the macOS core/web suites but skip app builds; and
 - the real shipped-store migration suite runs for persistence-affecting paths
   only. Its generic historical stores are cached by immutable shipped lineage,
   but a cache miss must regenerate them from the actually shipped apps.

@@ -18,7 +18,8 @@ jobs:
   # its already-passing web-tests job instead of running this suite twice.
   test:
     name: Web tests
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,7 +45,8 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -56,7 +58,9 @@ jobs:
       - name: Stamp build version into the service worker
         # Changes sw.js every deploy → browsers install the new worker and
         # refresh the cached app. Without this, installed phones never update.
-        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+        run: |
+          sed -i.bak "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+          rm web/app/sw.js.bak
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

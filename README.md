@@ -128,7 +128,7 @@ cd web && npm ci && npm test
 ```
 
 Notes:
-- CI always runs core checks on macOS and web checks on Ubuntu, runs parallel native builds only
+- CI always runs core/web checks on GitHub-hosted macOS, runs parallel native builds only
   when needed, and reserves full shipped-store migration reconstruction for
   persistence changes. Semantic-release cuts versioned releases with
   installable artifacts; see the [engineering guide](docs/AGENT-GUIDE.md) for
