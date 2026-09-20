@@ -139,7 +139,7 @@ struct HomeView: View {
         let orders = ProgramProgression.visibleDayOrders(
             dayOrders: days.map(\.order), recoveryDayOrders: recoveryOrders, rotation: program.currentWeek
         )
-        return days.filter { orders.contains($0.order) }
+        return orders.compactMap { order in days.first { $0.order == order } }
     }
 
     private func workoutName(_ program: Program, _ day: ProgramDay) -> String {
@@ -532,7 +532,7 @@ struct HomeView: View {
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
             .plateCalculatorClearance()
-            .sheet(isPresented: $showProgramSwitcher) {
+            .sheet(isPresented: $showProgramSwitcher, onDismiss: reconcileActiveRecovery) {
                 NavigationStack {
                     ProgramSwitcherView(onError: { switcherError = $0 })
                 }
@@ -544,7 +544,7 @@ struct HomeView: View {
             } message: {
                 Text(switcherError ?? "")
             }
-            .fullScreenCover(item: $activeSession) { session in
+            .fullScreenCover(item: $activeSession, onDismiss: reconcileActiveRecovery) { session in
                 NavigationStack {
                     ActiveSessionView(session: session)
                 }
@@ -718,14 +718,15 @@ struct HomeView: View {
     }
 
     private func reconcileRecoveryBridge(for program: Program) throws -> Bool {
-        guard let result = try SessionCompletion.reconcileRecoveryBridge(
+        let result = try SessionCompletion.reconcileRecoveryBridge(
             program: program, context: context
-        ) else { return false }
-        recoveryMessage = result.message
-        return true
+        )
+        recoveryMessage = result?.message
+        return result != nil
     }
 
     private func reconcileActiveRecovery() {
+        recoveryMessage = nil
         guard let program = activeProgram else { return }
         do {
             _ = try reconcileRecoveryBridge(for: program)

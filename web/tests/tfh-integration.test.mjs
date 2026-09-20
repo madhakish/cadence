@@ -8,6 +8,7 @@ const db = await import("../app/js/db.js");
 const S = await import("../app/js/views/session.js");
 const T = await import("../app/js/tfh.js");
 const UI = await import("../app/js/views/tfh.js");
+const home = await import("../app/js/views/home.js");
 await db.ensureSeeded();
 const exs = await db.Exercises.all();
 const names = ["Incline DB Press","Back Squat"];
@@ -17,6 +18,7 @@ const program = {uuid:crypto.randomUUID(),name:"TFH integration fixture",templat
     lifts:[{id:crypto.randomUUID(),exerciseName:name,exerciseId:exs.find(e=>e.name===name).id,role:"main",order:0,
       baseWeightLb:order ? 150 : 60,estimatedMaxLb:0,doubleProgressionSets:3,minimumReps:3,maximumReps:5,currentReps:3}],accessories:[]}))};
 program.tfhPolicy=T.tfhDraft(program,exs,[]);
+program.tfhPolicy.recoveryDayOrders=[1,0];
 for(const type of ["timed","conditioning"]) {
   const invalid=structuredClone(program), exercise={id:crypto.randomUUID(),name:`Synthetic ${type}`,type};
   invalid.days[0].lifts.push({id:crypto.randomUUID(),exerciseName:exercise.name,exerciseId:exercise.id,role:"complementary",order:1});
@@ -95,6 +97,12 @@ while(true){
 const before=p.cycleNumber;
 await S.reconcileRecoveryBridge(p,null,new Date("2035-01-01"));
 assert.equal(p.currentWeek,4,"time cannot complete TFH recovery");
+p.isActive=true;
+for(const candidate of await db.Programs.all())
+  await db.Programs.save({...candidate,isActive:candidate.id===p.id});
+await home.render(document.getElementById("view"));
+assert.deepEqual([...document.querySelectorAll(".day-sequence span")].map(x=>x.textContent),
+  ["NOW Day 1","Day 0"], "[INV-RECOVERY-IS-A-BRIDGE] Today preserves TFH's upper/lower recovery order");
 for(let i=0;i<2;i++){
   const id=await S.createSessionFromProgramDay(p,p.days.find(d=>d.order===p.nextDayIndex));
   const s=await db.Sessions.get(id),work=s.exercises[0].sets.filter(x=>!x.isWarmup);

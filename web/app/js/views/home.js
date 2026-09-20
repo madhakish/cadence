@@ -87,7 +87,7 @@ export async function render(host) {
       return { order: day.order, mainMovementGroup: exMap.get(main?.exerciseName)?.movementGroup };
     }));
     const orders = C.visibleDayOrders(program.days.map((day) => day.order), recoveryOrders, program.currentWeek);
-    const days = [...program.days].filter((day) => orders.includes(day.order)).sort((a, b) => a.order - b.order);
+    const days = orders.map((order) => program.days.find((day) => day.order === order)).filter(Boolean);
     if (program.currentWeek === C.DELOAD_WEEK) {
       root.append(ui.h("div", { class: "section-title", text: `Recovery · ${days.length} light sessions in this rotation` }));
     }

@@ -358,6 +358,9 @@ recognizes bridge exposures it already banked instead of prescribing them again.
 Before preview/start, an omitted or already-banked recovery pointer moves to
 the remaining selected exposure. A valid manually chosen upper-first order is
 preserved. Repairing this pointer never applies pending grades or rolls the cycle.
+The visible recovery sequence retains the scheduler's configured order, including
+TFH cohorts that recover upper-first. Native recovery notices are refreshed when
+returning from a workout or program switch and cleared when reconciliation has no new result.
 
 A recovery bridge expires seven elapsed days after the final completed Peak (or
 the preceding completed hard rotation when an early-recovery decision skipped

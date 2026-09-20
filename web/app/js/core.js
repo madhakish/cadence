@@ -1904,7 +1904,8 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
 // Presentation reads the schedule's orders, including TFH's authored recovery.
 // Mirrored in CadenceCore ProgramProgression.
 export function visibleDayOrders(dayOrders, recoveryDayOrders, rotation) {
-  return [...new Set(rotation === DELOAD_WEEK ? recoveryDayOrders : dayOrders)].sort((a, b) => a - b);
+  return rotation === DELOAD_WEEK ? [...new Set(recoveryDayOrders)]
+    : [...new Set(dayOrders)].sort((a, b) => a - b);
 }
 
 export function workoutDayLabel(name, rotation) {

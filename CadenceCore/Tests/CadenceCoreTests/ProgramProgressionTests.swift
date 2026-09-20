@@ -1006,6 +1006,8 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5], rotation: 4), [2, 5])
         XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5, 9], rotation: 4), [2, 5, 9],
                        "TFH can explicitly schedule three recovery days")
+        XCTAssertEqual(P.visibleDayOrders(dayOrders: [0, 1, 2, 3], recoveryDayOrders: [3, 0, 2], rotation: 4), [3, 0, 2],
+                       "TFH recovery presentation preserves the configured scheduler order")
         for rotation in 1...3 {
             XCTAssertEqual(P.visibleDayOrders(dayOrders: [7, 2, 9, 5], recoveryDayOrders: [2, 5], rotation: rotation), [2, 5, 7, 9])
             XCTAssertEqual(P.workoutDayLabel(name: "Day Alpha", rotation: rotation), "Day Alpha")

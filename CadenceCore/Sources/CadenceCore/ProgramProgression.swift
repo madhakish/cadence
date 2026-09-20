@@ -432,8 +432,9 @@ public enum ProgramProgression {
     /// Presentation reads the same authored/representative orders as scheduling.
     /// TFH callers supply the cohort's recovery orders instead of legacy inference.
     public static func visibleDayOrders(dayOrders: [Int], recoveryDayOrders: [Int], rotation: Int) -> [Int] {
-        let selected = rotation == deloadWeek ? recoveryDayOrders : dayOrders
-        return Array(Set(selected)).sorted()
+        guard rotation == deloadWeek else { return Array(Set(dayOrders)).sorted() }
+        var seen: Set<Int> = []
+        return recoveryDayOrders.filter { seen.insert($0).inserted }
     }
 
     /// Recovery is shared by every slot style, even when build phases are not.

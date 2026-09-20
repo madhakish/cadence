@@ -476,6 +476,7 @@ eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
 // including a TFH policy with three days and sparse day ordering.
 eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], 4).join(","), "2,5", "visible legacy recovery has two days");
 eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5, 9], 4).join(","), "2,5,9", "TFH can show three recovery days");
+eq(C.visibleDayOrders([0, 1, 2, 3], [3, 0, 2], 4).join(","), "3,0,2", "TFH recovery presentation preserves the configured scheduler order");
 for (const rotation of [1, 2, 3]) {
   eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], rotation).join(","), "2,5,7,9", "build retains all authored days");
   eq(C.workoutDayLabel("Day Alpha", rotation), "Day Alpha", "build day keeps its authored name");
