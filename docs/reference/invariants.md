@@ -4,10 +4,12 @@ Rules that must not silently change. Each was written because the opposite
 behaviour shipped and cost something real — a fabricated milestone, a stranded
 schedule, a workout that timed itself.
 
-This file is the readable specification. It is also **machine-checked**:
-`.github/scripts/check-invariants.mjs` verifies that every rule below is
-asserted by at least one test on every platform it applies to, and that no
-test cites a rule that does not exist here. It runs in `npm test` and in CI.
+This file is the readable specification. Its source citations are
+**machine-checked**: `.github/scripts/check-invariants.mjs` verifies that each
+verifiable rule ID appears in the scanned test sources for its platforms and
+that those sources cite no unknown rule. It runs in `npm test` and CI, but does
+not prove that an assertion exists, executes, or checks the stated behavior.
+Required executed-test evidence is described in [CI acceptance](../CI-ACCEPTANCE.md).
 
 ## How to use it
 
@@ -32,10 +34,10 @@ listing the fix commits with draft entries. Register the rule or reply why it
 is not one (a one-off, a typo, a build fix); the comment never blocks a merge.
 
 `platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
-`web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
-asserted in this workspace and are marked `unverifiable` — they are documented
-here so a reviewer can check them by hand, and are excluded from the coverage
-gate rather than being silently absent.
+`web` (JS runtime/UI), and `native` (SwiftUI). Rules marked `unverifiable` are
+excluded from this source-citation check and still require explicit review or
+execution evidence. Native UI execution belongs to the separate XCTest gates;
+this scanner does not establish their coverage.
 
 ---
 

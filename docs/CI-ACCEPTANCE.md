@@ -57,7 +57,7 @@ synthetic catalog. Identity and performed values stay in the comparison.
 | WEB-WORKOUT-REOPEN | Edit reps, complete/undo/re-complete, retain planned work; reload and reopen in a new tab with identical session data |
 | WEB-OFFLINE-RESUME | Disconnect the test origin at the TCP transport; reload from the worker, resume and bank work, inspect History, export it offline |
 | WEB-UPDATE-RESUME | Install a second worker build, accept the production Refresh prompt; preserve active work and another project's cache while retiring the old app cache |
-| WEB-BACKUP-ROUNDTRIP | Download JSON, import into a fresh browser context, reload and re-export all portable content with explicit legacy-ID repair assertions; an identical re-export reports no change |
+| WEB-BACKUP-ROUNDTRIP | Export a synthetic blank workout, import into a fresh browser context, reload and compare all exported content with explicit legacy-ID repair assertions; an identical re-export reports no change |
 | WEB-RESTORE-CONTENT | Same IDs/counts with changed reps require confirmation; Cancel preserves the original, Restore persists the changed value |
 
 The committed `web/tests/browser/requirements.json` lists required IDs and
@@ -67,6 +67,11 @@ uniqueness, and exactly one attempt. Missing/duplicate/unknown cases, skips,
 expected failures, retries and interrupted runs fail. Runner exit status is
 also mandatory. Never lower this gate or quarantine a critical journey to get
 a release green; fix the behavior or explicitly review a changed requirement.
+
+The restore fixture exercises a blank workout and the seeded catalog/settings.
+It does not establish round-trip coverage for populated programs, TFH cohorts,
+body measurements, or every other portable record type. Those need additional
+nonempty synthetic fixtures under the persistence acceptance work below.
 
 `web/test-results/` is retained for 14 days: machine-readable results plus
 traces, DOM snapshots and screenshots on failure. This suite contains synthetic

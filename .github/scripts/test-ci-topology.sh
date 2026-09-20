@@ -152,7 +152,6 @@ if [[ "${test_command%% && *}" != "node ../.github/scripts/check-invariants.mjs"
   exit 1
 fi
 
-
 # Browser tests run before the web gate can release app builds or Pages.
 assert_job_contains web-tests 'run: npx --no-install playwright install chromium webkit'
 assert_job_contains web-tests 'run: npm run test:browser'
@@ -163,16 +162,14 @@ if [[ "$browser_command" != 'playwright test && node tools/verify-feature-covera
   exit 1
 fi
 
-if ! grep -Fq 'run: npm run test:browser' .github/workflows/pages.yml; then
-  echo 'manual Pages must execute browser acceptance' >&2
-  exit 1
-fi
-
 # Build-capable recovery and visual workflows use the same hosted tier.
 workflow=".github/workflows/pages.yml"
 assert_job_contains test "runs-on: macos-latest"
 assert_job_contains test "if: github.ref == 'refs/heads/main'"
 assert_job_contains test "run: npm test"
+assert_job_contains test 'run: npx --no-install playwright install chromium webkit'
+assert_job_contains test 'run: npm run test:browser'
+assert_job_contains test 'path: web/test-results/'
 assert_job_contains test "run: node .github/scripts/verify-pages-recovery.mjs"
 assert_job_contains deploy "runs-on: macos-latest"
 workflow=".github/workflows/visual-proof.yml"
