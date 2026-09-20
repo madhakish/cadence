@@ -491,8 +491,10 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test13SetCompletionKeepsDominantBlockStill
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize
       - name: Require all four interaction tests to execute
+        if: always()
         run: |
           xcrun xcresulttool get test-results summary --path build/NativeSmoke.xcresult > build/native-smoke-summary.json
+          cat build/native-smoke-summary.json
           node .github/scripts/verify-native-smoke.mjs build/native-smoke-summary.json
       - name: Retain native interaction results
         if: always()

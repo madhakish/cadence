@@ -13,7 +13,7 @@ while IFS= read -r path; do
   [[ -z "$path" ]] && continue
 
   case "$path" in
-    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|CadenceVisualProofUITests/*|fastlane/*|Gemfile|Gemfile.lock|project.yml|.github/workflows/ci.yml|.github/scripts/classify-ci-paths.sh|.github/scripts/test-classify-ci-paths.sh|.github/scripts/plan-release.mjs|.github/scripts/verify-native-jobs.sh|.github/scripts/verify-release-artifact.sh)
+    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|CadenceVisualProofUITests/*|fastlane/*|Gemfile|Gemfile.lock|project.yml|.github/workflows/ci.yml|.github/scripts/classify-ci-paths.sh|.github/scripts/test-classify-ci-paths.sh|.github/scripts/plan-release.mjs|.github/scripts/verify-native-jobs.sh|.github/scripts/verify-native-smoke.mjs|.github/scripts/test-verify-native-smoke.mjs|.github/scripts/verify-release-artifact.sh)
       native=true
       ;;
   esac

@@ -127,6 +127,7 @@ assert_job_contains native-smoke "test10PlankCountdownAndLog"
 assert_job_contains native-smoke "test13SetCompletionKeepsDominantBlockStill"
 assert_job_contains native-smoke "test14CalculatorTargetAtAccessibilityTextSize"
 assert_job_contains native-smoke "node .github/scripts/verify-native-smoke.mjs"
+assert_job_contains native-smoke $'- name: Require all four interaction tests to execute\n        if: always()'
 assert_job_contains app-build 'NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}'
 assert_job_contains deploy-web "needs: [changes, web-tests, app-build]"
 assert_job_contains app-build 'CORE_RESULT: ${{ needs.core-tests.result }}'
