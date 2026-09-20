@@ -109,7 +109,7 @@
 ## Plate material, 2026-09-19
 
 - Colourisation — a plate face is rebuilt from the approved texture's luminance (a 5×4 matrix shared by both clients), so its photographed shading survives and its hue comes from the palette fill. The earlier per-channel gains clamped the dark textures into one flat colour, which is what made a 35 lb steel plate read as a mustard disc. The median texel of each texture lands at 85% of the fill; highlights whiten slightly rather than saturate. Black iron stays untouched. Colour tokens are unchanged: 35 lb is still yellow by the colour-bumper convention.
-- Shaft — a chrome gradient (dark underside, specular band above centre, hard shadow), two darker knurl bands with a cross-hatch, and sleeve end caps, drawn as vectors on both clients. Geometry, the solver, and the textures' pixels are unchanged.
+- Shaft — chrome, knurl, and sleeve shading are baked into the shared rendered bar sprites on both clients. Geometry, the solver, and the textures' pixels are unchanged.
 
 ## Loaded-bar composition, 2026-09-19
 

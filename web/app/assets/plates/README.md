@@ -10,3 +10,5 @@ scene angle (assembled 18°, exploded 38°), plus shaft, sleeves, and collars.
 Placement metadata is generated into `web/app/js/plate-sprites.js` and
 `Cadence/Views/PlateSprites.swift`. No photograph or third-party asset is
 involved; regenerate rather than edit.
+
+Renderer source revision: `5c6bcd0647ac5df8be3adda05d5fd5441f6cad51`.
