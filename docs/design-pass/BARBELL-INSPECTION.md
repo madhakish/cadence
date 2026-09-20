@@ -93,9 +93,11 @@ or backup schema and needs no migration.
 Add the `visual-proof` label to a same-repository PR to capture the current-set,
 exercise-detail, calculator (steel and bumper), and workout-preview screens.
 The workflow waits for the latest CI attempt for that exact head to pass its
-fast Linux suites before starting the simulator (the macOS device build stays
-the merge gate), and restores the previous capture's simulator build so only
-changed sources recompile. New commits cancel stale captures. Removing
+fast Linux suites before starting the simulator; the macOS device build stays
+the merge gate. Measured on 2c9ddf7: the capture boots 1.7 minutes after a
+push instead of 7, and of its ~14.5-minute test step about 2.7 minutes is
+compilation and 9.5 minutes is the UI tests, so a DerivedData cache was tried
+and dropped for no gain. New commits cancel stale captures. Removing
 the label stops captures on future updates. Ordinary PRs keep one native build.
 Manual dispatch remains available.
 

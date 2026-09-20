@@ -30,7 +30,6 @@ assert.ok(workflow.includes("contains(github.event.pull_request.labels.*.name, '
 assert.ok(workflow.includes('github.event.pull_request.head.repo.full_name == github.repository'));
 assert.ok(workflow.includes('needs: gate'));
 assert.ok(workflow.includes('ref: ${{ needs.gate.outputs.sha }}'));
-assert.ok(workflow.includes('path: build/visual-proof') && workflow.includes('restore-keys:'), 'the simulator build is cached between captures');
 assert.ok(!workflow.includes('pull_request_target'));
 assert.ok(!workflow.includes('write')); // no elevated token on code execution
 assert.ok(workflow.includes('persist-credentials: false'));
