@@ -86,7 +86,7 @@ assert_classification \
   $'native=true\nmigrations=false\nweb=false' \
   'CadenceVisualProofUITests/VisualProofUITests.swift'
 
-for script in .github/scripts/verify-native-smoke.mjs .github/scripts/test-verify-native-smoke.mjs; do
+for script in .github/scripts/verify-native-smoke.mjs .github/scripts/test-verify-native-smoke.mjs .github/scripts/native-smoke-summary.fixture.json; do
   assert_classification \
     "native result gate changes cannot skip interaction tests" \
     $'native=true\nmigrations=false\nweb=false' \

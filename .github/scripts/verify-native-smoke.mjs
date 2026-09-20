@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 
 export function verifyNativeSmoke(summary) {
   const expected = 4;
-  if (summary.testsCount !== expected || summary.passedTests !== expected ||
+  if (summary.totalTestCount !== expected || summary.passedTests !== expected ||
       summary.failedTests !== 0 || summary.skippedTests !== 0) {
     throw new Error("All four native interaction tests must execute and pass with zero skips.");
   }
