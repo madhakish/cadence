@@ -151,9 +151,7 @@ assert_job_contains capture "runs-on: macos-latest"
 
 # Reject self-hosted selectors and expressions that could route work to them.
 for workflow in .github/workflows/*.yml; do
-  if grep '^[[:space:]]*runs-on:' "$workflow" | grep -Ev '^[[:space:]]*runs-on: (ubuntu-latest|macos-latest)
-node .github/scripts/test-visual-ci.mjs
-; then
+  if grep '^[[:space:]]*runs-on:' "$workflow" | grep -Ev '^[[:space:]]*runs-on: (ubuntu-latest|macos-latest)$'; then
     echo "$workflow must use explicit GitHub-hosted runners" >&2
     exit 1
   fi
