@@ -166,7 +166,7 @@ jobs:
     name: Web tests (parity + smoke)
     needs: changes
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     outputs:
       simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}
       store-build-required: ${{ steps.release-plan.outputs.store-build-required }}
@@ -189,6 +189,20 @@ jobs:
       - name: Web parity, migration, and smoke tests
         working-directory: web
         run: npm test
+      - name: Install pinned Chromium and WebKit browsers
+        working-directory: web
+        run: npx --no-install playwright install chromium webkit
+      - name: Required browser feature acceptance
+        working-directory: web
+        run: npm run test:browser
+      - name: Retain browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cadence-browser-acceptance-${{ github.sha }}
+          path: web/test-results/
+          retention-days: 14
+          if-no-files-found: warn
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci

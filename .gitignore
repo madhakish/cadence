@@ -72,6 +72,8 @@ DerivedData/
 # Web PWA (node only used for tests; no build step)
 node_modules/
 web/node_modules/
+web/test-results/
+web/playwright-report/
 
 # Reproducible anatomy review renders, never source artwork or masks.
 docs/design-pass/anatomy-registration/before/
