@@ -63,6 +63,7 @@ async function bank(page) {
   await page.reload();
   await expect(page.getByRole('button', { name: /Resume workout/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByRole('button', { name: 'Log', exact: true }).click();
   await expect(page.locator('#view')).toContainText('Push-ups');
 }
 
