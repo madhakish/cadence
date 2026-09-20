@@ -32,10 +32,13 @@ Face-on plate badges keep the denomination and unit visible. Their adjacent
 text supplies the spoken label once; reverse-mode controls identify which
 plate they add or remove **per side** and expose the current count.
 
-Tap the bar or **Inspect plates** to open its photographic plate inspection.
-It opens with the plates separated at a 38° viewing angle. **Assemble bar**
-puts them back together; **Explode plates** separates them again. On a phone,
-scroll the exploded bar horizontally to inspect the sleeve. The ordered list
+Tap the bar or **Inspect plates** to open the loaded-bar inspection. It opens
+with the plates separated. Drag to turn the bar, pinch to zoom, tap it to
+assemble or explode the plates again, and double-tap or use **Reset view** to
+return to the front view. **Studio**, **Dark**, and **Paper** change the
+backdrop and lighting. On a device without 3D support the inspection is the
+same bar as a rendered diagram: **Assemble bar** and **Explode plates** toggle
+it, and on a phone you scroll the exploded bar horizontally. The ordered list
 below always gives exact denominations and counts **per side**.
 
 The same inspection is available from the current barbell set during a workout

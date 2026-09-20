@@ -36,8 +36,17 @@ hub. SVG paint-server identifiers are unique per view.
   Reverse-mode order is preserved. Painter order is separate from loading order.
 - The enlarged exploded scene scrolls inside its own track. Exact per-side
   denomination/count rows remain readable below it.
-- Native transition respects Reduce Motion. Web changes states immediately.
-- Compact rows use the same rendered scene as full views on both clients.
+- Where Metal (iOS) or WebGL2 (web) is available, the inspection is a real-time
+  solid built from the shared `BarbellInspector` model: drag orbits, pinch or
+  wheel zooms, a tap explodes or assembles with an animated cut, double tap or
+  **Reset view** returns to the front view, and Studio / Dark / Paper backdrops
+  switch the lighting mood. Without it the sprite scene above is the inspection.
+- The explode cut is instant under Reduce Motion / `prefers-reduced-motion` on
+  both clients. The sprite view's assemble/explode remains immediate on web.
+- The solid keeps every plate exposed to assistive technology: native reuses
+  the per-plate accessibility children; web keeps the sprite SVG over the canvas
+  as an invisible, focusable plate layer and names the focused plate in a note.
+- Compact rows use the same rendered sprite scene as full views on both clients.
 - Native and web colourise the full face with the same luminance matrix and
   restore the untinted metal hub; the camera sits at the −x end, so far parts
   paint first and near parts last, and every plate bore is open in the sprites
@@ -61,9 +70,17 @@ or backup schema and needs no migration.
   renderer proofs, not iPhone app screenshots.
 - `node web/tests/plate-sprites.test.mjs` proves the sprite family is
   byte-identical on both clients and that both placement manifests agree.
+- `node web/tests/barbell-inspector.test.mjs` and `BarbellInspectorTests` prove
+  the 3D layout, explode fraction, camera limits, and lathe profiles agree
+  through `web/tests/fixtures/barbell-3d.json`; `barbell-gl.test.mjs` covers
+  the lathe meshes, the camera fit, and the no-WebGL fallback.
+- `web/tools/capture-web-proof.mjs` runs Chromium with software WebGL, reports
+  which renderer produced `web-plate-inspection-*.png`, and also captures the
+  orbited and Paper-backdrop states.
 - `CadenceVisualProofUITests.test04PlateCalculatorHero` opens inspection for a
-  normal load and captures both exploded and assembled native states. Use the
-  iPhone visual-proof workflow to capture it.
+  normal load, captures the exploded and assembled states, and — when the solid
+  is present — orbits it, switches to the Paper backdrop, and resets through the
+  control. Use the iPhone visual-proof workflow to capture it.
 
 ## Opt-in iPhone capture
 
