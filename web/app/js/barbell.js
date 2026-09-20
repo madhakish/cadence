@@ -213,7 +213,8 @@ export function barbellStage(rendered, {
   track.className = "barbell-stage-track";
   const footer = uiText("div", "barbell-stage-footer", "");
   const inspection = emphasis === "expanded";
-  let exploded = inspection;
+  // The inspection opens straight ahead, assembled; a tap explodes it.
+  let exploded = false;
   // The inspection shows the solid where WebGL2 exists; the sprite SVG then
   // becomes the focusable, spoken layer over it (same plates, same order).
   const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
@@ -241,10 +242,10 @@ export function barbellStage(rendered, {
       : (exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect");
     const toggle = uiText("button", "btn ghost sm barbell-explode", wording());
     toggle.type = "button";
-    toggle.setAttribute("aria-pressed", "true");
-    toggle.setAttribute("aria-label", `${toggle.textContent}. Assemble bar`);
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.setAttribute("aria-label", `${toggle.textContent}. Explode plates`);
     const swipe = uiText("span", "sub", "Swipe across · inside → outside");
-    swipe.hidden = Boolean(live);
+    swipe.hidden = true;
     const focusNote = uiText("span", "sub barbell-focus-note", "");
     focusNote.setAttribute("aria-hidden", "true");
     const flip = () => {

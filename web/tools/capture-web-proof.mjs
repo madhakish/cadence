@@ -126,6 +126,10 @@ try {
     const solid = await page.evaluate(() => Boolean(document.querySelector("#overlays .overlay:last-child .barbell-stage.solid canvas.barbell-gl")));
     console.log(`[${viewport.name}] plate-inspection renderer: ${solid ? "WebGL solid" : "sprite SVG fallback"}`);
     await shot("plate-inspection");
+    // The tap explodes: the blow-up at 35°, framed on the near stack.
+    await page.evaluate(() => document.querySelector("#overlays .overlay:last-child .barbell-explode")?.click());
+    await settle(solid ? 800 : 200);
+    await shot("plate-inspection-exploded");
     if (solid) {
       // Orbit by drag, switch the backdrop, and reset, like the iPhone capture.
       const box = await (await page.$("#overlays .overlay:last-child canvas.barbell-gl")).boundingBox();

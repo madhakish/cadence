@@ -79,19 +79,21 @@ assert.equal(stage.querySelector('.barbell-expand').textContent, 'Larger view â†
 stage.querySelector('.barbell-expand').click();
 assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
+// The inspection opens straight ahead, assembled; the tap explodes it.
+assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false', 'the inspection opens assembled');
+assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), '0px');
+const toggle = inspector.querySelector('.barbell-explode');
+assert.equal(toggle.getAttribute('aria-pressed'),'false');
+assert.match(toggle.getAttribute('aria-label'), /Explode plates/);
+toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
+assert.equal(toggle.getAttribute('aria-pressed'),'true');
 assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), `${open.width}px`);
 for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
   assert.equal(label.getAttribute('font-size'), '14');
   assert.equal(label.hasAttribute('textLength'), false);
 }
 assert.equal(inspector.querySelectorAll('.barbell-stack-list li').length,4);
-const toggle = inspector.querySelector('.barbell-explode');
-toggle.click();
-assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false');
-assert.equal(toggle.getAttribute('aria-pressed'),'false');
-toggle.click();
-assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(JSON.stringify(solution), before);
 // A focusable plate can be activated to hear its name without flipping the
 // view, and the toggle's accessible name carries its visible text.
@@ -102,6 +104,8 @@ assert.equal(JSON.stringify(solution), before);
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true', 'activating a plate does not flip the inspection');
 assert.ok(toggle.getAttribute('aria-label').includes(toggle.textContent), 'the toggle is named by its visible text');
 assert.match(toggle.getAttribute('aria-label'), /Assemble bar/);
+toggle.click();
+assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false');
 const firstIDs=[...inspector.querySelectorAll('[id]')].map(x=>x.id);
 const secondIDs=[...B.barbellSVG(solution,'full').svg.querySelectorAll('[id]')].map(x=>x.id);
 assert.ok(!secondIDs.some(id=>firstIDs.includes(id)), 'multiple views never collide in SVG paint-server IDs');

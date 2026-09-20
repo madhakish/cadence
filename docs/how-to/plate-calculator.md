@@ -33,9 +33,10 @@ text supplies the spoken label once; reverse-mode controls identify which
 plate they add or remove **per side** and expose the current count.
 
 Tap the bar or **Inspect plates** to open the loaded-bar inspection. It opens
-with the plates separated. Drag to turn the bar, pinch to zoom, tap it to
-assemble or explode the plates again, and double-tap or use **Reset view** to
-return to the front view. **Studio**, **Dark**, and **Paper** change the
+straight ahead with the bar assembled; tap the bar to explode the plates apart
+at an angle, up close, so every plate and its number reads. Drag to turn the
+bar, pinch to zoom, tap again to assemble, and double-tap or use **Reset view**
+to return to the default view. **Studio**, **Dark**, and **Paper** change the
 backdrop and lighting. On a device without 3D support the inspection is the
 same bar as a rendered diagram: **Assemble bar** and **Explode plates** toggle
 it, and on a phone you scroll the exploded bar horizontally. The ordered list

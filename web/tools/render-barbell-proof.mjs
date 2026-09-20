@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as C from '../app/js/core.js';
 import { barbellScene } from '../app/js/barbell-scene.js';
-import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera } from '../app/js/barbell-inspector.js';
+import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera, inspectorFrame } from '../app/js/barbell-inspector.js';
 const dom = new JSDOM('<html><body></body></html>');
 global.document = dom.window.document;
 const B = await import('../app/js/barbell.js');
@@ -44,5 +44,6 @@ inspector.profiles = [['bumper', 450, 60], ['steel', 450, 27], ['change', 160, 1
 inspector.cameras = [{ camera: inspectorCamera(true), distance: 1600 }, { camera: inspectorCamera(false), distance: 1600 },
   { camera: { yaw: 90, pitch: 0, zoom: 2 }, distance: 1000 }, { camera: { yaw: -120, pitch: 60, zoom: 0.7 }, distance: 1000 }]
   .map((c) => ({ ...c, position: cameraOrbitPosition(c.camera, c.distance) }));
+inspector.frames = [0, 0.5, 1].map((explode) => ({ explode, frame: inspectorFrame(barbellLayout(inspector.solution, inspector.style, explode), explode) }));
 await writeFile(new URL('../tests/fixtures/barbell-3d.json',import.meta.url),JSON.stringify(inspector,null,2)+'\n');
 console.log(`Production SVG proofs written to ${output}`);

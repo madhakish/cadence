@@ -50,14 +50,14 @@ final class BarbellInspectorTests: XCTestCase {
     }
 
     func testCameraLimitsAndOrbit() {
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: true), BarbellInspector.Camera(yaw: 38, pitch: 14, zoom: 1))
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false), BarbellInspector.Camera(yaw: 18, pitch: 14, zoom: 1))
+        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: true), BarbellInspector.Camera(yaw: 35, pitch: 12, zoom: 1))
+        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false), BarbellInspector.Camera(yaw: 8, pitch: 10, zoom: 1))
         let exploded = BarbellInspector.Camera.initial(exploded: true)
-        XCTAssertEqual(exploded.orbiting(yaw: 10, pitch: -5), BarbellInspector.Camera(yaw: 48, pitch: 9, zoom: 1))
+        XCTAssertEqual(exploded.orbiting(yaw: 10, pitch: -5), BarbellInspector.Camera(yaw: 45, pitch: 7, zoom: 1))
         XCTAssertEqual(exploded.orbiting(yaw: 0, pitch: 200).pitch, BarbellInspector.Limits.pitchMax)
         XCTAssertEqual(exploded.orbiting(yaw: 0, pitch: -200).pitch, BarbellInspector.Limits.pitchMin)
-        XCTAssertEqual(exploded.orbiting(yaw: 170, pitch: 0).yaw, -152)
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false).orbiting(yaw: -198, pitch: 0).yaw, 180)
+        XCTAssertEqual(exploded.orbiting(yaw: 170, pitch: 0).yaw, -155)
+        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false).orbiting(yaw: -188, pitch: 0).yaw, 180)
         XCTAssertEqual(exploded.zoomed(by: 100).zoom, BarbellInspector.Limits.zoomMax)
         XCTAssertEqual(exploded.zoomed(by: 0).zoom, BarbellInspector.Limits.zoomMin)
         XCTAssertEqual(exploded.zoomed(by: 1.5).zoom, 1.5, accuracy: 1e-9)
@@ -67,6 +67,18 @@ final class BarbellInspectorTests: XCTestCase {
         XCTAssertEqual(BarbellInspector.Camera(yaw: 90, pitch: 0, zoom: 1).position(distance: 10).x, -10, accuracy: 1e-9)
         XCTAssertEqual(BarbellInspector.Camera(yaw: 0, pitch: 0, zoom: 1).position(distance: 10).z, 10, accuracy: 1e-9)
         XCTAssertEqual(BarbellInspector.Camera(yaw: 0, pitch: 0, zoom: 2).position(distance: 10).z, 5, accuracy: 1e-9)
+    }
+
+    func testFrameIsTheBarAssembledAndTheNearStackExploded() {
+        let closed = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0)
+        let open = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 1)
+        let closedFrame = BarbellInspector.frame(layout: closed, explode: 0)
+        let openFrame = BarbellInspector.frame(layout: open, explode: 1)
+        let midFrame = BarbellInspector.frame(layout: BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0.5), explode: 0.5)
+        XCTAssertEqual(closedFrame, BarbellInspector.Frame(target: BarbellInspector.Point3(x: 0, y: 0, z: 0), halfWidth: closed.extent))
+        XCTAssertTrue(openFrame.target.x < -closed.bar.shaftHalfLength && openFrame.target.x > -open.extent, "exploded frames the centre of the near stack")
+        XCTAssertTrue(openFrame.halfWidth < closed.extent && openFrame.halfWidth > (open.collar.right + open.collar.length - open.bar.shaftHalfLength) / 2)
+        XCTAssertTrue(midFrame.target.x < 0 && midFrame.target.x > openFrame.target.x && midFrame.halfWidth > openFrame.halfWidth)
     }
 
     func testProfilesAreClosedSymmetricAndInsideThePlate() {
@@ -99,8 +111,12 @@ final class BarbellInspectorTests: XCTestCase {
                 struct Pos: Decodable { let x, y, z: Double }
                 let camera: Cam; let distance: Double; let position: Pos
             }
+            struct FrameCase: Decodable {
+                struct Frame: Decodable { struct Target: Decodable { let x, y, z: Double }; let target: Target; let halfWidth: Double }
+                let explode: Double; let frame: Frame
+            }
             let solution: Solution; let style: String; let explode: Double
-            let layout: Layout; let profiles: [Profile]; let cameras: [CameraCase]
+            let layout: Layout; let profiles: [Profile]; let cameras: [CameraCase]; let frames: [FrameCase]
         }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -138,6 +154,13 @@ final class BarbellInspectorTests: XCTestCase {
             XCTAssertEqual(position.x, c.position.x, accuracy: 1e-8)
             XCTAssertEqual(position.y, c.position.y, accuracy: 1e-8)
             XCTAssertEqual(position.z, c.position.z, accuracy: 1e-8)
+        }
+        let style: PlateVisualStyle = fixture.style == "bumper" ? .bumper : .steel
+        for f in fixture.frames {
+            let frameLayout = BarbellInspector.layout(loadout: Loadout(bar: fixture.solution.bar, perSide: fixture.solution.perSide, collarLb: 0), style: style, explode: f.explode)
+            let frame = BarbellInspector.frame(layout: frameLayout, explode: f.explode)
+            XCTAssertEqual(frame.target.x, f.frame.target.x, accuracy: 1e-8)
+            XCTAssertEqual(frame.halfWidth, f.frame.halfWidth, accuracy: 1e-8)
         }
     }
 }

@@ -33,10 +33,11 @@ assert.equal(cyl.positions.length / 3, 3 * 2 * 13);
 const counts = [{ plate: { value: 45, unit: 'lb' }, count: 1 }];
 const solution = C.enteredPlateSolution(C.BARS.bar45lb, counts, 5);
 const layout = barbellLayout(solution, 'steel', 0);
-const phone = fitDistance(layout, 390 / 300), wide = fitDistance(layout, 1280 / 300);
+const whole = { halfWidth: layout.extent, maxRadius: layout.maxRadius };
+const phone = fitDistance(whole, 390 / 300), wide = fitDistance(whole, 1280 / 300);
 assert.ok(phone > wide, 'a narrower viewport needs a farther camera to fit the bar');
 assert.ok(phone > layout.extent, 'the eye sits outside the bar');
-const yawed = fitDistance(layout, 1280 / 300, 38), endOn = fitDistance(layout, 1280 / 300, 90);
+const yawed = fitDistance(whole, 1280 / 300, 38), endOn = fitDistance(whole, 1280 / 300, 90);
 assert.ok(yawed > wide && yawed > layout.extent * Math.sin(38 * Math.PI / 180) + layout.maxRadius, 'a yawed bar backs the camera off by its reach toward the eye');
 assert.ok(endOn - layout.extent > layout.maxRadius * 1.7 / Math.tan(11 * Math.PI / 180) - 1e-9, 'looking down the bar, the near plate still fits the frame');
 

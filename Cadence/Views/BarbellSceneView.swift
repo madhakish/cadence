@@ -45,6 +45,8 @@ struct BarbellSceneView: UIViewRepresentable {
     let exploded: Bool
     let backdrop: BarbellBackdrop
     let camera: BarbellInspector.Camera
+    /// Increments when the sheet asks for an animated return to the default view.
+    let resetToken: Int
     let reduceMotion: Bool
 
     /// SceneKit needs a Metal device; without one (some simulators, audits)
@@ -60,12 +62,12 @@ struct BarbellSceneView: UIViewRepresentable {
         view.isAccessibilityElement = false
         view.scene = context.coordinator.scene
         context.coordinator.attach(view)
-        context.coordinator.apply(exploded: exploded, camera: camera, backdrop: backdrop, animated: false, reduceMotion: reduceMotion)
+        context.coordinator.apply(exploded: exploded, camera: camera, backdrop: backdrop, resetToken: resetToken, animated: false, reduceMotion: reduceMotion)
         return view
     }
 
     func updateUIView(_ view: FittingSceneView, context: Context) {
-        context.coordinator.apply(exploded: exploded, camera: camera, backdrop: backdrop, animated: true, reduceMotion: reduceMotion)
+        context.coordinator.apply(exploded: exploded, camera: camera, backdrop: backdrop, resetToken: resetToken, animated: true, reduceMotion: reduceMotion)
     }
 
     func makeCoordinator() -> BarbellSolid {
@@ -97,6 +99,7 @@ final class BarbellSolid {
     private var explodedNow: Bool?
     private var cameraNow: BarbellInspector.Camera?
     private var backdropNow: BarbellBackdrop?
+    private var resetTokenNow = 0
     private var viewSize = CGSize(width: 390, height: 260)
     private weak var view: SCNView?
 
@@ -117,7 +120,7 @@ final class BarbellSolid {
 
     // MARK: - State
 
-    func apply(exploded: Bool, camera: BarbellInspector.Camera, backdrop: BarbellBackdrop, animated: Bool, reduceMotion: Bool) {
+    func apply(exploded: Bool, camera: BarbellInspector.Camera, backdrop: BarbellBackdrop, resetToken: Int, animated: Bool, reduceMotion: Bool) {
         if backdrop != backdropNow {
             backdropNow = backdrop
             scene.background.contents = backdrop.background
@@ -126,10 +129,14 @@ final class BarbellSolid {
             view?.backgroundColor = backdrop.background
         }
         let explodeChanged = exploded != explodedNow
+        let resetting = resetToken != resetTokenNow
         explodedNow = exploded
         cameraNow = camera
+        resetTokenNow = resetToken
+        // The cut moves plates, camera angle, and framing together; a reset
+        // glides back; a drag or pinch is direct manipulation and never lags.
         SCNTransaction.begin()
-        SCNTransaction.animationDuration = animated && explodeChanged && !reduceMotion ? 0.42 : 0
+        SCNTransaction.animationDuration = animated && !reduceMotion ? (explodeChanged ? 0.48 : resetting ? 0.3 : 0) : 0
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         if explodeChanged {
             let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: exploded ? 1 : 0)
@@ -149,22 +156,25 @@ final class BarbellSolid {
     /// A long lens keeps the solid close to the sprites' near-orthographic look.
     static let fieldOfView = 22.0
 
-    /// Fit the whole bar at zoom 1 for the view's aspect and the camera's yaw,
-    /// then orbit: a yawed bar reaches toward the eye by extent·sin(yaw), so
-    /// the near end must still fit the frame and clear the lens (same rule as
-    /// barbell-gl.js fitDistance).
+    /// Fit the shared frame (whole bar assembled, near stack exploded) at zoom 1
+    /// for the view's aspect and the camera's yaw, then orbit: a yawed span
+    /// reaches toward the eye by halfWidth·sin(yaw), so its near end must still
+    /// fit and clear the lens (same rule as barbell-gl.js fitDistance).
     private func place(camera: BarbellInspector.Camera) {
-        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: explodedNow == true ? 1 : 0)
+        let explode = explodedNow == true ? 1.0 : 0.0
+        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: explode)
+        let frame = BarbellInspector.frame(layout: layout, explode: explode)
         let aspect = max(0.5, viewSize.width / max(1, viewSize.height))
         let vertical = Self.fieldOfView * Double.pi / 180
         let horizontal = 2 * atan(tan(vertical / 2) * Double(aspect))
         let yaw = camera.yaw * Double.pi / 180
-        let reach = layout.extent * abs(sin(yaw)), across = layout.extent * abs(cos(yaw))
+        let reach = frame.halfWidth * abs(sin(yaw)), across = frame.halfWidth * abs(cos(yaw))
         let fitWidth = across * 1.12 / tan(horizontal / 2)
         let fitHeight = layout.maxRadius * 1.7 / tan(vertical / 2)
         let eye = camera.position(distance: reach + max(fitWidth, fitHeight))
-        cameraNode.position = SCNVector3(Float(eye.x), Float(eye.y), Float(eye.z))
-        cameraNode.look(at: SCNVector3(0, 0, 0))
+        let target = SCNVector3(Float(frame.target.x), Float(frame.target.y), Float(frame.target.z))
+        cameraNode.position = SCNVector3(Float(eye.x) + target.x, Float(eye.y) + target.y, Float(eye.z) + target.z)
+        cameraNode.look(at: target)
     }
 
     // MARK: - Build
@@ -267,7 +277,7 @@ final class BarbellSolid {
         let radius = disc.radius
         let hub = disc.family == "bumper" ? 0.235 * radius : disc.family == "steel" ? 0.2 * radius : max(BarbellInspector.boreRadius + 8, 0.25 * radius)
         let rim = disc.family == "bumper" ? 0.9 * radius : disc.family == "steel" ? 0.86 * radius : radius
-        let size = (rim - hub) * 0.32 / 0.7
+        let size = (rim - hub) * 0.5 / 0.7
         let text = SCNText(string: Weight.trim(disc.plate.value, decimals: 2), extrusionDepth: 0)
         text.font = UIFont.systemFont(ofSize: CGFloat(size), weight: .heavy)
         text.flatness = 0.15

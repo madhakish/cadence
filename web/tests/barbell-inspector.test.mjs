@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as C from '../app/js/core.js';
-import { barbellLayout, inspectorCamera, orbitCamera, zoomCamera, cameraOrbitPosition, plateProfile, INSPECTOR_LIMITS }
+import { barbellLayout, inspectorCamera, inspectorFrame, orbitCamera, zoomCamera, cameraOrbitPosition, plateProfile, INSPECTOR_LIMITS }
   from '../app/js/barbell-inspector.js';
 
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
@@ -45,14 +45,14 @@ assert.equal(barbellLayout(C.enteredPlateSolution(C.BARS.bar15kg, [], 5), 'bumpe
 assert.equal(barbellLayout(C.enteredPlateSolution(C.BARS.bar35lb, [], 5), 'bumper', 0).bar.shaftRadius, 12.5);
 assert.equal(JSON.stringify(solution), JSON.stringify(C.enteredPlateSolution(C.BARS.bar45lb, counts, 5)), 'layout never mutates the solution');
 
-// Camera: yaw is the angle between the bar axis and the screen, matching the sprite views.
-assert.deepEqual(inspectorCamera(true), { yaw: 38, pitch: 14, zoom: 1 });
-assert.deepEqual(inspectorCamera(false), { yaw: 18, pitch: 14, zoom: 1 });
-assert.deepEqual(orbitCamera(inspectorCamera(true), 10, -5), { yaw: 48, pitch: 9, zoom: 1 });
+// Camera: assembled is straight ahead, exploded is the 35° blow-up.
+assert.deepEqual(inspectorCamera(true), { yaw: 35, pitch: 12, zoom: 1 });
+assert.deepEqual(inspectorCamera(false), { yaw: 8, pitch: 10, zoom: 1 });
+assert.deepEqual(orbitCamera(inspectorCamera(true), 10, -5), { yaw: 45, pitch: 7, zoom: 1 });
 assert.equal(orbitCamera(inspectorCamera(true), 0, 200).pitch, INSPECTOR_LIMITS.pitchMax);
 assert.equal(orbitCamera(inspectorCamera(true), 0, -200).pitch, INSPECTOR_LIMITS.pitchMin);
-assert.equal(orbitCamera(inspectorCamera(true), 170, 0).yaw, -152, 'yaw wraps into (-180, 180]');
-assert.equal(orbitCamera(inspectorCamera(false), -198, 0).yaw, 180);
+assert.equal(orbitCamera(inspectorCamera(true), 170, 0).yaw, -155, 'yaw wraps into (-180, 180]');
+assert.equal(orbitCamera(inspectorCamera(false), -188, 0).yaw, 180);
 assert.equal(zoomCamera(inspectorCamera(true), 100).zoom, INSPECTOR_LIMITS.zoomMax);
 assert.equal(zoomCamera(inspectorCamera(true), 0).zoom, INSPECTOR_LIMITS.zoomMin);
 near(zoomCamera(inspectorCamera(true), 1.5).zoom, 1.5, 'zoom multiplies');
@@ -62,6 +62,13 @@ assert.ok(eye.x < 0 && eye.z > 0 && eye.y > 0, 'default eye is at the −x end, 
 near(cameraOrbitPosition({ yaw: 90, pitch: 0, zoom: 1 }, 10).x, -10, 'yaw 90 looks straight down the bar');
 near(cameraOrbitPosition({ yaw: 0, pitch: 0, zoom: 1 }, 10).z, 10, 'yaw 0 is side-on');
 near(cameraOrbitPosition({ yaw: 0, pitch: 0, zoom: 2 }, 10).z, 5, 'zoom shortens the distance');
+
+// Framing: the whole bar assembled, the near stack up close when exploded.
+const closedFrame = inspectorFrame(closed, 0), openFrame = inspectorFrame(open, 1), midFrame = inspectorFrame(half, 0.5);
+assert.deepEqual(closedFrame, { target: { x: 0, y: 0, z: 0 }, halfWidth: closed.extent });
+assert.ok(openFrame.target.x < -closed.bar.shaftHalfLength && openFrame.target.x > -open.extent, 'exploded frames the centre of the near stack');
+assert.ok(openFrame.halfWidth < closed.extent && openFrame.halfWidth > (open.collar.right + open.collar.length - open.bar.shaftHalfLength) / 2, 'the exploded frame is the stack, not the bar');
+assert.ok(midFrame.target.x < 0 && midFrame.target.x > openFrame.target.x && midFrame.halfWidth > openFrame.halfWidth, 'the frame blends with the explode fraction');
 
 // Lathe profiles are closed outlines in (radius, axial) millimetres.
 for (const [family, dia, t] of [['bumper', 450, 60], ['steel', 450, 27], ['change', 160, 16]]) {
@@ -81,4 +88,5 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/barbell-3d.json', im
 assert.deepEqual(barbellLayout(fixture.solution, fixture.style, fixture.explode), fixture.layout, 'layout matches the shared fixture');
 assert.deepEqual(fixture.profiles.map((p) => plateProfile(p.family, p.diameter, p.thickness)), fixture.profiles.map((p) => p.points), 'profiles match the shared fixture');
 assert.deepEqual(fixture.cameras.map((c) => cameraOrbitPosition(c.camera, c.distance)), fixture.cameras.map((c) => c.position), 'camera positions match the shared fixture');
+assert.deepEqual(fixture.frames.map((f) => inspectorFrame(barbellLayout(fixture.solution, fixture.style, f.explode), f.explode)), fixture.frames.map((f) => f.frame), 'frames match the shared fixture');
 console.log('Barbell 3D inspector model: layout, explode fraction, camera limits, profiles, and fixture passed');

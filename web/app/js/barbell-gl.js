@@ -7,7 +7,7 @@
 // Where WebGL2 is unavailable (jsdom, old browsers) `supported` is false and
 // barbell.js keeps the sprite SVG.
 import * as C from './core.js';
-import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera, orbitCamera, zoomCamera, BORE_RADIUS }
+import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera, inspectorFrame, orbitCamera, zoomCamera, BORE_RADIUS }
   from './barbell-inspector.js';
 
 // ---------------------------------------------------------------- geometry
@@ -53,15 +53,15 @@ export const cylinderMesh = (radius, length, segments = 72) =>
 
 export const FIELD_OF_VIEW = 22;   // degrees, vertical: a long lens keeps the bar close to the sprites' look
 
-/// Camera distance at zoom 1 that fits the bar for a viewport aspect and the
-/// camera's yaw, the same rule as the SceneKit view. A yawed bar reaches
-/// toward the eye by extent·sin(yaw), so the near end must still fit the
-/// frame and clear the lens.
-export function fitDistance(layout, aspect, yawDeg = 0, verticalFovDeg = FIELD_OF_VIEW) {
+/// Camera distance at zoom 1 that fits a frame (half-width along the bar and
+/// the tallest plate) for a viewport aspect and the camera's yaw, the same
+/// rule as the SceneKit view. A yawed span reaches toward the eye by
+/// halfWidth·sin(yaw), so its near end must still fit and clear the lens.
+export function fitDistance({ halfWidth, maxRadius }, aspect, yawDeg = 0, verticalFovDeg = FIELD_OF_VIEW) {
   const vertical = verticalFovDeg * Math.PI / 180;
   const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * Math.max(0.5, aspect));
-  const yaw = yawDeg * Math.PI / 180, reach = layout.extent * Math.abs(Math.sin(yaw)), across = layout.extent * Math.abs(Math.cos(yaw));
-  return reach + Math.max(across * 1.12 / Math.tan(horizontal / 2), layout.maxRadius * 1.7 / Math.tan(vertical / 2));
+  const yaw = yawDeg * Math.PI / 180, reach = halfWidth * Math.abs(Math.sin(yaw)), across = halfWidth * Math.abs(Math.cos(yaw));
+  return reach + Math.max(across * 1.12 / Math.tan(horizontal / 2), maxRadius * 1.7 / Math.tan(vertical / 2));
 }
 
 // ---------------------------------------------------------------- matrices (column-major)
@@ -278,7 +278,7 @@ export function barbellGL(solution, style = 'steel', { exploded = true, backdrop
     const R = disc.radius;
     const hub = disc.family === 'bumper' ? 0.235 * R : disc.family === 'steel' ? 0.2 * R : Math.max(BORE_RADIUS + 8, 0.25 * R);
     const rim = disc.family === 'bumper' ? 0.9 * R : disc.family === 'steel' ? 0.86 * R : R;
-    const cap = (rim - hub) * 0.32, w = cap * 2.2;
+    const cap = (rim - hub) * 0.5, w = cap * 2.2;
     const faceOffset = disc.family === 'bumper' ? disc.thickness / 2 - 0.14 * disc.thickness : disc.thickness / 2;
     const y = (hub + rim) / 2;
     // Real plates are marked on both faces: one quad per face at the top of
@@ -373,9 +373,11 @@ export function barbellGL(solution, style = 'steel', { exploded = true, backdrop
     if (state.disposed) return;
     const layout = placeStack(state.explode);
     const aspect = state.width / state.height;
-    const eye = cameraOrbitPosition(state.camera, fitDistance(layout, aspect, state.camera.yaw));
-    const eyeV = [eye.x, eye.y, eye.z];
-    const view = mat4.lookAt(eyeV, [0, 0, 0], [0, 1, 0]);
+    const frame = inspectorFrame(layout, state.explode);
+    const eye = cameraOrbitPosition(state.camera, fitDistance({ halfWidth: frame.halfWidth, maxRadius: layout.maxRadius }, aspect, state.camera.yaw));
+    const target = [frame.target.x, frame.target.y, frame.target.z];
+    const eyeV = [eye.x + target[0], eye.y + target[1], eye.z + target[2]];
+    const view = mat4.lookAt(eyeV, target, [0, 1, 0]);
     const proj = mat4.perspective(FIELD_OF_VIEW * Math.PI / 180, aspect, 20, 60000);
     // Light: orthographic from the key direction, covering the whole bar.
     const span = Math.max(layout.extent * 1.2, layout.maxRadius * 3);
@@ -442,15 +444,21 @@ export function barbellGL(solution, style = 'steel', { exploded = true, backdrop
 
   // Explode/assemble: an animated cut of the explode fraction, instant under
   // Reduce Motion, driven by the same shared layout at every step.
+  // The cut moves plates, camera angle, and framing together: straight ahead
+  // and whole-bar when assembled, 35° and up close on the near stack when
+  // exploded.
   function setExploded(value) {
     state.target = value ? 1 : 0;
+    const camTo = inspectorCamera(value);
     if (state.explode === state.target) { request(); return; }
-    if (reduceMotion()) { state.explode = state.target; request(); return; }
-    const from = state.explode, to = state.target, start = performance.now(), duration = 420;
+    if (reduceMotion()) { state.explode = state.target; state.camera = camTo; request(); return; }
+    const from = state.explode, to = state.target, camFrom = state.camera, start = performance.now(), duration = 480;
     const step = (now) => {
       if (state.disposed || state.target !== to) return;
       const t = Math.min(1, (now - start) / duration), eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
       state.explode = from + (to - from) * eased;
+      state.camera = { yaw: camFrom.yaw + (camTo.yaw - camFrom.yaw) * eased, pitch: camFrom.pitch + (camTo.pitch - camFrom.pitch) * eased,
+        zoom: camFrom.zoom + (camTo.zoom - camFrom.zoom) * eased };
       frame();
       if (t < 1) requestAnimationFrame(step);
     };

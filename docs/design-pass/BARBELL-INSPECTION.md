@@ -27,7 +27,8 @@ hub. SVG paint-server identifiers are unique per view.
 
 - Every normal hero bar offers **Inspect plates**, not just overflowing stacks.
 - The calculator, current workout set, and contextual exercise pane open the
-  same inspector, initially exploded at 38°.
+  same inspector: straight ahead and assembled first; a tap explodes it (the
+  solid swings to 35° and frames the near stack; the sprite scene shows 38°).
 - Assemble/explode is view-local. It never saves to SwiftData or IndexedDB.
 - The same dimensions feed both camera views. Explicit reference catalogs
   replace threshold-based plate sizes. Full-size 5 kg training bumpers stay

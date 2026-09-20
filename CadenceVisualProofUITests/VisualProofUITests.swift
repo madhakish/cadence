@@ -91,7 +91,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
         let toggle = app.buttons["barbell-explode-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
-        XCTAssertEqual(toggle.value as? String, "Exploded")
+        XCTAssertEqual(toggle.value as? String, "Assembled", "the inspection opens straight ahead, assembled")
         // The calculator beneath this sheet has its own accessible bar.
         // The artwork is the SceneKit solid where Metal is available and the
         // sprite scroll view otherwise; both expose the same plate children.
@@ -100,6 +100,9 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
         XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
+        capture("barbell-assembled-iphone")
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "Exploded")
         capture("barbell-exploded-iphone")
         if app.buttons["barbell-reset-view"].exists {
             // Orbit by hand, switch the backdrop, then return to the front view
@@ -113,7 +116,6 @@ final class VisualProofUITests: XCTestCase {
         }
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "Assembled")
-        capture("barbell-assembled-iphone")
 
         app.navigationBars["Loaded bar"].buttons["Done"].tap()
         let equipment = app.buttons["Equipment & loading"]

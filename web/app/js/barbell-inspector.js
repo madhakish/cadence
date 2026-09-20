@@ -49,9 +49,21 @@ export function barbellLayout(solution, style = 'steel', explode = 0, geometry =
 }
 
 // Camera: yaw is the angle between the bar axis and the screen plane (0 =
-// side-on, 90 = looking down the bar from the −x end), the same convention
-// as the sprite views' 18° / 38°. Pitch is elevation above the bar.
-export const inspectorCamera = (exploded) => ({ yaw: exploded ? 38 : 18, pitch: 14, zoom: 1 });
+// side-on, 90 = looking down the bar from the −x end). Pitch is elevation
+// above the bar. Assembled is the straight-ahead view of the whole bar;
+// exploded swings to 35° and frames the near stack so plates and numerals
+// read clearly (see inspectorFrame).
+export const inspectorCamera = (exploded) => exploded ? { yaw: 35, pitch: 12, zoom: 1 } : { yaw: 8, pitch: 10, zoom: 1 };
+
+/// What the camera frames at zoom 1: the whole bar when assembled; the near
+/// (−x) stack from the sleeve start to the lock collar when exploded, blended
+/// by the explode fraction so the cut is one continuous move.
+export function inspectorFrame(layout, explode = 0) {
+  const t = Math.min(1, Math.max(0, explode));
+  const outer = layout.collar.left - layout.collar.length, inner = -layout.bar.shaftHalfLength;
+  const stackCenter = (outer + inner) / 2, stackHalf = (inner - outer) / 2 + layout.maxRadius * 0.6;
+  return { target: { x: stackCenter * t + 0, y: 0, z: 0 }, halfWidth: layout.extent * (1 - t) + stackHalf * t };
+}
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrapDegrees = (deg) => { const d = ((deg + 180) % 360 + 360) % 360 - 180; return d === -180 ? 180 : d; };
 export const orbitCamera = (camera, dYaw, dPitch) => ({

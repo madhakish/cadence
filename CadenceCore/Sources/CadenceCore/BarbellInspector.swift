@@ -81,11 +81,14 @@ public enum BarbellInspector {
 
     public struct Point3: Equatable, Sendable {
         public let x, y, z: Double
+        public init(x: Double, y: Double, z: Double) { self.x = x; self.y = y; self.z = z }
     }
 
     /// Yaw is the angle between the bar axis and the screen plane (0 =
-    /// side-on, 90 = looking down the bar from the −x end), the same
-    /// convention as the sprite views' 18° / 38°. Pitch is elevation above the bar.
+    /// side-on, 90 = looking down the bar from the −x end). Pitch is elevation
+    /// above the bar. Assembled is the straight-ahead view of the whole bar;
+    /// exploded swings to 35° and frames the near stack so plates and numerals
+    /// read clearly (see `frame(layout:explode:)`).
     public struct Camera: Equatable, Sendable {
         public var yaw, pitch, zoom: Double
 
@@ -94,7 +97,7 @@ public enum BarbellInspector {
         }
 
         public static func initial(exploded: Bool) -> Camera {
-            Camera(yaw: exploded ? 38 : 18, pitch: 14, zoom: 1)
+            exploded ? Camera(yaw: 35, pitch: 12, zoom: 1) : Camera(yaw: 8, pitch: 10, zoom: 1)
         }
 
         public func orbiting(yaw dYaw: Double, pitch dPitch: Double) -> Camera {
@@ -120,6 +123,21 @@ public enum BarbellInspector {
             let wrapped = modulo - 180
             return wrapped == -180 ? 180 : wrapped
         }
+    }
+
+    /// What the camera frames at zoom 1: the whole bar when assembled; the
+    /// near (−x) stack from the sleeve start to the lock collar when exploded,
+    /// blended by the explode fraction so the cut is one continuous move.
+    public struct Frame: Equatable, Sendable {
+        public let target: Point3
+        public let halfWidth: Double
+    }
+
+    public static func frame(layout: Layout, explode: Double) -> Frame {
+        let t = min(1, max(0, explode))
+        let outer = layout.collar.left - layout.collar.length, inner = -layout.bar.shaftHalfLength
+        let stackCenter = (outer + inner) / 2, stackHalf = (inner - outer) / 2 + layout.maxRadius * 0.6
+        return Frame(target: Point3(x: stackCenter * t + 0, y: 0, z: 0), halfWidth: layout.extent * (1 - t) + stackHalf * t)
     }
 
     public struct ProfilePoint: Equatable, Sendable {

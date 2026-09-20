@@ -238,9 +238,10 @@ struct BarbellInspectionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
-    @State private var exploded = true
-    @State private var camera = BarbellInspector.Camera.initial(exploded: true)
+    @State private var exploded = false
+    @State private var camera = BarbellInspector.Camera.initial(exploded: false)
     @State private var backdrop: BarbellBackdrop = .studio
+    @State private var resetToken = 0
     @State private var dragBase: BarbellInspector.Camera?
     @State private var zoomBase: BarbellInspector.Camera?
     private let solid = BarbellSceneView.isSupported
@@ -253,7 +254,7 @@ struct BarbellInspectionView: View {
                     // The solid: drag orbits, pinch zooms, double tap resets, a
                     // single tap explodes or assembles like the sprite view.
                     BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, exploded: exploded,
-                                     backdrop: backdrop, camera: camera, reduceMotion: reduceMotion)
+                                     backdrop: backdrop, camera: camera, resetToken: resetToken, reduceMotion: reduceMotion)
                         .frame(height: 300)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
                         .contentShape(Rectangle())
@@ -332,14 +333,18 @@ struct BarbellInspectionView: View {
         .padding(.horizontal)
     }
 
+    /// Straight ahead and whole-bar when assembled; the 35° blow-up on the near
+    /// stack when exploded. The solid animates the cut itself.
     private func toggle() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) {
+            exploded.toggle()
+            camera = BarbellInspector.Camera.initial(exploded: exploded)
+        }
     }
 
     private func resetView() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) {
-            camera = BarbellInspector.Camera.initial(exploded: exploded)
-        }
+        camera = BarbellInspector.Camera.initial(exploded: exploded)
+        resetToken += 1
     }
 
     /// Horizontal drag turns the bar, vertical drag raises the eye; the shared
