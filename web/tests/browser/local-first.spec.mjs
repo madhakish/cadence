@@ -2,16 +2,24 @@ import { test as base, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { startServer } from './server.mjs';
 
+// First installation activates at once and claims the client; the production
+// app answers that controllerchange with exactly one reload. Wait for the
+// reloaded, controlled document so no action lands on the discarded one.
+async function openFirstInstall(page, url) {
+  await page.goto(url);
+  await expect.poll(() => page.evaluate(() =>
+    performance.getEntriesByType('navigation')[0]?.type === 'reload' && !!navigator.serviceWorker.controller,
+  ).catch(() => false)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Blank session', exact: true })).toBeVisible();
+}
+
 const test = base.extend({
   app: async ({ page }, use) => {
     const server = await startServer();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     try {
-      await page.goto(server.url);
-      await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller).catch(() => false)).toBe(true);
-      // First installation claims the client and the production app reloads.
-      await expect(page.getByRole('button', { name: 'Blank session', exact: true })).toBeVisible();
+      await openFirstInstall(page, server.url);
       await use(server);
       expect(errors, 'No uncaught browser exceptions').toEqual([]);
     } finally { await server.close(); }
@@ -166,9 +174,7 @@ test('[WEB-BACKUP-ROUNDTRIP] exported work restores in a fresh browser context',
   const fresh = await browser.newContext();
   try {
     const restored = await fresh.newPage();
-    await restored.goto(app.url);
-    await restored.waitForFunction(() => navigator.serviceWorker.controller !== null);
-    await expect(restored.getByRole('button', { name: 'Blank session', exact: true })).toBeVisible();
+    await openFirstInstall(restored, app.url);
     expect(await sessions(restored)).toEqual([]);
     await openData(restored);
     await chooseBackup(restored, original);
