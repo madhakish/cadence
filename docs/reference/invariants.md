@@ -358,6 +358,9 @@ recognizes bridge exposures it already banked instead of prescribing them again.
 Before preview/start, an omitted or already-banked recovery pointer moves to
 the remaining selected exposure. A valid manually chosen upper-first order is
 preserved. Repairing this pointer never applies pending grades or rolls the cycle.
+During an open bridge the manual "Next day" picker offers exactly the pointers
+this repair keeps (selected, not yet banked this cycle), so a manual pick is
+never silently overridden.
 The visible recovery sequence retains the scheduler's configured order, including
 TFH cohorts that recover upper-first. Native recovery notices are refreshed when
 returning from a workout or program switch and cleared when reconciliation has no new result.

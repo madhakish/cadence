@@ -1747,6 +1747,21 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   };
 }
 
+// Days the manual "Next day" picker may offer: null means every day. During a
+// legacy recovery bridge it is the unbanked recovery days, which are exactly
+// the pointers reconciliation keeps. An empty remainder means the bridge is
+// complete and rolls over on the next render, so the picker is unrestricted.
+// Mirrors SessionCompletion.manualNextDayOrders.
+export async function manualNextDayOrders(program) {
+  if (program.tfhPolicy != null || program.currentWeek !== C.DELOAD_WEEK) return null;
+  const [history, exercises] = await Promise.all([Sessions.completed(), Exercises.all()]);
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
+  const { recoverySessions, recoveryDayOrders } = recoveryBridgeState(program, history, exerciseByName, Date.now());
+  const remaining = C.recoveryRemainingDayOrders(recoveryDayOrders,
+    recoverySessions.map((candidate) => candidate.programTag.dayIndex));
+  return remaining.length ? remaining : null;
+}
+
 // Close stale/already-satisfied Recovery before Today or Start can prescribe
 // another reduced workout. The seven-day threshold only expires the bridge;
 // ordinary progression remains driven by completed cycles.

@@ -1938,6 +1938,14 @@ export function recoveryResumeDayOrder(dayOrders, completedDayOrders, currentDay
   return recoveryScheduleAdvance(dayOrders, completedDayOrders).nextDayOrder;
 }
 
+// The days a manual "Next day" pick can hold during recovery: exactly the
+// pointers recoveryResumeDayOrder keeps, in configured order. Mirrored in
+// CadenceCore ProgramProgression.recoveryRemainingDayOrders.
+export function recoveryRemainingDayOrders(dayOrders, completedDayOrders) {
+  const completed = new Set(completedDayOrders);
+  return [...new Set(dayOrders)].filter((order) => !completed.has(order));
+}
+
 // Why a bounded recovery bridge is ready to hand off to the next cycle.
 // `lastHardPhaseCompletionMs` is normally the final Peak completion; callers
 // may supply the preceding rotation completion when recovery started early.

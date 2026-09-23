@@ -494,6 +494,19 @@ eq(C.recoveryResumeDayOrder([0, 1], [0], 2), 1, "omitted pointer resumes the rem
 eq(C.recoveryResumeDayOrder([0, 1], [0], 0), 1, "already-banked pointer is repaired");
 eq(C.recoveryResumeDayOrder([0, 1], [], 1), 1, "an explicitly chosen upper-first recovery remains valid");
 eq(C.recoveryResumeDayOrder([], [], 2), 2, "an empty program does not invent a next day");
+eq(C.recoveryRemainingDayOrders([3, 0, 3, 2], [0, 5]).join(","), "3,2",
+  "the manual picker keeps configured order and drops banked days");
+eq(C.recoveryRemainingDayOrders([0, 1], [1, 0]).length, 0, "a fully banked bridge offers no recovery day");
+// The picker offers exactly what the repair keeps, so a manual pick during
+// recovery can never be silently overridden. A fully banked bridge rolls over
+// instead of repairing, so only open bridges are part of this contract.
+for (const completed of [[], [0], [1]]) {
+  const offered = C.recoveryRemainingDayOrders([0, 1], completed);
+  for (let pointer = 0; pointer <= 3; pointer++) {
+    eq(C.recoveryResumeDayOrder([0, 1], completed, pointer) === pointer, offered.includes(pointer),
+      `pointer ${pointer} after [${completed}] is offered iff the repair keeps it`);
+  }
+}
 eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
   "banking lower points at the remaining upper exposure");
 recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);

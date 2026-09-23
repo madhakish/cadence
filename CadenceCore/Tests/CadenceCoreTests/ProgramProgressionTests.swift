@@ -1026,6 +1026,21 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: selected, completedDayOrders: [], currentDayOrder: 1), 1,
                        "an explicitly chosen upper-first recovery remains valid")
         XCTAssertEqual(P.recoveryResumeDayOrder(dayOrders: [], completedDayOrders: [], currentDayOrder: 2), 2)
+        XCTAssertEqual(P.recoveryRemainingDayOrders(dayOrders: [3, 0, 3, 2], completedDayOrders: [0, 5]), [3, 2],
+                       "the manual picker keeps configured order and drops banked days")
+        XCTAssertEqual(P.recoveryRemainingDayOrders(dayOrders: selected, completedDayOrders: [1, 0]), [])
+        // The picker offers exactly what the repair keeps, so a manual pick
+        // during recovery can never be silently overridden. A fully banked
+        // bridge rolls over instead of repairing, so only open bridges count.
+        for completed: [Int] in [[], [0], [1]] {
+            let offered = P.recoveryRemainingDayOrders(dayOrders: selected, completedDayOrders: completed)
+            for pointer in 0...3 {
+                let kept = P.recoveryResumeDayOrder(
+                    dayOrders: selected, completedDayOrders: completed, currentDayOrder: pointer
+                ) == pointer
+                XCTAssertEqual(kept, offered.contains(pointer), "pointer \(pointer) after \(completed)")
+            }
+        }
         let afterLower = P.recoveryScheduleAdvance(
             dayOrders: selected, completedDayOrders: [0]
         )

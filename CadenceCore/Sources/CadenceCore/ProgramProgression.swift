@@ -477,6 +477,16 @@ public enum ProgramProgression {
         return recoveryScheduleAdvance(dayOrders: dayOrders, completedDayOrders: completedDayOrders).nextDayOrder
     }
 
+    /// The days a manual "Next day" pick can hold during recovery: exactly the
+    /// pointers `recoveryResumeDayOrder` keeps, in configured order. Offering
+    /// any other day would let reconciliation silently override the pick.
+    /// Mirrored in web/app/js/core.js `recoveryRemainingDayOrders`.
+    public static func recoveryRemainingDayOrders(dayOrders: [Int], completedDayOrders: [Int]) -> [Int] {
+        let completed = Set(completedDayOrders)
+        var seen: Set<Int> = []
+        return dayOrders.filter { !completed.contains($0) && seen.insert($0).inserted }
+    }
+
     /// Decide whether recovery has done its job.
     ///
     /// Selected representative exposures still close a short bridge normally.

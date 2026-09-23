@@ -597,6 +597,38 @@ enum SessionCompletion {
         return preceding.map(\.effectiveCompletionDate)
     }
 
+    private static func selectedRecoveryDayOrders(
+        for program: Program, exerciseByName: [String: Exercise]
+    ) -> [Int] {
+        ProgramProgression.recoveryDayOrders(
+            program.orderedDays.map { programDay in
+                let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
+                return RecoveryDayCandidate(
+                    order: programDay.order,
+                    mainMovementGroup: mainName.flatMap { exerciseByName[$0]?.movementGroup }
+                )
+            }
+        )
+    }
+
+    /// Days the manual "Next day" picker may offer; `nil` means every day.
+    /// During a legacy recovery bridge it is the unbanked recovery days, which
+    /// are exactly the pointers reconciliation keeps. An empty remainder means
+    /// the bridge is complete and rolls over on the next reconcile, so the
+    /// picker is unrestricted. Mirrors web session.js `manualNextDayOrders`.
+    static func manualNextDayOrders(program: Program, context: ModelContext) throws -> [Int]? {
+        guard program.tfhPolicyData == nil, program.currentWeek == ProgramProgression.deloadWeek else { return nil }
+        let exerciseByName = try context.fetch(FetchDescriptor<Exercise>()).indexedByName()
+        let recoveryOrders = selectedRecoveryDayOrders(for: program, exerciseByName: exerciseByName)
+        let recoverySessions = try recentRecoverySessions(
+            for: program, selectedExposureCount: recoveryOrders.count, context: context
+        )
+        let remaining = ProgramProgression.recoveryRemainingDayOrders(
+            dayOrders: recoveryOrders, completedDayOrders: recoverySessions.compactMap(\.programDayIndex)
+        )
+        return remaining.isEmpty ? nil : remaining
+    }
+
     /// Close a stale or already-satisfied recovery bridge before Today or
     /// Start can prescribe another reduced workout. The seven-day threshold is
     /// an expiry guard only; normal program advancement remains cycle-based.
@@ -646,17 +678,8 @@ enum SessionCompletion {
         openByName.fetchLimit = 1
         guard try context.fetch(openByName).isEmpty else { return nil }
 
-        let exercises = try context.fetch(FetchDescriptor<Exercise>())
-        let exerciseByName = exercises.indexedByName()
-        let recoveryOrders = ProgramProgression.recoveryDayOrders(
-            program.orderedDays.map { programDay in
-                let mainName = programDay.orderedLifts.first(where: { $0.role == .main })?.exerciseName
-                return RecoveryDayCandidate(
-                    order: programDay.order,
-                    mainMovementGroup: mainName.flatMap { exerciseByName[$0]?.movementGroup }
-                )
-            }
-        )
+        let exerciseByName = try context.fetch(FetchDescriptor<Exercise>()).indexedByName()
+        let recoveryOrders = selectedRecoveryDayOrders(for: program, exerciseByName: exerciseByName)
         let recoverySessions = try recentRecoverySessions(
             for: program, selectedExposureCount: recoveryOrders.count, context: context
         )

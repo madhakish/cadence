@@ -3534,6 +3534,51 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.Programs.del(program.id);
 }
 
+// ---- the manual Next-day picker offers only picks recovery repair keeps ----
+{
+  const name = "Fixture Recovery Picker";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.GRADED_WEEK,
+    nextDayIndex: 2, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Lower B", order: 2, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+      { name: "Upper B", order: 3, lifts: [cyc("Overhead Press", "main", 95, 125)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const bankedId = await db.Sessions.save({
+    date: "2042-03-01T12:00:00.000Z", completedAt: "2042-03-01T13:00:00.000Z",
+    notes: "Synthetic banked recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] },
+    exercises: [],
+  });
+  settings.programEditor(program); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const daySelect = () => [...editor.querySelectorAll(".row")]
+    .find((row) => row.textContent.startsWith("Next day")).querySelector("select");
+  const offered = () => [...daySelect().options].map((option) => option.textContent).join(",");
+  ok(offered() === "Lower A,Upper A,Lower B,Upper B", "build rotations offer every day");
+  const rotationRow = [...editor.querySelectorAll(".row")].find((row) => row.textContent.startsWith("Rotation"));
+  [...rotationRow.querySelectorAll("button")].at(-1).click(); await tick();
+  program = await db.Programs.get(program.id);
+  ok(program.currentWeek === C.DELOAD_WEEK, "the rotation stepper enters recovery");
+  ok(offered() === "Upper A",
+    "[INV-RECOVERY-IS-A-BRIDGE] recovery offers only unbanked recovery days, refreshed without a redraw");
+  const select = daySelect();
+  select.value = "1"; select.dispatchEvent(new window.Event("change")); await tick();
+  program = await db.Programs.get(program.id);
+  ok(program.nextDayIndex === 1, "the recovery pick is saved");
+  ok(await session.reconcileRecoveryBridge(program, await db.Sessions.completed(), new Date("2042-03-02T10:00:00.000Z")) === null
+    && (await db.Programs.get(program.id)).nextDayIndex === 1,
+    "[INV-RECOVERY-IS-A-BRIDGE] reconciliation keeps every offered manual pick");
+  document.getElementById("overlays").replaceChildren();
+  await db.Sessions.del(bankedId);
+  await db.Programs.del(program.id);
+}
+
 // ---- recovery is capped at two sessions and expires after seven days ----
 {
   const name = "Fixture Bounded Recovery";
