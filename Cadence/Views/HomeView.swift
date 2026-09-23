@@ -117,6 +117,35 @@ struct HomeView: View {
         program.nextDay
     }
 
+    private func scheduledDays(_ program: Program) -> [ProgramDay] {
+        let days = program.orderedDays
+        guard program.currentWeek == ProgramProgression.deloadWeek else { return days }
+        let recoveryOrders: [Int]
+        do {
+            if let policy = try TFHProgramService.policy(program) {
+                recoveryOrders = policy.recoveryDayOrders
+            } else {
+                recoveryOrders = ProgramProgression.recoveryDayOrders(days.map { day in
+                    let main = day.orderedLifts.first { $0.role == .main }
+                    return RecoveryDayCandidate(order: day.order, mainMovementGroup:
+                        exercises.first { $0.name == main?.exerciseName }?.movementGroup)
+                })
+            }
+        } catch {
+            // Reconciliation presents the policy failure through the existing
+            // persistence error surface. Do not invent a recovery schedule.
+            return []
+        }
+        let orders = ProgramProgression.visibleDayOrders(
+            dayOrders: days.map(\.order), recoveryDayOrders: recoveryOrders, rotation: program.currentWeek
+        )
+        return orders.compactMap { order in days.first { $0.order == order } }
+    }
+
+    private func workoutName(_ program: Program, _ day: ProgramDay) -> String {
+        ProgramProgression.workoutDayLabel(name: day.name, rotation: program.currentWeek)
+    }
+
     /// The shared preview pipeline — the card must show the same honest,
     /// snapped plan the started session will store.
     private func previewPlans(_ program: Program, _ lift: ProgramLift) -> (raw: SessionPlan, snapped: SessionPlan) {
@@ -229,8 +258,9 @@ struct HomeView: View {
                         Button { previewProgramDay(program, fallback: day) } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Next workout").font(.caption.bold()).foregroundStyle(.secondary)
-                                    Text(day.name).font(.title2.bold())
+                                    Text(program.currentWeek == ProgramProgression.deloadWeek ? "Deload · light work" : "Next workout")
+                                        .font(.caption.bold()).foregroundStyle(.secondary)
+                                    Text(workoutName(program, day)).font(.title2.bold())
                                     Text("\(program.name) · Cycle \(program.cycleNumber)")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
@@ -239,20 +269,25 @@ struct HomeView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         }
-                        Button("Start \(day.name)") { startProgramDay(program, day) }
+                        Button("Start \(workoutName(program, day))") { startProgramDay(program, day) }
                             .primaryActionStyle()
                     }
                 }
 
                 if let program = activeProgram, !program.orderedDays.isEmpty {
+                    let days = scheduledDays(program)
                     Section {
+                        if program.currentWeek == ProgramProgression.deloadWeek {
+                            Text("Recovery · \(days.count) light sessions in this rotation")
+                                .font(.subheadline.bold())
+                        }
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
-                                ForEach(program.orderedDays) { day in
-                                    Text("\(day.order == program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
+                                ForEach(days) { day in
+                                    Text("\(day.order == program.nextDayIndex ? "NOW " : program.currentWeek != ProgramProgression.deloadWeek && day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
                                         .font(.caption.bold())
                                         .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
-                                    if day.id != program.orderedDays.last?.id { Text("→").foregroundStyle(.tertiary) }
+                                    if day.id != days.last?.id { Text("→").foregroundStyle(.tertiary) }
                                 }
                             }
                         }
@@ -376,7 +411,7 @@ struct HomeView: View {
                             previewProgramDay(program, fallback: day)
                         } label: {
                             HStack(spacing: 8) {
-                                Text(day.name).font(.headline)
+                                Text(workoutName(program, day)).font(.headline)
                                 Spacer()
                                 // Position only. The phase NAME moved onto the
                                 // slots it actually describes — this counter is
@@ -450,7 +485,7 @@ struct HomeView: View {
                         Button {
                             startProgramDay(program, day)
                         } label: {
-                            Text("Start \(day.name)").frame(maxWidth: .infinity).font(.headline)
+                            Text("Start \(workoutName(program, day))").frame(maxWidth: .infinity).font(.headline)
                         }
                         .primaryActionStyle()
                     }
@@ -497,7 +532,7 @@ struct HomeView: View {
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
             .plateCalculatorClearance()
-            .sheet(isPresented: $showProgramSwitcher) {
+            .sheet(isPresented: $showProgramSwitcher, onDismiss: reconcileActiveRecovery) {
                 NavigationStack {
                     ProgramSwitcherView(onError: { switcherError = $0 })
                 }
@@ -509,7 +544,7 @@ struct HomeView: View {
             } message: {
                 Text(switcherError ?? "")
             }
-            .fullScreenCover(item: $activeSession) { session in
+            .fullScreenCover(item: $activeSession, onDismiss: reconcileActiveRecovery) { session in
                 NavigationStack {
                     ActiveSessionView(session: session)
                 }
@@ -683,14 +718,15 @@ struct HomeView: View {
     }
 
     private func reconcileRecoveryBridge(for program: Program) throws -> Bool {
-        guard let result = try SessionCompletion.reconcileRecoveryBridge(
+        let result = try RecoveryBridgeService.reconcileRecoveryBridge(
             program: program, context: context
-        ) else { return false }
-        recoveryMessage = result.message
-        return true
+        )
+        recoveryMessage = result?.message
+        return result != nil
     }
 
     private func reconcileActiveRecovery() {
+        recoveryMessage = nil
         guard let program = activeProgram else { return }
         do {
             _ = try reconcileRecoveryBridge(for: program)

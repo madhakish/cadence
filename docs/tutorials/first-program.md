@@ -102,6 +102,14 @@ cycle rolls over: clean lifts get a proportional weight increase, misses hold
 or eventually trigger a −10% rebuild, and rotation 1 of cycle 2 begins with
 new prescriptions. You never have to decide what to lift — that's the point.
 
+During rotation 4, Today says **Deload · light work** and names the workout
+**Recovery · Lower A** or **Recovery · Upper A**. Only the two recovery days
+appear in the sequence. The preview shows reduced lift prescriptions and one
+set per accessory; completing recovery restores the full four-day sequence.
+TFH programs use their configured recovery days and require completed recovery
+sessions. Existing programs do not silently switch to TFH when the app updates;
+review TFH setup in the program editor to start a TFH cohort.
+
 Where to go from here:
 
 - [Run a training day](../how-to/run-a-training-day.md) — set flags,

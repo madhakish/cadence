@@ -429,6 +429,24 @@ public enum ProgramProgression {
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
     }
 
+    /// Presentation reads the same authored/representative orders as scheduling.
+    /// TFH callers supply the cohort's recovery orders instead of legacy inference.
+    public static func visibleDayOrders(dayOrders: [Int], recoveryDayOrders: [Int], rotation: Int) -> [Int] {
+        guard rotation == deloadWeek else { return Array(Set(dayOrders)).sorted() }
+        var seen: Set<Int> = []
+        return recoveryDayOrders.filter { seen.insert($0).inserted }
+    }
+
+    /// Recovery is shared by every slot style, even when build phases are not.
+    public static func workoutDayLabel(name: String, rotation: Int) -> String {
+        rotation == deloadWeek ? "Recovery · \(name)" : name
+    }
+
+    /// Used by both preview and creation; recovery always trims accessories.
+    public static func recoveryAccessorySets(ordinarySets: Int, rotation: Int) -> Int {
+        rotation == deloadWeek ? 1 : ordinarySets
+    }
+
     /// Recovery completion is set-based, not pointer-based. The bridge may be
     /// banked in either order, and a program upgraded while already in phase 4
     /// may point at a day omitted by the shortened bridge. Count the selected
@@ -445,6 +463,28 @@ public enum ProgramProgression {
             return (next, false)
         }
         return (selected[0], true)
+    }
+
+    /// Preserve a valid chosen recovery order, including upper-first. Repair
+    /// an omitted or already-banked pointer to the next remaining exposure.
+    public static func recoveryResumeDayOrder(
+        dayOrders: [Int], completedDayOrders: [Int], currentDayOrder: Int
+    ) -> Int {
+        guard !dayOrders.isEmpty else { return currentDayOrder }
+        if dayOrders.contains(currentDayOrder), !completedDayOrders.contains(currentDayOrder) {
+            return currentDayOrder
+        }
+        return recoveryScheduleAdvance(dayOrders: dayOrders, completedDayOrders: completedDayOrders).nextDayOrder
+    }
+
+    /// The days a manual "Next day" pick can hold during recovery: exactly the
+    /// pointers `recoveryResumeDayOrder` keeps, in configured order. Offering
+    /// any other day would let reconciliation silently override the pick.
+    /// Mirrored in web/app/js/core.js `recoveryRemainingDayOrders`.
+    public static func recoveryRemainingDayOrders(dayOrders: [Int], completedDayOrders: [Int]) -> [Int] {
+        let completed = Set(completedDayOrders)
+        var seen: Set<Int> = []
+        return dayOrders.filter { !completed.contains($0) && seen.insert($0).inserted }
     }
 
     /// Decide whether recovery has done its job.

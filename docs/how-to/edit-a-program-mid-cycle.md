@@ -29,7 +29,7 @@ the slot's progression state instead of resetting it.
 
 The **Rotation** control sets cycle week and next day directly. Use it
 to skip ahead, repeat a week, or align Cadence with training you did on
-paper. Two things to know:
+paper. Three things to know:
 
 - Manual repositioning never *penalizes* you: lifts whose peak hasn't
   been graded aren't treated as missed when you move the pointer.
@@ -37,6 +37,9 @@ paper. Two things to know:
   it when banked. A session left over from before you repositioned still
   banks into history, but it won't drag the schedule around
   ([why](../reference/progression-rules.md#stale-sessions)).
+- During recovery (rotation 4), **Next day** lists only the recovery days
+  you haven't banked this cycle. Other days would be moved back to the
+  recovery bridge the next time Today opens.
 
 ## What edits do to progression
 

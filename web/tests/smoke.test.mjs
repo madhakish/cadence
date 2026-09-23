@@ -3439,6 +3439,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   for (let i = 1; i < 14; i++) { // 3 × 4 progression exposures + 2 recovery exposures
     prog = await db.Programs.active();
     const day = prog.days.find((d) => d.order === prog.nextDayIndex);
+    if (prog.currentWeek === C.DELOAD_WEEK) {
+      await home.render(host());
+      const hero = host().querySelector(".today-hero");
+      ok(hero.textContent.includes(`Recovery · ${day.name}`) && hero.textContent.includes("Deload · light work"),
+        "[INV-RECOVERY-IS-A-BRIDGE] Today explicitly identifies the next recovery workout");
+      const sequence = host().querySelector(".day-sequence").textContent;
+      ok(sequence.includes("Lower A") && sequence.includes("Upper A") && !sequence.includes("Lower B") && !sequence.includes("Upper B"),
+        "Recovery sequence shows only the two scheduled representatives");
+      hero.querySelector("button").click();
+      const preview = document.querySelector("#overlays .overlay:last-child");
+      ok(preview.textContent.includes(`Start Recovery · ${day.name}`), "preview start action names recovery");
+      for (const acc of day.accessories) {
+        const row = [...preview.querySelectorAll(".row")].find(row => row.querySelector(".title")?.textContent === acc.exerciseName);
+        ok(/^1(?:×| ×)/.test(row?.querySelector(".sub.mono")?.textContent || ""),
+          "recovery accessory preview shows the single set the builder will create");
+      }
+      preview.querySelector(".overlay-head button").click();
+    }
     const id = await session.createSessionFromProgramDay(prog, day);
     const sess = await db.Sessions.get(id);
     if (sess.programTag.week === C.DELOAD_WEEK) {
@@ -3453,6 +3471,9 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   prog = await db.Programs.active();
   ok(prog.cycleNumber === 2, `cycle rolled over (cyc=${prog.cycleNumber})`);
   ok(prog.currentWeek === 1, `wave reset to week 1 (wk=${prog.currentWeek})`);
+  await home.render(host());
+  ok(!host().querySelector(".today-hero").textContent.includes("Recovery"), "new cycle returns to the ordinary workout heading");
+  ok(host().querySelector(".day-sequence").textContent.includes("Upper B"), "new cycle restores the full four-day sequence");
   ok(recoveryDays.join(",") === "Lower A,Upper A",
     `[INV-RECOVERY-IS-A-BRIDGE] phase 4 banks one lower and one upper exposure (${recoveryDays})`);
   const squatMain = prog.days[0].lifts.find((l) => l.role === "main");
@@ -3482,6 +3503,12 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   });
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   const priorIds = [];
+  const beforePointerRepair = JSON.stringify({ ...program, nextDayIndex: 0 });
+  const repaired = await session.reconcileRecoveryBridge(program, [], new Date("2042-01-01T10:00:00.000Z"));
+  ok(repaired?.reason === null && repaired?.message.startsWith("Recovery continues"),
+    "[INV-RECOVERY-IS-A-BRIDGE] an omitted recovery pointer is repaired without declaring recovery complete");
+  ok(JSON.stringify(program) === beforePointerRepair, "pointer repair preserves all cycle and progression state");
+  ok((await db.Programs.get(program.id)).nextDayIndex === 0, "recovery pointer repair is persisted");
   for (const [index, dayIndex] of [0, 1].entries()) {
     priorIds.push(await db.Sessions.save({
       date: `2042-01-0${index + 1}T12:00:00.000Z`,
@@ -3507,6 +3534,51 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     "[INV-RECOVERY-IS-A-BRIDGE] an in-flight old phase-4 pointer rolls over from already-banked bridge exposures");
 
   for (const id of priorIds) await db.Sessions.del(id);
+  await db.Programs.del(program.id);
+}
+
+// ---- the manual Next-day picker offers only picks recovery repair keeps ----
+{
+  const name = "Fixture Recovery Picker";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: C.GRADED_WEEK,
+    nextDayIndex: 2, roundingLb: 5, isActive: false,
+    days: [
+      { name: "Lower A", order: 0, lifts: [cyc("Back Squat", "main", 175, 225)], accessories: [] },
+      { name: "Upper A", order: 1, lifts: [cyc("Barbell Bench", "main", 135, 175)], accessories: [] },
+      { name: "Lower B", order: 2, lifts: [cyc("Deadlift", "main", 205, 275)], accessories: [] },
+      { name: "Upper B", order: 3, lifts: [cyc("Overhead Press", "main", 95, 125)], accessories: [] },
+    ],
+  });
+  let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const bankedId = await db.Sessions.save({
+    date: "2042-03-01T12:00:00.000Z", completedAt: "2042-03-01T13:00:00.000Z",
+    notes: "Synthetic banked recovery exposure", isCompleted: true,
+    programTag: { programId: program.uuid, programName: name,
+      cycleNumber: 1, week: C.DELOAD_WEEK, dayIndex: 0, planNames: [] },
+    exercises: [],
+  });
+  settings.programEditor(program); await tick();
+  const editor = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const daySelect = () => [...editor.querySelectorAll(".row")]
+    .find((row) => row.textContent.startsWith("Next day")).querySelector("select");
+  const offered = () => [...daySelect().options].map((option) => option.textContent).join(",");
+  ok(offered() === "Lower A,Upper A,Lower B,Upper B", "build rotations offer every day");
+  const rotationRow = [...editor.querySelectorAll(".row")].find((row) => row.textContent.startsWith("Rotation"));
+  [...rotationRow.querySelectorAll("button")].at(-1).click(); await tick();
+  program = await db.Programs.get(program.id);
+  ok(program.currentWeek === C.DELOAD_WEEK, "the rotation stepper enters recovery");
+  ok(offered() === "Upper A",
+    "[INV-RECOVERY-IS-A-BRIDGE] recovery offers only unbanked recovery days, refreshed without a redraw");
+  const select = daySelect();
+  select.value = "1"; select.dispatchEvent(new window.Event("change")); await tick();
+  program = await db.Programs.get(program.id);
+  ok(program.nextDayIndex === 1, "the recovery pick is saved");
+  ok(await session.reconcileRecoveryBridge(program, await db.Sessions.completed(), new Date("2042-03-02T10:00:00.000Z")) === null
+    && (await db.Programs.get(program.id)).nextDayIndex === 1,
+    "[INV-RECOVERY-IS-A-BRIDGE] reconciliation keeps every offered manual pick");
+  document.getElementById("overlays").replaceChildren();
+  await db.Sessions.del(bankedId);
   await db.Programs.del(program.id);
 }
 
@@ -3586,7 +3658,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const inside = await session.reconcileRecoveryBridge(
     program, await db.Sessions.completed(), new Date("2042-03-08T12:59:59.999Z"),
   );
-  ok(inside === null, "Recovery remains available one millisecond before the seven-day boundary");
+  ok(inside?.reason === null && program.currentWeek === 4 && program.nextDayIndex === 1,
+    "Recovery remains available before seven days and repairs a pointer to an already-banked exposure");
   const expired = await session.reconcileRecoveryBridge(
     program, await db.Sessions.completed(), new Date("2042-03-08T13:00:00.000Z"),
   );
@@ -3741,7 +3814,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     }));
   }
   const held = await session.reconcileRecoveryBridge(program, await db.Sessions.completed());
-  ok(held === null,
+  ok(held?.reason === null && program.cycleNumber === 1
+      && program.currentWeek === C.DELOAD_WEEK && program.nextDayIndex === 2,
     "[INV-RECOVERY-IS-A-BRIDGE] a three-day authored bridge is not closed by two sessions");
   ids.push(await db.Sessions.save({
     date: new Date().toISOString(), completedAt: new Date().toISOString(),

@@ -472,10 +472,41 @@ eq(C.recoveryDayOrders([
 ]).join(","), "0,2,5", "ambiguous programs retain their complete authored rotation");
 eq(C.recoveryDayOrders([]).length, 0, "empty recovery candidates stay empty");
 
+// [INV-RECOVERY-IS-A-BRIDGE] Presentation uses authored recovery orders,
+// including a TFH policy with three days and sparse day ordering.
+eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], 4).join(","), "2,5", "visible legacy recovery has two days");
+eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5, 9], 4).join(","), "2,5,9", "TFH can show three recovery days");
+eq(C.visibleDayOrders([0, 1, 2, 3], [3, 0, 2], 4).join(","), "3,0,2", "TFH recovery presentation preserves the configured scheduler order");
+for (const rotation of [1, 2, 3]) {
+  eq(C.visibleDayOrders([7, 2, 9, 5], [2, 5], rotation).join(","), "2,5,7,9", "build retains all authored days");
+  eq(C.workoutDayLabel("Day Alpha", rotation), "Day Alpha", "build day keeps its authored name");
+  eq(C.recoveryAccessorySets(3, rotation), 3, "build accessory count holds");
+}
+eq(C.workoutDayLabel("Day Alpha", 4), "Recovery · Day Alpha", "recovery is explicit regardless of day name");
+eq(C.recoveryAccessorySets(3, 4), 1, "recovery preview and builder agree for all accessory modalities");
+
 // Recovery completion counts selected exposures actually banked in the
 // current cycle. Pointer order cannot make the second-authored day roll early,
 // and an old full-rotation day cannot count as part of the shortened bridge.
 let recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [0]);
+eq(C.recoveryResumeDayOrder([0, 1], [], 2), 0, "omitted recovery pointer resumes the first representative");
+eq(C.recoveryResumeDayOrder([0, 1], [0], 2), 1, "omitted pointer resumes the remaining representative");
+eq(C.recoveryResumeDayOrder([0, 1], [0], 0), 1, "already-banked pointer is repaired");
+eq(C.recoveryResumeDayOrder([0, 1], [], 1), 1, "an explicitly chosen upper-first recovery remains valid");
+eq(C.recoveryResumeDayOrder([], [], 2), 2, "an empty program does not invent a next day");
+eq(C.recoveryRemainingDayOrders([3, 0, 3, 2], [0, 5]).join(","), "3,2",
+  "the manual picker keeps configured order and drops banked days");
+eq(C.recoveryRemainingDayOrders([0, 1], [1, 0]).length, 0, "a fully banked bridge offers no recovery day");
+// The picker offers exactly what the repair keeps, so a manual pick during
+// recovery can never be silently overridden. A fully banked bridge rolls over
+// instead of repairing, so only open bridges are part of this contract.
+for (const completed of [[], [0], [1]]) {
+  const offered = C.recoveryRemainingDayOrders([0, 1], completed);
+  for (let pointer = 0; pointer <= 3; pointer++) {
+    eq(C.recoveryResumeDayOrder([0, 1], completed, pointer) === pointer, offered.includes(pointer),
+      `pointer ${pointer} after [${completed}] is offered iff the repair keeps it`);
+  }
+}
 eq(`${recoveryAdvance.nextDayOrder}:${recoveryAdvance.isLastDay}`, "1:false",
   "banking lower points at the remaining upper exposure");
 recoveryAdvance = C.recoveryScheduleAdvance([0, 1], [1]);
