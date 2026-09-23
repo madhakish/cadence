@@ -315,8 +315,10 @@ for (const track of [
   "left and right sleeve coordinates mirror while preserving the same collar-first load order");
   const bumperBar = barbell.barbellSVG(mixedSolution, "full", "bumper").svg;
   const bumperRight = [...bumperBar.querySelectorAll('.barbell-plate-body[data-side="right"]')];
-  ok(Number(bumperRight[0].getAttribute("height")) === Number(bumperRight[1].getAttribute("height"))
-    && Number(rightStack[0].getAttribute("height")) > Number(rightStack[1].getAttribute("height")),
+  const [bumperInner, bumperNext] = orderedStack(bumperRight);
+  const [steelInner, steelNext] = orderedStack(rightStack);
+  ok(Number(bumperInner.getAttribute("height")) === Number(bumperNext.getAttribute("height"))
+    && Number(steelInner.getAttribute("height")) > Number(steelNext.getAttribute("height")),
   "bumper plates keep competition diameter while calibrated steel steps down by denomination");
   ok(bumperBar.querySelectorAll("image.barbell-plate-face").length === bumperRight.length * 2
     && bumperBar.querySelectorAll("image.barbell-plate-hub").length === bumperRight.length * 2
@@ -326,8 +328,9 @@ for (const track of [
     .slice(0, 6).map((label) => Number(label.getAttribute("y")));
   ok(new Set(mixedLabelYs).size > 1,
     "adjacent denominations use staggered label rails instead of printing on top of one another");
-  ok(fullBar.querySelector("linearGradient") && fullBar.querySelectorAll("line.barbell-knurl").length > 10,
-    "the calculator bar uses reflective steel and real knurl detail rather than flat blocks");
+  ok(/bar-shaft-/.test(fullBar.querySelector("image.barbell-shaft")?.getAttribute("href") || "")
+    && fullBar.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
+    "the calculator bar is the rendered chrome shaft and sleeves rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
     && fullRendered.minimumLegibleWidth <= 390,
   "a normal complete bar derives a legible width that fits the primary phone viewport");
@@ -343,14 +346,14 @@ for (const track of [
     "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
   const collarSolution = solveAt(50);
   const collarsOnly = barbell.barbellSVG(collarSolution, "full").svg;
-  ok(collarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2,
+  ok(collarsOnly.querySelectorAll("image.barbell-collar, image.barbell-collar-near").length === 2,
     "a collar-only full bar draws one lock collar on each sleeve");
   ok(collarsOnly.textContent.includes("bar + collars") && !collarsOnly.textContent.includes("bar only")
     && collarsOnly.getAttribute("aria-label").includes("with collars, no plates")
     && !collarsOnly.getAttribute("aria-label").includes("bar only"),
   "a collar-only load is labeled as bar plus collars visually and accessibly");
   const compactCollarsOnly = barbell.barbellSVG(collarSolution).svg;
-  ok(compactCollarsOnly.querySelectorAll("rect.barbell-lock-collar").length === 2
+  ok(compactCollarsOnly.querySelectorAll("image.barbell-collar, image.barbell-collar-near").length === 2
     && compactCollarsOnly.textContent.includes("bar + collars"),
   "the compact full-bar scene shows both collars instead of claiming bar only");
   await db.Gyms.save(legacyRack);

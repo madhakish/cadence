@@ -34,14 +34,32 @@ export function plateGeometry(plate, style = 'steel') {
   const [diameter, thickness] = (style === 'bumper' ? BUMPER : STEEL)[key] || CHANGE[key] || [200, 20];
   return { diameter, thickness };
 }
-// Black iron is the untinted texture; every other token tints the face with
-// its palette fill. Mirrors CadenceCore PlateFaceTint.
-export function plateTintGains(token) {
+// Photographic face colourisation, mirrored from CadenceCore PlateFaceTint: a
+// 5×4 colour matrix (row-major R, G, B, A rows of five) that rebuilds every
+// channel from the texture's luminance, so the plate keeps its photographed
+// shading and takes its hue from the palette fill. Black iron is untinted.
+export const PLATE_TINT_IDENTITY = [1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0];
+// Median face luminance of each rendered sprite family (measured, hub excluded);
+// the lift maps it to 85% of the fill so highlights keep headroom.
+export const plateTintLift = (style) => 0.85 / (style === "bumper" ? 0.459 : 0.453);
+export const PLATE_TINT_GREY_MIX = 0.12;
+export function plateTintMatrix(token, style = "steel") {
   const fill = token === "black" ? null : C.PLATE_COLOURS[token]?.fill;
-  if (!fill) return [1, 1, 1];
+  if (!fill) return PLATE_TINT_IDENTITY;
   const hex = Number.parseInt(fill.slice(1), 16);
-  return [16, 8, 0].map((shift) => ((hex >> shift) & 255) / 255 * 3.2);
+  const channels = [16, 8, 0].map((shift) => ((hex >> shift) & 255) / 255);
+  const lift = plateTintLift(style), grey = lift * PLATE_TINT_GREY_MIX;
+  const luma = [0.2126, 0.7152, 0.0722];
+  const rows = [];
+  for (const channel of channels) {
+    const weight = channel * lift + (1 - channel) * grey;
+    rows.push(...luma.map((l) => l * weight), 0, 0);
+  }
+  rows.push(0, 0, 0, 1, 0);
+  return rows;
 }
+// The colour a neutral texel of luminance l becomes: [r, g, b], clamped.
+export const plateTintApply = (matrix, l) => [0, 5, 10].map((i) => Math.min(1, matrix[i] * l + matrix[i + 1] * l + matrix[i + 2] * l));
 export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}) {
   const angle = (exploded ? 38 : 18) * Math.PI / 180;
   const axisX = Math.cos(angle), axisY = -Math.sin(angle) * .24, faceScale = Math.sin(angle);

@@ -1,0 +1,391 @@
+{
+  "solution": {
+    "bar": {
+      "value": 45,
+      "unit": "lb"
+    },
+    "perSide": [
+      {
+        "plate": {
+          "value": 45,
+          "unit": "lb"
+        },
+        "count": 1
+      },
+      {
+        "plate": {
+          "value": 25,
+          "unit": "lb"
+        },
+        "count": 1
+      },
+      {
+        "plate": {
+          "value": 10,
+          "unit": "lb"
+        },
+        "count": 1
+      },
+      {
+        "plate": {
+          "value": 2.5,
+          "unit": "lb"
+        },
+        "count": 1
+      }
+    ]
+  },
+  "style": "steel",
+  "explode": 0.5,
+  "layout": {
+    "bar": {
+      "shaftHalfLength": 685,
+      "sleeveLength": 415,
+      "shaftRadius": 14,
+      "sleeveRadius": 25,
+      "shoulderRadius": 36,
+      "shoulderLength": 20,
+      "collarLength": 50,
+      "collarRadius": 40,
+      "shoulderEnd": 705
+    },
+    "discs": [
+      {
+        "plate": {
+          "value": 45,
+          "unit": "lb"
+        },
+        "side": -1,
+        "index": 0,
+        "family": "steel",
+        "centerX": -751,
+        "radius": 225,
+        "thickness": 27
+      },
+      {
+        "plate": {
+          "value": 25,
+          "unit": "lb"
+        },
+        "side": -1,
+        "index": 1,
+        "family": "steel",
+        "centerX": -808.5,
+        "radius": 162.5,
+        "thickness": 23
+      },
+      {
+        "plate": {
+          "value": 10,
+          "unit": "lb"
+        },
+        "side": -1,
+        "index": 2,
+        "family": "steel",
+        "centerX": -862.5,
+        "radius": 115,
+        "thickness": 20
+      },
+      {
+        "plate": {
+          "value": 2.5,
+          "unit": "lb"
+        },
+        "side": -1,
+        "index": 3,
+        "family": "change",
+        "centerX": -913,
+        "radius": 80,
+        "thickness": 16
+      },
+      {
+        "plate": {
+          "value": 45,
+          "unit": "lb"
+        },
+        "side": 1,
+        "index": 0,
+        "family": "steel",
+        "centerX": 751,
+        "radius": 225,
+        "thickness": 27
+      },
+      {
+        "plate": {
+          "value": 25,
+          "unit": "lb"
+        },
+        "side": 1,
+        "index": 1,
+        "family": "steel",
+        "centerX": 808.5,
+        "radius": 162.5,
+        "thickness": 23
+      },
+      {
+        "plate": {
+          "value": 10,
+          "unit": "lb"
+        },
+        "side": 1,
+        "index": 2,
+        "family": "steel",
+        "centerX": 862.5,
+        "radius": 115,
+        "thickness": 20
+      },
+      {
+        "plate": {
+          "value": 2.5,
+          "unit": "lb"
+        },
+        "side": 1,
+        "index": 3,
+        "family": "change",
+        "centerX": 913,
+        "radius": 80,
+        "thickness": 16
+      }
+    ],
+    "collar": {
+      "left": -953.5,
+      "right": 953.5,
+      "length": 50,
+      "radius": 40
+    },
+    "extent": 1100,
+    "maxRadius": 225
+  },
+  "profiles": [
+    {
+      "family": "bumper",
+      "diameter": 450,
+      "thickness": 60,
+      "points": [
+        [
+          25.25,
+          -31.5
+        ],
+        [
+          52.875,
+          -31.5
+        ],
+        [
+          52.875,
+          -21.6
+        ],
+        [
+          202.5,
+          -21.6
+        ],
+        [
+          202.5,
+          -30
+        ],
+        [
+          225,
+          -30
+        ],
+        [
+          225,
+          30
+        ],
+        [
+          202.5,
+          30
+        ],
+        [
+          202.5,
+          21.6
+        ],
+        [
+          52.875,
+          21.6
+        ],
+        [
+          52.875,
+          31.5
+        ],
+        [
+          25.25,
+          31.5
+        ]
+      ]
+    },
+    {
+      "family": "steel",
+      "diameter": 450,
+      "thickness": 27,
+      "points": [
+        [
+          25.25,
+          -15
+        ],
+        [
+          45,
+          -15
+        ],
+        [
+          45,
+          -8.64
+        ],
+        [
+          193.5,
+          -13.5
+        ],
+        [
+          225,
+          -13.5
+        ],
+        [
+          225,
+          13.5
+        ],
+        [
+          193.5,
+          13.5
+        ],
+        [
+          45,
+          8.64
+        ],
+        [
+          45,
+          15
+        ],
+        [
+          25.25,
+          15
+        ]
+      ]
+    },
+    {
+      "family": "change",
+      "diameter": 160,
+      "thickness": 16,
+      "points": [
+        [
+          25.25,
+          -9
+        ],
+        [
+          33.25,
+          -9
+        ],
+        [
+          33.25,
+          -8
+        ],
+        [
+          80,
+          -8
+        ],
+        [
+          80,
+          8
+        ],
+        [
+          33.25,
+          8
+        ],
+        [
+          33.25,
+          9
+        ],
+        [
+          25.25,
+          9
+        ]
+      ]
+    }
+  ],
+  "cameras": [
+    {
+      "camera": {
+        "yaw": 35,
+        "pitch": 12,
+        "zoom": 1
+      },
+      "distance": 1600,
+      "position": {
+        "x": -897.6678640867553,
+        "y": 332.6587053084149,
+        "z": 1282.002570811951
+      }
+    },
+    {
+      "camera": {
+        "yaw": 8,
+        "pitch": 10,
+        "zoom": 1
+      },
+      "distance": 1600,
+      "position": {
+        "x": -219.29399813795715,
+        "y": 277.8370842670885,
+        "z": 1560.3578746513995
+      }
+    },
+    {
+      "camera": {
+        "yaw": 90,
+        "pitch": 0,
+        "zoom": 2
+      },
+      "distance": 1000,
+      "position": {
+        "x": -500,
+        "y": 0,
+        "z": 3.061616997868383e-14
+      }
+    },
+    {
+      "camera": {
+        "yaw": -120,
+        "pitch": 60,
+        "zoom": 0.7
+      },
+      "distance": 1000,
+      "position": {
+        "x": 618.5895741317421,
+        "y": 1237.1791482634837,
+        "z": -357.14285714285705
+      }
+    }
+  ],
+  "frames": [
+    {
+      "explode": 0,
+      "frame": {
+        "target": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "halfWidth": 1100
+      }
+    },
+    {
+      "explode": 0.5,
+      "frame": {
+        "target": {
+          "x": -422.125,
+          "y": 0,
+          "z": 0
+        },
+        "halfWidth": 697.125
+      }
+    },
+    {
+      "explode": 1,
+      "frame": {
+        "target": {
+          "x": -925.5,
+          "y": 0,
+          "z": 0
+        },
+        "halfWidth": 375.5
+      }
+    }
+  ]
+}

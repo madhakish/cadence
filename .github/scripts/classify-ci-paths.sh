@@ -13,7 +13,7 @@ while IFS= read -r path; do
   [[ -z "$path" ]] && continue
 
   case "$path" in
-    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|fastlane/*|Gemfile|Gemfile.lock|project.yml|.github/workflows/ci.yml|.github/scripts/classify-ci-paths.sh|.github/scripts/test-classify-ci-paths.sh|.github/scripts/plan-release.mjs|.github/scripts/verify-native-jobs.sh|.github/scripts/verify-release-artifact.sh)
+    Cadence/*|CadenceWidgets/*|CadenceCore/*|CadenceMigrationTests/*|CadenceVisualProofUITests/*|fastlane/*|Gemfile|Gemfile.lock|project.yml|.github/workflows/ci.yml|.github/scripts/classify-ci-paths.sh|.github/scripts/test-classify-ci-paths.sh|.github/scripts/plan-release.mjs|.github/scripts/verify-native-jobs.sh|.github/scripts/verify-native-smoke.mjs|.github/scripts/test-verify-native-smoke.mjs|.github/scripts/native-smoke-summary.fixture.json|.github/scripts/verify-release-artifact.sh)
       native=true
       ;;
   esac
@@ -21,9 +21,10 @@ while IFS= read -r path; do
   case "$path" in
     # Every source compiled into the hostless CadenceMigrationTests target
     # (see project.yml) is compatibility-bearing: the backup and program-file
-    # codecs plus the template/seed catalogs are proven only by that suite,
+    # codecs plus the template/seed catalogs and shared core dependency are
+    # proven together only by that suite,
     # so a change to any of them must run it.
-    Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|Cadence/Services/SessionCorrectionService.swift|Cadence/Services/ActivitySession.swift|Cadence/Services/ProgramActivationService.swift|Cadence/Services/MilestoneProjection.swift|Cadence/Services/RecoveryBridgeService.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
+    CadenceCore/*|Cadence/Models/*|Cadence/Seed/Seeder.swift|Cadence/Seed/ProgramTemplates.swift|Cadence/Services/ExportService.swift|Cadence/Services/ImportService.swift|Cadence/Services/ProgramExportService.swift|Cadence/Services/ProgramImportService.swift|Cadence/Services/SessionCorrectionService.swift|Cadence/Services/ActivitySession.swift|Cadence/Services/ProgramActivationService.swift|Cadence/Services/TFHProgramService.swift|Cadence/Services/ProgramSession.swift|Cadence/Services/TFHSession.swift|Cadence/Services/ProgramEquipmentService.swift|Cadence/Services/WorkoutCommandService.swift|Cadence/Services/MilestoneProjection.swift|Cadence/Services/RecoveryBridgeService.swift|CadenceMigrationTests/*|project.yml|.github/scripts/generate-shipped-stores.sh)
       migrations=true
       ;;
   esac

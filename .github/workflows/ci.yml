@@ -102,6 +102,7 @@ jobs:
           bash .github/scripts/test-cancel-stale-pr-runs.sh
           bash .github/scripts/test-classify-ci-paths.sh
           bash .github/scripts/test-ci-topology.sh
+          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs
           bash .github/scripts/test-fastlane-phases.sh
           bash .github/scripts/test-verify-native-jobs.sh
       - name: Classify changed paths
@@ -136,37 +137,35 @@ jobs:
           bash .github/scripts/classify-ci-paths.sh < "$paths" | tee -a "$GITHUB_OUTPUT"
 
   core-tests:
+    # Preserve the required-check context; execution uses macOS below.
     name: CadenceCore tests (Linux)
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
-    container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Linux cannot COMPILE the app target (SwiftUI/SwiftData), but it can
-      # PARSE it. A bare syntax error in app-target Swift used to survive
-      # every fast job and surface minutes later in all the macOS builds at
-      # once; this catches that class in seconds, in the container this job
-      # already pays for. Parse-only: macros, property wrappers, and Apple
-      # attributes are syntactically valid here even though they cannot
-      # type-check off-Darwin. If app code ever adopts syntax newer than this
-      # container's Swift, bump the container (CadenceCore needs the same).
+      - name: Show Xcode Swift toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+      # Catch syntax errors before the downstream production app builds.
+      # Parsing alone does not type-check SwiftUI or SwiftData usage.
       - name: Parse app-target Swift (syntax fail-fast)
         run: |
           find Cadence CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
-            | xargs -0 swiftc -parse
+            | xargs -0 xcrun swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
-        run: swift test
+        run: xcrun swift test
 
   # The CadenceCore↔core.js parity mandate is enforced pre-merge: a PR that
   # touches either side without its mirror fails these suites.
   web-tests:
     name: Web tests (parity + smoke)
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
     outputs:
       simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}
@@ -211,12 +210,8 @@ jobs:
           VERIFY_SIGNED_ARTIFACT: ${{ inputs.verify_signed_artifact || 'false' }}
         run: node .github/scripts/plan-release.mjs
 
-  # The macOS jobs are the expensive tier, so they sit BEHIND the fast Linux
-  # suites: a red core/web/parse failure costs zero macOS minutes, and every
-  # build that does start already has the cheap proofs behind it. The ~40s of
-  # added green-path latency buys a strictly rising pass rate through the
-  # pipeline. Workflow-only PRs still exercise the builds; docs/web-only PRs
-  # do not spend macOS runner minutes.
+  # App builds wait for core, web, and syntax checks. Workflow-only PRs
+  # exercise this tier; docs/web-only PRs run core on macOS but skip app builds.
   # The simulator download and signed App Store IPA are release artifacts.
   # Build them only when the pinned semantic-release analyzer finds a pending
   # release. Already-tagged retries reuse the published IPA; docs:/ci:/test:
@@ -440,11 +435,83 @@ jobs:
           -derivedDataPath build/migration
           CODE_SIGNING_ALLOWED=NO
 
+  # Mandatory behavioral checks; artistic capture review remains opt-in.
+  native-smoke:
+    name: iPhone interaction tests
+    needs: [changes, core-tests, web-tests]
+    if: needs.changes.outputs.native == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Select and boot an iPhone
+        id: simulator
+        run: |
+          device_id="$(python3 - <<'PY'
+          import json, subprocess
+
+          payload = json.loads(subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "-j"],
+              text=True,
+          ))
+          phones = [
+              device
+              for runtime in payload["devices"].values()
+              for device in runtime
+              if device["name"].startswith("iPhone")
+          ]
+          preferred = next((d for d in phones if d["name"] == "iPhone 16 Pro"), None)
+          selected = preferred or next((d for d in phones if "Pro" in d["name"]), None) or phones[0]
+          print(selected["udid"])
+          PY
+          )"
+          echo "device-id=$device_id" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device_id" 2>/dev/null || true
+          xcrun simctl bootstatus "$device_id" -b
+      - name: Exercise critical workout interactions
+        run: >-
+          xcodebuild test
+          -project Cadence.xcodeproj
+          -scheme CadenceVisualProof
+          -configuration Debug
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
+          -derivedDataPath build/native-smoke
+          -resultBundlePath build/NativeSmoke.xcresult
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test07FinalSetAdvancesToNextAuthoredExercise
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test10PlankCountdownAndLog
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test13SetCompletionKeepsDominantBlockStill
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize
+      - name: Require all four interaction tests to execute
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path build/NativeSmoke.xcresult > build/native-smoke-summary.json
+          cat build/native-smoke-summary.json
+          node .github/scripts/verify-native-smoke.mjs build/native-smoke-summary.json
+      - name: Retain native interaction results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cadence-native-interactions-${{ github.sha }}
+          path: |
+            build/NativeSmoke.xcresult
+            build/native-smoke-summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
   # Preserve the existing required-check name while allowing the expensive
   # macOS jobs to be split, parallel, and conditionally skipped.
   app-build:
     name: App build (macOS)
-    needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests]
+    needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests, native-smoke]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -465,6 +532,8 @@ jobs:
           DEVICE_RESULT: ${{ needs.device-build.result }}
           STORE_RESULT: ${{ needs.store-build.result }}
           MIGRATION_RESULT: ${{ needs.migration-tests.result }}
+          NATIVE_SMOKE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
+          NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}
         run: bash .github/scripts/verify-native-jobs.sh
 
   release:
@@ -653,9 +722,9 @@ jobs:
   # second workflow that repeats npm install and the entire test suite.
   deploy-web:
     name: Deploy site + web app (Pages)
-    needs: [changes, web-tests]
+    needs: [changes, web-tests, app-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
     concurrency:
       group: pages
@@ -673,7 +742,9 @@ jobs:
           persist-credentials: false
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Stamp build version into the service worker
-        run: sed -i "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+        run: |
+          sed -i.bak "s/__BUILD__/${GITHUB_SHA::12}/" web/app/sw.js
+          rm web/app/sw.js.bak
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
