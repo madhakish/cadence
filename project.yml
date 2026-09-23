@@ -150,6 +150,9 @@ targets:
       # The milestone projection is the shared owner behind both bank-time
       # PRs and the post-correction rebuild (epic #155 Stage 6).
       - Cadence/Services/MilestoneProjection.swift
+      # Legacy recovery-bridge reconciliation is models-only; compiling it
+      # here pins pointer repair and the open-session guard on real rows.
+      - Cadence/Services/RecoveryBridgeService.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

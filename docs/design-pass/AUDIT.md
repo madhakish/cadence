@@ -126,7 +126,8 @@ Web captures come from `web/tools/capture-web-proof.mjs`, which serves this
 checkout inside the `zenika/alpine-chrome:with-puppeteer` image, seeds a
 fictional program and mid-workout session through the app's own modules, and
 screenshots Today, the session, the exercise pane, the calculator and its
-inspection, the library, Settings, and History at 390×844 and 1280×800. The
+inspection (the 3D solid under software WebGL, plus its orbited and Paper
+states), the library, Settings, and History at 390×844 and 1280×800. The
 header comment carries the `podman run` line.
 
 Web verification runs from `web` with `npm test`. That chain ends with an

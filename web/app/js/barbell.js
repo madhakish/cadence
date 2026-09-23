@@ -1,7 +1,37 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintGains } from "./barbell-scene.js";
+import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
+import { PLATE_SPRITES } from "./plate-sprites.js";
+import { barbellGL, BACKDROPS } from "./barbell-gl.js";
+
+// Rendered loaded-bar sprites (web/tools/render-plate-sprites.py): one per
+// plate shape and scene angle, plus shaft, sleeves, and collars. Placement
+// comes from the same BarbellScene geometry both clients share.
+const spriteURL = (name) => new URL(`../assets/plates/${name}.png`, import.meta.url).href;
+export function plateSpriteName(plate, style, exploded) {
+  const family = plateFamily(plate, style);
+  const angle = exploded ? "exploded" : "assembled";
+  const shape = PLATE_SPRITES.plates[`${family}:${plate.value}-${plate.unit}`];
+  const name = `plate-${shape}-${angle}`;
+  if (shape && PLATE_SPRITES.sprites[name]) return name;
+  // An unknown shape borrows the family's first sprite; geometry still scales it.
+  return Object.keys(PLATE_SPRITES.sprites).find((key) => key.startsWith(`plate-${family}-`) && key.endsWith(`-${angle}`));
+}
+// Map a bar sprite's axis reference points onto two scene points. Thickness
+// comes from the sprite's nominal span (so an exploded scene's longer sleeve
+// stretches along the bar, never fattens); the stretch runs along the bar axis.
+function placeBarSprite(name, from, to, axisLength) {
+  const meta = PLATE_SPRITES.sprites[name];
+  const [ax, ay] = meta.axisStart, [bx, by] = meta.axisEnd;
+  const spritePx = Math.hypot(bx - ax, by - ay);
+  const k = meta.spanUnits * axisLength / spritePx;                  // scene units per sprite px
+  const stretch = Math.hypot(to.x - from.x, to.y - from.y) / (meta.spanUnits * axisLength);
+  const sceneDeg = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI;
+  const spriteDeg = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+  return el('image', { class: `barbell-${meta.kind}`, href: spriteURL(name), width: meta.size[0], height: meta.size[1],
+    transform: `translate(${from.x} ${from.y}) rotate(${sceneDeg.toFixed(3)}) scale(${(k * stretch).toFixed(5)} ${k.toFixed(5)}) rotate(${(-spriteDeg).toFixed(3)}) translate(${-ax} ${-ay})` });
+}
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
@@ -90,75 +120,75 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     'aria-label': `${exploded ? 'Exploded' : 'Assembled'} loaded bar, ${C.both(solution.totalLb)}, ${stackLabel}`,
     'data-exploded': exploded });
   const defs = el('defs');
-  const metal = el('linearGradient', { id: `${id}-metal`, x1: 0, y1: 0, x2: 0, y2: 1 });
-  for (const [offset, color] of [[0,'#535b64'],[.22,'#c2c9cc'],[.43,'#f2f3f0'],[.6,'#8b959e'],[1,'#343b43']])
-    metal.append(el('stop', { offset, 'stop-color': color }));
-  defs.append(metal);
-  const art = new URL(`../assets/plate-${style === 'bumper' ? 'bumper' : 'steel'}.png`, import.meta.url).href;
+  const angle = exploded ? 'exploded' : 'assembled';
   for (const token of Object.keys(C.PLATE_COLOURS)) {
     const filter = el('filter', { id: `${id}-${token}`, 'color-interpolation-filters': 'sRGB' });
-    // Tint the approved photographic texture; the hub is redrawn unfiltered.
-    const gain = plateTintGains(token);
-    filter.append(el('feColorMatrix', { type:'matrix', values:
-      `${gain[0]} 0 0 0 0 0 ${gain[1]} 0 0 0 0 0 ${gain[2]} 0 0 0 0 0 1 0` }));
+    // Colourise the rendered greyscale sprite from its luminance; the hub is
+    // redrawn unfiltered.
+    filter.append(el('feColorMatrix', { type:'matrix', values: plateTintMatrix(token, style).join(' ') }));
     defs.append(filter);
   }
   svg.append(defs);
   const root = el('g', { transform: `translate(${scene.width/2} ${scene.height/2})` });
   svg.append(root);
   const point = x => ({ x: x * scene.axisX, y: x * scene.axisY });
-  const shaft = (from, to, diameter, className = '') => {
-    const a = point(from), b = point(to);
-    root.append(el('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y,
-      stroke:`url(#${id}-metal)`, 'stroke-width':diameter, 'stroke-linecap':'round', class:className }));
-  };
-  shaft(-scene.end, scene.end, 7);
-  shaft(-scene.end, -scene.shoulder, 12);
-  shaft(scene.shoulder, scene.end, 12);
-  for (const side of [-1,1]) {
-    const p = point(side * scene.shoulder);
-    root.append(el('ellipse', { cx:p.x, cy:p.y, rx:4, ry:18, fill:`url(#${id}-metal)` }));
+  // The bar goes under everything: every plate bore is open in the sprites, so
+  // the sleeves and shaft show through wherever the plate's thickness lets them. The camera sits at the −x end,
+  // so the far (+x) collar precedes the plates and the near one follows them.
+  const axisLength = Math.hypot(scene.axisX, scene.axisY);
+  root.append(placeBarSprite(`bar-sleeve-${angle}`, point(scene.shoulder), point(scene.end), axisLength));
+  root.append(placeBarSprite(`bar-shaft-${angle}`, point(-scene.shoulder), point(scene.shoulder), axisLength));
+  root.append(placeBarSprite(`bar-sleeve-near-${angle}`, point(-scene.end), point(-scene.shoulder), axisLength));
+  if (solution.collarLb > 0) {
+    const half = PLATE_SPRITES.sprites[`bar-collar-${angle}`].spanUnits / 2;
+    root.append(placeBarSprite(`bar-collar-${angle}`, point(scene.collar - half), point(scene.collar + half), axisLength));
   }
-  for (let x = -scene.shoulder + 24; x < scene.shoulder - 24; x += 4) {
-    if (Math.abs(x) < 42) continue;
-    const p = point(x);
-    root.append(el('line', { x1:p.x-1, y1:p.y-3, x2:p.x+2, y2:p.y+3,
-      class:'barbell-knurl', stroke:'#4c535b', 'stroke-width':.6, opacity:.8 }));
-  }
-  for (const d of scene.discs) {
+  // Far plates first (+x), then near (−x): painter's order for that camera.
+  // The artwork paints in that order; the focusable plate groups are appended
+  // afterwards in the spoken order both clients share (each side from the
+  // collar outward), so keyboard traversal never follows paint order.
+  const art = el('g', { class:'barbell-plate-art', 'aria-hidden':'true' });
+  root.append(art);
+  const focusable = [];
+  for (const d of [...scene.discs].sort((a, b) => b.x - a.x)) {
     const token = C.plateColorToken(d.plate, style);
     const colour = C.plateColour(token);
     const side = d.side < 0 ? 'left' : 'right';
+    // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
+    const x = d.x - d.depth/2;
     const group = el('g', { class:'barbell-plate-body', tabindex:0, role:'img',
       'data-side':side, 'data-plate-value':d.plate.value, 'data-plate-denomination':C.plateLabel(d.plate),
       'data-stack-index':d.index, 'data-center-x':d.x, height:d.radius*2,
       'aria-label':discAccessibilityLabel(d) });
-    const x = d.x + d.depth/2;
-    // Extruded edge and recessed photographic face share the same diameter.
-    group.append(el('ellipse', { cx:d.x-d.depth/2, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:colour.edge }),
-      el('rect', { x:d.x-d.depth/2, y:d.y-d.radius, width:d.depth, height:d.radius*2, fill:colour.edge }));
-    const face = el('image', { class:'barbell-plate-face', href:art, x:x-d.faceRadius, y:d.y-d.radius,
-      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', filter:`url(#${id}-${token})` });
-    group.append(face);
+    // Transparent hit target over the face: focus ring, pointer, and the
+    // inspection's plate activation all land here.
+    group.append(el('ellipse', { class:'barbell-plate-target', cx:x, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:'transparent' }));
+    focusable.push({ side: d.side, index: d.index, group });
+    const name = plateSpriteName(d.plate, style, exploded);
+    const meta = PLATE_SPRITES.sprites[name];
+    const k = d.radius / meta.faceRadius;
+    const frame = { x: x - meta.faceCenter[0] * k, y: d.y - meta.faceCenter[1] * k, width: meta.size[0] * k, height: meta.size[1] * k };
+    art.append(el('image', { class:'barbell-plate-face', href:spriteURL(name), ...frame, 'data-sprite':name,
+      'data-center-x':d.x, preserveAspectRatio:'none', filter:`url(#${id}-${token})` }));
     const clipID = `${id}-hub-${side}-${d.index}`;
     const clip = el('clipPath', { id:clipID });
-    clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*.235, ry:d.radius*.235 }));
+    clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*meta.hubRadius, ry:d.radius*meta.hubRadius }));
     defs.append(clip);
-    group.append(el('image', { class:'barbell-plate-hub', href:art, x:x-d.faceRadius, y:d.y-d.radius,
-      width:d.faceRadius*2, height:d.radius*2, preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
+    art.append(el('image', { class:'barbell-plate-hub', href:spriteURL(name), ...frame,
+      preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
     const labelSize = exploded ? 14 : 10;
     const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
-      fill:colour.ink,
+      fill:colour.ink, 'data-side':side, 'data-stack-index':d.index, 'data-plate-value':d.plate.value,
       'data-plate-denomination':C.plateLabel(d.plate) });
     label.textContent = C.trim(d.plate.value, 2);
-    group.append(label);
-    root.append(group);
+    art.append(label);
   }
-  if (solution.collarLb > 0) for (const side of [-1,1]) {
-    const p = point(side * scene.collar);
-    root.append(el('rect', { class:'barbell-lock-collar', x:p.x-4, y:p.y-13,
-      width:8, height:26, rx:2, fill:`url(#${id}-metal)`, stroke:'#515b65' }));
+  focusable.sort((a, b) => (a.side - b.side) || (a.index - b.index));
+  for (const { group } of focusable) root.append(group);
+  if (solution.collarLb > 0) {
+    const half = PLATE_SPRITES.sprites[`bar-collar-near-${angle}`].spanUnits / 2;
+    root.append(placeBarSprite(`bar-collar-near-${angle}`, point(-scene.collar - half), point(-scene.collar + half), axisLength));
   }
   if (!scene.discs.length) {
     const label = el('text', { x:0, y:35, fill:'currentColor', 'font-size':14, 'text-anchor':'middle' });
@@ -183,10 +213,22 @@ export function barbellStage(rendered, {
   track.className = "barbell-stage-track";
   const footer = uiText("div", "barbell-stage-footer", "");
   const inspection = emphasis === "expanded";
-  let exploded = inspection;
+  // The inspection opens straight ahead, assembled; a tap explodes it.
+  let exploded = false;
+  // The inspection shows the solid where WebGL2 exists; the sprite SVG then
+  // becomes the focusable, spoken layer over it (same plates, same order).
+  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
+  const live = solid?.supported ? solid : null;
+  stage.classList.toggle("solid", Boolean(live));
   const paint = () => {
     const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
-    track.replaceChildren(drawing.svg);
+    if (live) {
+      drawing.svg.classList.add("barbell-a11y-layer");
+      track.replaceChildren(live.canvas, drawing.svg);
+      live.setExploded(exploded);
+    } else {
+      track.replaceChildren(drawing.svg);
+    }
     track.style.setProperty("--barbell-natural-width", `${exploded ? drawing.scene.width : 0}px`);
     stage.classList.toggle("exploded", exploded);
   };
@@ -195,24 +237,61 @@ export function barbellStage(rendered, {
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.
-    const toggle = uiText("button", "btn ghost sm barbell-explode", "38° inspection · tap to collapse");
+    const wording = () => live
+      ? (exploded ? "Exploded · tap to assemble" : "Assembled · tap to explode")
+      : (exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect");
+    const toggle = uiText("button", "btn ghost sm barbell-explode", wording());
     toggle.type = "button";
-    toggle.setAttribute("aria-pressed", "true");
-    toggle.setAttribute("aria-label", `${toggle.textContent}. Assemble bar`);
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.setAttribute("aria-label", `${toggle.textContent}. Explode plates`);
     const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    swipe.hidden = true;
+    const focusNote = uiText("span", "sub barbell-focus-note", "");
+    focusNote.setAttribute("aria-hidden", "true");
     const flip = () => {
       exploded = !exploded;
       paint();
-      toggle.textContent = exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect";
+      toggle.textContent = wording();
       toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
-      swipe.hidden = !exploded;
+      swipe.hidden = !exploded || Boolean(live);
     };
     toggle.addEventListener("click", flip);
     // A plate is focusable so its name can be read; activating it must not
     // flip the view under a screen-reader user.
     track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
-    footer.append(toggle, swipe);
+    // Keyboard users see which hidden plate holds focus over the solid.
+    track.addEventListener("focusin", (event) => { focusNote.textContent = event.target.getAttribute?.("aria-label") || ""; });
+    track.addEventListener("focusout", () => { focusNote.textContent = ""; });
+    footer.append(toggle, swipe, focusNote);
+    if (live) {
+      // Backdrop and reset are the keyboard path for what drag, wheel, and
+      // pinch do by hand; the solid itself is not a control.
+      live.canvas.setAttribute("aria-hidden", "true");
+      const controls = uiText("div", "barbell-scene-controls", "");
+      const group = uiText("div", "barbell-backdrop", "");
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "Backdrop");
+      let current = "studio";
+      for (const [name, preset] of Object.entries(BACKDROPS)) {
+        const button = uiText("button", "btn ghost sm", preset.label);
+        button.type = "button";
+        button.dataset.backdrop = name;
+        button.setAttribute("aria-pressed", String(name === current));
+        button.addEventListener("click", () => {
+          current = name;
+          live.setBackdrop(name);
+          for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other.dataset.backdrop === name));
+        });
+        group.append(button);
+      }
+      const reset = uiText("button", "btn ghost sm barbell-reset-view", "Reset view");
+      reset.type = "button";
+      reset.setAttribute("aria-label", "Reset view. Returns the camera to the front view");
+      reset.addEventListener("click", () => live.reset());
+      controls.append(group, reset);
+      stage.append(controls);
+    }
   } else if (onExpand) {
     const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";

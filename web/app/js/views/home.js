@@ -54,6 +54,7 @@ export async function render(host) {
   const todayKey = localDayKey(new Date());
   const primaryOpen = [...openSessions].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
   const nextProgramDay = program?.days?.find((day) => day.order === program.nextDayIndex) || program?.days?.[0];
+  const workoutName = (day) => C.workoutDayLabel(day.name, program.currentWeek);
 
   // Conditional hero: the next physical action always wins the top slot.
   if (primaryOpen) {
@@ -72,20 +73,28 @@ export async function render(host) {
     root.append(ui.h("div", { class: "card today-hero" },
       ui.h("button", { class: "row wide", style: { minHeight: "64px", textAlign: "left" },
         onClick: () => workoutPreview(program, nextProgramDay, { exMap, gym, barLb, completed }) },
-      ui.h("div", { class: "lead" }, ui.h("span", { class: "sub", text: "Next workout" }),
-        ui.h("span", { class: "big", text: nextProgramDay.name }),
+      ui.h("div", { class: "lead" }, ui.h("span", { class: "sub", text: program.currentWeek === C.DELOAD_WEEK ? "Deload · light work" : "Next workout" }),
+        ui.h("span", { class: "big", text: workoutName(nextProgramDay) }),
         ui.h("span", { class: "sub", text: `${program.name} · Cycle ${program.cycleNumber}` })),
       ui.rotation(program.currentWeek)),
-      ui.h("button", { class: "btn primary wide", text: `Start ${nextProgramDay.name}`,
+      ui.h("button", { class: "btn primary wide", text: `Start ${workoutName(nextProgramDay)}`,
         onClick: async () => openSession(await createSessionFromProgramDay(program, nextProgramDay)) })));
   }
 
   if (program?.days?.length) {
-    const days = [...program.days].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const recoveryOrders = program.tfhPolicy?.recoveryDayOrders ?? C.recoveryDayOrders(program.days.map((day) => {
+      const main = (day.lifts || []).find((lift) => lift.role === "main");
+      return { order: day.order, mainMovementGroup: exMap.get(main?.exerciseName)?.movementGroup };
+    }));
+    const orders = C.visibleDayOrders(program.days.map((day) => day.order), recoveryOrders, program.currentWeek);
+    const days = orders.map((order) => program.days.find((day) => day.order === order)).filter(Boolean);
+    if (program.currentWeek === C.DELOAD_WEEK) {
+      root.append(ui.h("div", { class: "section-title", text: `Recovery · ${days.length} light sessions in this rotation` }));
+    }
     root.append(ui.h("div", { class: "day-sequence", role: "status", ariaLabel: `${nextProgramDay?.name || "Next day"} is now` },
       ...days.flatMap((day, index) => [
         ui.h("span", { class: day.order === program.nextDayIndex ? "now" : "",
-          text: `${day.order === program.nextDayIndex ? "NOW " : day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
+          text: `${day.order === program.nextDayIndex ? "NOW " : program.currentWeek !== C.DELOAD_WEEK && day.order < program.nextDayIndex ? "✓ " : ""}${day.name}` }),
         index < days.length - 1 ? document.createTextNode(" → ") : null,
       ].filter(Boolean))));
   }
@@ -194,7 +203,7 @@ export async function render(host) {
     const card = ui.h("div", { class: "card" },
       ui.h("div", { class: "row", style: { borderBottom: "0", paddingBottom: "2px", cursor: "pointer" },
         onClick: () => workoutPreview(program, day, { exMap, gym, barLb, completed }) },
-        ui.h("span", { class: "title", text: day.name }),
+        ui.h("span", { class: "title", text: workoutName(day) }),
         ui.h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
           // Position only. The phase NAME moved onto the slots it actually
           // describes — this counter is shared by slots whose prescriptions
@@ -235,7 +244,7 @@ export async function render(host) {
     }
     if(program.tfhPolicy != null) for(const a of C.orderedProgramSlots(day.accessories)) card.append(tfhPlanRow(program,a,exMap.get(a.exerciseName),completed,gym));
     else if (day.accessories.length) card.append(ui.h("div", { class: "sub", style: { marginTop: "6px" }, text: `+ ${day.accessories.map((a) => a.exerciseName).join(", ")}` }));
-    card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${day.name}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));
+    card.append(ui.h("button", { class: "btn primary wide", style: { marginTop: "10px" }, text: `Start ${workoutName(day)}`, onClick: async () => openSession(await createSessionFromProgramDay(program, day)) }));
     root.append(card);
   }
 
@@ -344,9 +353,9 @@ function showGymTag(gym) {
 // (iOS mirror: WorkoutPreviewView.)
 function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
   ui.pushScreen({
-    title: day.name,
+    title: C.workoutDayLabel(day.name, program.currentWeek),
     build: (body) => {
-      body.append(ui.h("button", { class: "btn primary wide", text: `▶︎ Start ${day.name}`, onClick: async () => {
+      body.append(ui.h("button", { class: "btn primary wide", text: `▶︎ Start ${C.workoutDayLabel(day.name, program.currentWeek)}`, onClick: async () => {
         openSession(await createSessionFromProgramDay(program, day));
       } }));
       // Position, not phase: this header sits above slots whose prescriptions
@@ -402,14 +411,15 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
           const accReps = C.repWindow(a.minReps, a.maxReps, a.currentReps,
             C.hasLoadStep(a.incrementLb, accessoryExercise)).current;
           const isTimed = type === "timed" || type === "conditioning";
+          const sets = C.recoveryAccessorySets(a.sets, program.currentWeek);
           accCard.append(ui.h("div", { class: "row", style: { borderBottom: "0", padding: "4px 0" } },
             accessoryExercise ? ui.h("button", { class: "title title-button", text: a.exerciseName,
               "aria-label": `${a.exerciseName} — history, program cycle, and settings`,
               onClick: () => exerciseDetail(accessoryExercise) })
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
-              ? `${a.sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${a.sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : `${a.sets}×${accReps}`) })));
+              ? `${sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
+              : (a.weightLb > 0 ? `${sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : `${sets}×${accReps}`) })));
         }
         body.append(accCard);
       }

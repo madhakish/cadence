@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { plateGeometry, barbellScene, plateTintGains } from '../app/js/barbell-scene.js';
+import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
@@ -19,7 +19,7 @@ const open = barbellScene(solution, 'bumper', true);
 const compact = B.barbellSVG(solution, 'compact', 'bumper');
 assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
 assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
-assert.equal(compact.svg.querySelectorAll('[data-side="left"]').length, counts.length);
+assert.equal(compact.svg.querySelectorAll('.barbell-plate-body[data-side="left"]').length, counts.length);
 assert.equal(compact.svg.getAttribute('role'), 'group', 'the SVG does not hide its plate accessibility children');
 assert.match(compact.svg.getAttribute('aria-label'), /Assembled loaded bar,.*per side/);
 for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
@@ -29,12 +29,27 @@ for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
     `${plate.dataset.plateDenomination} plate, ${Number(plate.dataset.stackIndex)+1} from inside, ${plate.dataset.side} side`);
 }
 const tints = JSON.parse(readFileSync(new URL('./fixtures/plate-tints.json', import.meta.url), 'utf8'));
-for (const {token, gains} of tints) assert.deepEqual(plateTintGains(token), gains);
+assert.equal(tints.length, 12, 'every token in both styles');
+for (const {token, style, matrix} of tints) assert.deepEqual(plateTintMatrix(token, style), matrix);
 for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
   const token = matrix.parentNode.id.split('-').at(-1);
   const values = matrix.getAttribute('values').split(' ').map(Number);
-  assert.deepEqual([values[0],values[6],values[12]], plateTintGains(token));
+  assert.deepEqual(values, plateTintMatrix(token, 'bumper'), 'the face filter is the style-specific colourisation');
 }
+// Luminance-driven: shading survives, the median lands near the fill, black iron is untouched.
+const yellow = plateTintMatrix('yellow', 'steel');
+const median = 0.85 / plateTintLift('steel');
+const mid = plateTintApply(yellow, median);
+const fill = [0xE8, 0xB0, 0x08].map((v) => v / 255);
+for (let c = 0; c < 3; c++) {
+  const expected = Math.min(1, 0.85 * fill[c] + 0.85 * PLATE_TINT_GREY_MIX * (1 - fill[c]));
+  assert.ok(Math.abs(mid[c] - expected) < 0.01, `yellow steel median channel ${c} â†’ ${mid[c]} vs ${expected}`);
+}
+const [bright, dark] = [plateTintApply(yellow, median * 1.3), plateTintApply(yellow, median * 0.75)];
+assert.ok(bright.every((v, i) => v > dark[i]), 'brighter texels stay brighter');
+assert.deepEqual(plateTintMatrix('black', 'bumper'), PLATE_TINT_IDENTITY);
+assert.equal(compact.svg.querySelectorAll('image.barbell-shaft').length, 1, 'one rendered shaft sprite');
+assert.equal(compact.svg.querySelectorAll('image.barbell-sleeve, image.barbell-sleeve-near').length, 2, 'a far and a near sleeve sprite');
 assert.ok([...compact.svg.querySelectorAll('.barbell-plate-hub')].every(hub=>!hub.hasAttribute('filter')),
   'the photographic hub keeps its original metal color');
 assert.deepEqual(open.discs.filter(d=>d.side===1).map(d=>d.plate.value), [45,10,25,2.5]);
@@ -64,19 +79,21 @@ assert.equal(stage.querySelector('.barbell-expand').textContent, 'Larger view â†
 stage.querySelector('.barbell-expand').click();
 assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
+// The inspection opens straight ahead, assembled; the tap explodes it.
+assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false', 'the inspection opens assembled');
+assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), '0px');
+const toggle = inspector.querySelector('.barbell-explode');
+assert.equal(toggle.getAttribute('aria-pressed'),'false');
+assert.match(toggle.getAttribute('aria-label'), /Explode plates/);
+toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
+assert.equal(toggle.getAttribute('aria-pressed'),'true');
 assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), `${open.width}px`);
 for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
   assert.equal(label.getAttribute('font-size'), '14');
   assert.equal(label.hasAttribute('textLength'), false);
 }
 assert.equal(inspector.querySelectorAll('.barbell-stack-list li').length,4);
-const toggle = inspector.querySelector('.barbell-explode');
-toggle.click();
-assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false');
-assert.equal(toggle.getAttribute('aria-pressed'),'false');
-toggle.click();
-assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(JSON.stringify(solution), before);
 // A focusable plate can be activated to hear its name without flipping the
 // view, and the toggle's accessible name carries its visible text.
@@ -87,10 +104,18 @@ assert.equal(JSON.stringify(solution), before);
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true', 'activating a plate does not flip the inspection');
 assert.ok(toggle.getAttribute('aria-label').includes(toggle.textContent), 'the toggle is named by its visible text');
 assert.match(toggle.getAttribute('aria-label'), /Assemble bar/);
+toggle.click();
+assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false');
 const firstIDs=[...inspector.querySelectorAll('[id]')].map(x=>x.id);
 const secondIDs=[...B.barbellSVG(solution,'full').svg.querySelectorAll('[id]')].map(x=>x.id);
 assert.ok(!secondIDs.some(id=>firstIDs.includes(id)), 'multiple views never collide in SVG paint-server IDs');
-assert.equal(inspector.querySelectorAll('.barbell-lock-collar').length,2);
+assert.equal(inspector.querySelectorAll('image.barbell-collar, image.barbell-collar-near').length,2);
 const worker=readFileSync(new URL('../app/sw.js',import.meta.url),'utf8');
-for (const asset of ['js/barbell-scene.js','assets/plate-steel.png','assets/plate-bumper.png']) assert.ok(worker.includes(`"${asset}"`));
+for (const asset of ['js/barbell-scene.js','js/plate-sprites.js']) assert.ok(worker.includes(`"${asset}"`));
+{
+  // Every installed sprite is precached, so the loaded bar draws offline.
+  const sprites = readdirSync(new URL('../app/assets/plates/', import.meta.url)).filter((f) => f.endsWith('.png'));
+  assert.ok(sprites.length >= 16);
+  for (const file of sprites) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} precached`);
+}
 console.log('Barbell inspection geometry, identity, controls, and offline assets passed');

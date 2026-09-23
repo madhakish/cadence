@@ -144,6 +144,9 @@ struct WorkoutPreviewView: View {
                         let accReps = acc.prescribedReps(
                             loadable: exercise?.supportsLoadableIncrement ?? true
                         )
+                        let sets = ProgramProgression.recoveryAccessorySets(
+                            ordinarySets: acc.sets, rotation: program.currentWeek
+                        )
                         HStack {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: acc.exerciseName)
@@ -153,10 +156,10 @@ struct WorkoutPreviewView: View {
                             .buttonStyle(.plain)
                             Spacer()
                             Text(isTimed
-                                 ? "\(acc.sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
+                                 ? "\(sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
                                  : (acc.weightLb > 0
-                                    ? "\(acc.sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))\(exercise?.loadBasis.shortSuffix ?? "")"
-                                    : "\(acc.sets)×\(accReps)"))
+                                    ? "\(sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))\(exercise?.loadBasis.shortSuffix ?? "")"
+                                    : "\(sets)×\(accReps)"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
@@ -164,7 +167,7 @@ struct WorkoutPreviewView: View {
                 }
             }
         }
-        .navigationTitle(day.name)
+        .navigationTitle(ProgramProgression.workoutDayLabel(name: day.name, rotation: program.currentWeek))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("workout-preview-screen")
         .sheet(item: $plateDetail) { detail in
@@ -186,7 +189,7 @@ struct WorkoutPreviewView: View {
         // Start lives up top, pinned — browsing the workout never scrolls it away.
         .safeAreaInset(edge: .top, spacing: 0) {
             Button(action: onStart) {
-                Label("Start \(day.name)", systemImage: "play.fill")
+                Label("Start \(ProgramProgression.workoutDayLabel(name: day.name, rotation: program.currentWeek))", systemImage: "play.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 40)
             }

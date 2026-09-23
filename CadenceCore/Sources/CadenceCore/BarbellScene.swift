@@ -1,20 +1,69 @@
 import Foundation
 
-/// Photographic face channel gains, mirrored by plateTintGains on web.
-/// The renderer applies these only to the face, then restores the metal hub.
+/// Photographic face colourisation, mirrored by `plateTintMatrix` on web: a
+/// 5×4 colour matrix (row-major R, G, B, A rows of five) that rebuilds every
+/// channel from the texture's luminance. The plate keeps its photographed
+/// shading — rim shadow, rubber grain, machining — and takes its hue from the
+/// palette fill, instead of the earlier per-channel gains that clamped the
+/// dark textures into one flat colour. The renderer applies it only to the
+/// face, then restores the metal hub.
 public struct PlateFaceTint: Equatable, Sendable {
-    public let red, green, blue: Double
+    public let matrix: [Double]
+    private let gains: [Double]
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var red: Double { gains[0] }
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var green: Double { gains[1] }
+    /// Backwards-compatible per-channel gains used by existing clients.
+    public var blue: Double { gains[2] }
 
-    /// Black iron is the untinted texture; every other token tints the face
-    /// with its palette fill.
-    public init(token: String) {
-        if token != "black", let hex = PlatePalette.colours[token]?.fill {
-            red = Double((hex >> 16) & 255) / 255 * 3.2
-            green = Double((hex >> 8) & 255) / 255 * 3.2
-            blue = Double(hex & 255) / 255 * 3.2
-        } else {
-            red = 1; green = 1; blue = 1
+    public static let identity: [Double] = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
+    /// Median face luminance of each rendered sprite family (measured on the
+    /// shipped PNGs, hub excluded). The lift maps it to 85% of the fill so
+    /// the brighter 15% of texels keep headroom before clamping.
+    public static func lift(for style: PlateVisualStyle) -> Double {
+        0.85 / (style == .bumper ? 0.459 : 0.453)
+    }
+    /// Fraction of the lift mixed in as grey: highlights whiten instead of
+    /// saturating to a single hue.
+    public static let greyMix = 0.12
+
+    private static func channelGains(token: String) -> [Double] {
+        guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
+            return [1, 1, 1]
         }
+        return [Double((hex >> 16) & 255) / 255, Double((hex >> 8) & 255) / 255, Double(hex & 255) / 255]
+    }
+
+    /// Source-compatible initializer kept for CadenceCore library consumers.
+    public init(token: String) {
+        self.init(token: token, style: .steel)
+    }
+
+    /// Black iron is the untinted texture; every other token colourises the
+    /// face from the palette fill.
+    public init(token: String, style: PlateVisualStyle) {
+        gains = PlateFaceTint.channelGains(token: token)
+        guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
+            matrix = PlateFaceTint.identity
+            return
+        }
+        let fill = gains
+        let lift = PlateFaceTint.lift(for: style)
+        let grey = lift * PlateFaceTint.greyMix
+        let luma = [0.2126, 0.7152, 0.0722]
+        var rows: [Double] = []
+        for channel in fill {
+            let weight = channel * lift + (1 - channel) * grey
+            rows += luma.map { $0 * weight } + [0, 0]
+        }
+        rows += [0, 0, 0, 1, 0]
+        matrix = rows
+    }
+
+    /// The colour a neutral texel of luminance `l` becomes: (r, g, b), clamped.
+    public func apply(luminance l: Double) -> [Double] {
+        [0, 5, 10].map { min(1, matrix[$0] * l + matrix[$0 + 1] * l + matrix[$0 + 2] * l) }
     }
 }
 

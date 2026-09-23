@@ -1901,6 +1901,21 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
+// Presentation reads the schedule's orders, including TFH's authored recovery.
+// Mirrored in CadenceCore ProgramProgression.
+export function visibleDayOrders(dayOrders, recoveryDayOrders, rotation) {
+  return rotation === DELOAD_WEEK ? [...new Set(recoveryDayOrders)]
+    : [...new Set(dayOrders)].sort((a, b) => a - b);
+}
+
+export function workoutDayLabel(name, rotation) {
+  return rotation === DELOAD_WEEK ? `Recovery · ${name}` : name;
+}
+
+export function recoveryAccessorySets(ordinarySets, rotation) {
+  return rotation === DELOAD_WEEK ? 1 : ordinarySets;
+}
+
 // Recovery completion is set-based, not pointer-based. The bridge can be
 // banked in either order, and an in-flight phase-4 program may still point at
 // an old full-rotation day omitted by the shortened bridge. Only selected
@@ -1914,6 +1929,21 @@ export function recoveryScheduleAdvance(dayOrders, completedDayOrders) {
   return next === undefined
     ? { nextDayOrder: selected[0], isLastDay: true }
     : { nextDayOrder: next, isLastDay: false };
+}
+
+// Preserve a valid chosen recovery order; repair omitted/already-banked days.
+// Mirrored in CadenceCore ProgramProgression.recoveryResumeDayOrder.
+export function recoveryResumeDayOrder(dayOrders, completedDayOrders, currentDayOrder) {
+  if (!dayOrders.length || (dayOrders.includes(currentDayOrder) && !completedDayOrders.includes(currentDayOrder))) return currentDayOrder;
+  return recoveryScheduleAdvance(dayOrders, completedDayOrders).nextDayOrder;
+}
+
+// The days a manual "Next day" pick can hold during recovery: exactly the
+// pointers recoveryResumeDayOrder keeps, in configured order. Mirrored in
+// CadenceCore ProgramProgression.recoveryRemainingDayOrders.
+export function recoveryRemainingDayOrders(dayOrders, completedDayOrders) {
+  const completed = new Set(completedDayOrders);
+  return [...new Set(dayOrders)].filter((order) => !completed.has(order));
 }
 
 // Why a bounded recovery bridge is ready to hand off to the next cycle.

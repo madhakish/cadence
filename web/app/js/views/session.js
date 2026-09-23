@@ -1747,6 +1747,21 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
   };
 }
 
+// Days the manual "Next day" picker may offer: null means every day. During a
+// legacy recovery bridge it is the unbanked recovery days, which are exactly
+// the pointers reconciliation keeps. An empty remainder means the bridge is
+// complete and rolls over on the next render, so the picker is unrestricted.
+// Mirrors RecoveryBridgeService.manualNextDayOrders.
+export async function manualNextDayOrders(program) {
+  if (program.tfhPolicy != null || program.currentWeek !== C.DELOAD_WEEK) return null;
+  const [history, exercises] = await Promise.all([Sessions.completed(), Exercises.all()]);
+  const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
+  const { recoverySessions, recoveryDayOrders } = recoveryBridgeState(program, history, exerciseByName, Date.now());
+  const remaining = C.recoveryRemainingDayOrders(recoveryDayOrders,
+    recoverySessions.map((candidate) => candidate.programTag.dayIndex));
+  return remaining.length ? remaining : null;
+}
+
 // Close stale/already-satisfied Recovery before Today or Start can prescribe
 // another reduced workout. The seven-day threshold only expires the bridge;
 // ordinary progression remains driven by completed cycles.
@@ -1769,7 +1784,7 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
   // explicitly supports keeping around — suppress the session cap and the
   // expiry window indefinitely, and Start would go on minting stale recovery
   // prescriptions. That is the indefinite-light-work path this whole mechanism
-  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  // exists to close. Mirrors RecoveryBridgeService.reconcileRecoveryBridge.
   const openForThisProgram = (await Sessions.openAll())
     .some((candidate) => sessionBelongsToProgram(candidate, program));
   if (openForThisProgram) return null;
@@ -1777,8 +1792,18 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
     completed || Sessions.completed(), Exercises.all(),
   ]);
   const exerciseByName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
-  const { reason, recoverySessions } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
-  if (!reason) return null;
+  const { reason, recoverySessions, recoveryDayOrders } = recoveryBridgeState(program, history, exerciseByName, now.getTime());
+  if (!reason) {
+    const next = C.recoveryResumeDayOrder(recoveryDayOrders,
+      recoverySessions.map((candidate) => candidate.programTag.dayIndex), program.nextDayIndex);
+    if (next === program.nextDayIndex) return null;
+    // Persist the staged pointer before changing the live object; a failed
+    // write must not leave Today displaying an unsaved schedule.
+    await Programs.save({ ...program, nextDayIndex: next });
+    program.nextDayIndex = next;
+    return { program, reason: null,
+      message: `Recovery continues — next light session: ${program.days.find((day) => day.order === next)?.name || "program day"}.` };
+  }
 
   const nextCycle = program.cycleNumber + 1;
   const banked = recoverySessions.length;
@@ -2378,7 +2403,7 @@ export async function createSessionFromProgramDay(program, day) {
       ? acc.sets : Math.max(1, Math.round(acc.sets * accessoryPercent / 100));
     // Recovery retains movement familiarity but not a full accessory session.
     // Banking this exposure cannot advance the slot's rep/load target.
-    const effectiveSets = program.currentWeek === C.DELOAD_WEEK ? 1 : ordinarySets;
+    const effectiveSets = C.recoveryAccessorySets(ordinarySets, program.currentWeek);
     // The target clamped into the slot's own window, so the card, the built
     // session, and the advance all read the same number. Mirrors
     // ProgramAccessory.prescribedReps.
