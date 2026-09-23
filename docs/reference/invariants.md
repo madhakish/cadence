@@ -336,7 +336,7 @@ rotations never listen to it, and other styles keep a recovery-specific shape
 (secondary 1×5 at 0.75; 5/3/1 one ramp at 0.50 plus 1×5 at 0.60).
 
 ### INV-RECOVERY-IS-A-BRIDGE
-*platforms: core, web*
+*platforms: core, web, native*
 
 Phase 4 of a recognizable upper/lower program is a **two-exposure recovery
 bridge**, not a fourth pass through every A/B day. Cadence selects the first
