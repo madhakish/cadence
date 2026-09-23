@@ -1114,7 +1114,7 @@ struct ProgramEditorView: View {
                 if !program.orderedDays.isEmpty {
                     // During recovery only unbanked recovery days are offered;
                     // any other pick would be repaired away on Today.
-                    let choices = try? SessionCompletion.manualNextDayOrders(program: program, context: context)
+                    let choices = try? RecoveryBridgeService.manualNextDayOrders(program: program, context: context)
                     Picker("Next day", selection: Binding(get: { program.nextDayIndex }, set: { program.nextDayIndex = $0 })) {
                         ForEach(program.orderedDays.filter { choices?.contains($0.order) ?? true }) { day in
                             Text(day.name).tag(day.order)

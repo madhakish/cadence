@@ -1751,7 +1751,7 @@ function recoveryBridgeState(program, completed, exerciseByName, nowMs) {
 // legacy recovery bridge it is the unbanked recovery days, which are exactly
 // the pointers reconciliation keeps. An empty remainder means the bridge is
 // complete and rolls over on the next render, so the picker is unrestricted.
-// Mirrors SessionCompletion.manualNextDayOrders.
+// Mirrors RecoveryBridgeService.manualNextDayOrders.
 export async function manualNextDayOrders(program) {
   if (program.tfhPolicy != null || program.currentWeek !== C.DELOAD_WEEK) return null;
   const [history, exercises] = await Promise.all([Sessions.completed(), Exercises.all()]);
@@ -1784,7 +1784,7 @@ export async function reconcileRecoveryBridge(program, completed = null, now = n
   // explicitly supports keeping around — suppress the session cap and the
   // expiry window indefinitely, and Start would go on minting stale recovery
   // prescriptions. That is the indefinite-light-work path this whole mechanism
-  // exists to close. Mirrors SessionCompletion.reconcileRecoveryBridge.
+  // exists to close. Mirrors RecoveryBridgeService.reconcileRecoveryBridge.
   const openForThisProgram = (await Sessions.openAll())
     .some((candidate) => sessionBelongsToProgram(candidate, program));
   if (openForThisProgram) return null;

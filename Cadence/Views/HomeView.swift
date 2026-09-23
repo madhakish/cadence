@@ -718,7 +718,7 @@ struct HomeView: View {
     }
 
     private func reconcileRecoveryBridge(for program: Program) throws -> Bool {
-        let result = try SessionCompletion.reconcileRecoveryBridge(
+        let result = try RecoveryBridgeService.reconcileRecoveryBridge(
             program: program, context: context
         )
         recoveryMessage = result?.message

@@ -52,6 +52,11 @@ assert_classification \
   $'Cadence/Services/ActivitySession.swift\nCadence/Services/ProgramActivationService.swift'
 
 assert_classification \
+  "recovery bridge reconciliation compiled into the migration target runs the migration suite" \
+  $'native=true\nmigrations=true\nweb=false' \
+  'Cadence/Services/RecoveryBridgeService.swift'
+
+assert_classification \
   "seed template catalog changes run the migration suite" \
   $'native=true\nmigrations=true\nweb=false' \
   'Cadence/Seed/ProgramTemplates.swift'
