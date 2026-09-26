@@ -82,10 +82,13 @@ ok(flattened(fixtures.F4).some((plate) => C.plateLabel(plate) === "1.25 kg"),
 // Sprites paint far to near, so read the stack by its index, not DOM order.
 const byStack = (svg, side) => [...svg.querySelectorAll(`.barbell-plate-body[data-side="${side}"]`)]
   .sort((a, b) => Number(a.dataset.stackIndex) - Number(b.dataset.stackIndex));
+// [INV-PLATE-LABELS-PRESERVE-INPUT]
 const f5Right = byStack(B.barbellSVG(fixtures.F5, "full").svg, "right")
   .map((plate) => Number(plate.dataset.plateValue));
 ok(JSON.stringify(f5Right) === JSON.stringify([45, 10, 25, 2.5]),
   "F5: reverse mode preserves entered collar-to-sleeve order");
+ok(C.perSideLabel(fixtures.F5.perSide) === '45 lb + 10 lb + 25 lb + 2.5 lb',
+  'F5: the shared summary preserves the same entered order as the artwork');
 ok(fixtures.F6.satisfiesPolicy === false && fixtures.F6.policy === "exact",
   "F6: unreachable exact load keeps its policy warning evidence");
 const f7Steel = B.barbellSVG(fixtures.F7, "full", "steel").svg;
@@ -144,6 +147,7 @@ ok(S.plateFamily({ value: 5, unit: "kg" }, "bumper") === "bumper" && S.plateFami
     "an off-target result shows its difference from the request");
 }
 
+// [INV-PLATE-LABELS-PRESERVE-INPUT]
 for (const value of [1.125, 1.25, 2.5, 45]) {
   ok(C.plateLabel({ value, unit: "kg" }) === `${value} kg`,
     `formatter preserves exact denomination ${value}`);

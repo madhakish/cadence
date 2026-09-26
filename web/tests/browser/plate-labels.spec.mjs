@@ -39,7 +39,10 @@ test('[WEB-PLATE-LABELS] exact denominations survive final layout and inspection
         const labels = page.locator('.barbell-plate-denomination');
         await expect(labels).toHaveText(expected);
         if (id === 'F3') expect(expected).toEqual(['20 kg', '1.25 kg']);
-        if (id === 'F5') expect(expected).toEqual(['45 lb', '10 lb', '25 lb', '2.5 lb']);
+        if (id === 'F5') {
+          expect(expected).toEqual(['45 lb', '10 lb', '25 lb', '2.5 lb']);
+          await expect(page.locator('.loadout-line strong')).toHaveText('45 lb + 10 lb + 25 lb + 2.5 lb / side');
+        }
         expect(await labels.evaluateAll(items => items.every(e => parseFloat(getComputedStyle(e).fontSize) >= 14))).toBe(true);
         // Check the final transform, not the nominal SVG font-size attribute.
         const stamps = await page.locator('.barbell-plate-label').evaluateAll(items => items.map(e => {

@@ -494,10 +494,9 @@ export function loadoutTotalLb(bar, perSide, collarLb = 0) {
 }
 export function perSideLabel(perSide) {
   if (!perSide.length) return "bar only";
-  return [...perSide]
-    .sort((a, b) => plateLb(b.plate) - plateLb(a.plate))
-    .map(plateCountLabel)
-    .join(" + ");
+  // The solver has already chosen loading order; reverse mode preserves the
+  // lifter's entered order. Mirror Loadout.perSideLabel without re-sorting.
+  return perSide.map(plateCountLabel).join(" + ");
 }
 
 // ---- Plate math ------------------------------------------------------------
