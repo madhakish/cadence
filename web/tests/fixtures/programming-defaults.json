@@ -176,6 +176,38 @@
     "incrementLb": 5
   },
   {
+    "exerciseName": "Farmer Carry",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 50,
+    "estimatedMaxLb": 70,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Suitcase Carry",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 50,
+    "estimatedMaxLb": 70,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Front-rack Carry",
+    "slotCategory": "Accessory",
+    "exerciseType": "kettlebell",
+    "weightLb": 35,
+    "estimatedMaxLb": 53,
+    "incrementLb": 5
+  },
+  {
+    "exerciseName": "Overhead Carry",
+    "slotCategory": "Accessory",
+    "exerciseType": "dumbbell",
+    "weightLb": 25,
+    "estimatedMaxLb": 35,
+    "incrementLb": 5
+  },
+  {
     "exerciseName": null,
     "slotCategory": "Main",
     "exerciseType": "barbell",

@@ -419,7 +419,13 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : `${sets}×${accReps}`) })));
+              // [INV-CARRY-LOGS-DISTANCE] "3 × 40 yd @ 50 lb each".
+              : (() => {
+                const volume = C.logsCarryDistance(a.exerciseName)
+                  ? `${sets} × ${C.carryDistanceLabel(C.CARRY_DEFAULT_YARDS)}` : `${sets}×${accReps}`;
+                return a.weightLb > 0
+                  ? `${volume} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : volume;
+              })() })));
         }
         body.append(accCard);
       }

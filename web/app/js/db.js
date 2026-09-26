@@ -555,8 +555,10 @@ export function workingVolume(sessionExercise, exercise = null) {
   // cardio set whose library entry is gone, so restored history behaves.
   // Mirrors native SessionExercise.workingVolumeLb.
   if (exercise?.type === "conditioning") return 0;
+  // [INV-CARRY-LOGS-DISTANCE] A distance carry is excluded like a ruck: its
+  // load × yards is compared only with other carries, never summed as tonnage.
   return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed")
-    .filter((s) => !(s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0))
+    .filter(C.countsTowardTonnage)
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // Session→program linkage, spelled once. The name fallback exists ONLY for
@@ -916,7 +918,7 @@ export async function exportBundle() {
     })),
     tracks, gyms: gyms.map(normalizeGym),
     exercises: exercises.map((exercise) => ({ ...exercise,
-      loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
+      loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.backupImplementCount(exercise),
       watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite) })),
     settings: settingsOut,
     coachingDecisions: coachingDecisions.map((decision) => ({

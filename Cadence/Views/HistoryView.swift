@@ -864,7 +864,8 @@ struct SessionDetailView: View {
         if entry.exercise?.type != .conditioning, entry.exercise?.type != .timed,
            let top = entry.topSet {
             let load = top.weightLb == 0 ? "BW" : unitDisplay.format(lb: top.weightLb)
-            parts.append("top \(load)×\(top.reps)")
+            let amount = top.carryYards.map { CardioFormat.carryDistanceLabel(yards: $0) } ?? "\(top.reps)"
+            parts.append("top \(load)×\(amount)")
         }
         if entry.workingVolumeLb > 0 {
             parts.append("\(unitDisplay.format(lb: entry.workingVolumeLb)) volume")
@@ -975,6 +976,10 @@ func performedSetLabel(_ set: SetEntry, type: ExerciseType?, unitDisplay: UnitDi
         return CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)
     }
     let load = set.weightLb == 0 ? "BW" : unitDisplay.format(lb: set.weightLb)
+    // [INV-CARRY-LOGS-DISTANCE] A distance carry reads "50 lb × 40 yd".
+    if let yards = set.carryYards {
+        return "\(load) × \(CardioFormat.carryDistanceLabel(yards: yards, isPerSide: set.isPerSide))"
+    }
     return "\(load) × \(set.reps)\(set.isPerSide ? "/side" : "")"
 }
 
@@ -1033,7 +1038,7 @@ private struct HistorySetRow: View {
            planned != set.durationSeconds {
             return "Planned \(CardioFormat.durationLabel(seconds: planned))"
         }
-        guard type != .conditioning, type != .timed else { return nil }
+        guard type != .conditioning, type != .timed, set.carryYards == nil else { return nil }
         let plannedWeight = set.plannedWeightLb ?? set.weightLb
         let plannedReps = set.plannedReps ?? set.reps
         guard abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps else { return nil }

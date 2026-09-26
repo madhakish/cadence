@@ -32,6 +32,23 @@ final class ProgrammingDefaultsDataTests: XCTestCase {
         XCTAssertEqual(bodyweight.incrementLb, 0)
     }
 
+    /// Loaded carries start at a training load per hand, not the 5 lb
+    /// accessory-dumbbell fallback; every other dumbbell accessory keeps it.
+    func testCarriesHaveNamedPerHandDefaults() {
+        let expected: [(String, String, Double)] = [
+            ("Farmer Carry", "dumbbell", 50), ("Suitcase Carry", "dumbbell", 50),
+            ("Front-rack Carry", "kettlebell", 35), ("Overhead Carry", "dumbbell", 25),
+        ]
+        for (name, type, lb) in expected {
+            XCTAssertEqual(ProgrammingDefaultsData.recommendation(
+                exerciseName: name, slotCategory: "Accessory", exerciseType: type
+            ).weightLb, lb, name)
+        }
+        XCTAssertEqual(ProgrammingDefaultsData.recommendation(
+            exerciseName: "DB Curls", slotCategory: "Accessory", exerciseType: "dumbbell"
+        ).weightLb, 5, "the generic dumbbell fallback is unchanged")
+    }
+
     func testUnknownLoadedMovementsNeverBootstrapBlank() {
         let barbell = ProgrammingDefaultsData.recommendation(
             exerciseName: "Custom Barbell Lift", slotCategory: "Main", exerciseType: "barbell"

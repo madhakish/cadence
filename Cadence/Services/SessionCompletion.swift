@@ -109,11 +109,15 @@ enum SessionCompletion {
             if exercise.type == .conditioning { continue }
 
             if let top = entry.topSet {
+                // [INV-CARRY-LOGS-DISTANCE] A distance carry reads "× 40 yd".
+                let amount = top.carryYards.map {
+                    CardioFormat.carryDistanceLabel(yards: $0, isPerSide: top.isPerSide)
+                } ?? "\(top.reps)"
                 lines.append(SessionSummary.LiftLine(
                     exerciseName: exercise.name,
                     topSetLabel: top.loadBasis == .bodyweight
                         ? "\(top.reps) reps"
-                        : "\(unitDisplay.format(lb: top.weightLb))\(top.loadBasis.shortSuffix) × \(top.reps)",
+                        : "\(unitDisplay.format(lb: top.weightLb))\(top.loadBasis.shortSuffix) × \(amount)",
                     volumeLb: entry.workingVolumeLb
                 ))
             }
@@ -260,7 +264,8 @@ enum SessionCompletion {
 
     private static func sample(_ set: SetEntry) -> SetSample {
         SetSample(weightLb: set.weightLb, reps: set.reps, isPerSide: set.isPerSide,
-                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount)
+                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount,
+                  distanceYards: set.carryYards)
     }
 
     // MARK: - Program day/week/cycle advancement (mirrors web advanceProgram)
@@ -554,6 +559,10 @@ enum SessionCompletion {
                 if exerciseType == ExerciseType.conditioning.rawValue {
                     continue
                 }
+                // [INV-CARRY-LOGS-DISTANCE] A distance carry's "reps" are a
+                // placeholder, so a rep window cannot grade it; the slot holds
+                // until carries get a programmed distance target. Mirrors web.
+                if prescribedWork(entry).contains(where: { $0.carryYards != nil }) { continue }
                 // A temporary red-readiness cut deliberately banks less work;
                 // it is a hold, not a failed double-progression exposure.
                 if (entry.plannedSets ?? acc.sets) < acc.sets { continue }

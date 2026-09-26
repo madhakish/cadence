@@ -129,13 +129,17 @@ const historySetKind = (set) => {
 /// The completed row keeps actual work first and shows the original plan only
 /// when the lifter changed it. Historical rows without plan snapshots remain
 /// exactly as terse as they were before snapshots existed.
-export const historySetPresentationForTest = (set, exerciseType = null) => {
-  const cardio = exerciseType === "conditioning" || (exerciseType == null && isCardioSet(set));
+export const historySetPresentationForTest = (set, exerciseType = null, exerciseName = "") => {
+  // [INV-CARRY-LOGS-DISTANCE] A distance carry reads "50 lb × 40 yd".
+  const carryYards = C.carryYards(exerciseName, set.distanceMiles);
+  const cardio = exerciseType === "conditioning"
+    || (exerciseType == null && carryYards === null && isCardioSet(set));
   const timed = exerciseType === "timed";
   const performed = cardio
     ? C.cardioSetLabel(set.distanceMiles, set.durationSeconds, set.inclinePercent, set.weightLb, set.flights)
     : timed ? C.cardioDurationLabel(set.durationSeconds || 0)
-      : `${setLabel(set)} × ${set.reps}${set.isPerSide ? "/side" : ""}`;
+      : `${setLabel(set)} × ${carryYards !== null ? C.carryDistanceLabel(carryYards, set.isPerSide)
+        : `${set.reps}${set.isPerSide ? "/side" : ""}`}`;
   const state = set.status || "completed";
   const actual = state === "completed" ? performed
     : `${state === "skipped" ? "Skipped" : "Not performed"} · ${performed}`;
@@ -143,7 +147,7 @@ export const historySetPresentationForTest = (set, exerciseType = null) => {
   if (timed && Number.isFinite(set.plannedDurationSeconds)
       && set.plannedDurationSeconds !== set.durationSeconds) {
     planned = `Planned ${C.cardioDurationLabel(set.plannedDurationSeconds)}`;
-  } else if (!cardio && !timed) {
+  } else if (!cardio && !timed && carryYards === null) {
     const plannedWeight = Number.isFinite(set.plannedWeightLb) ? set.plannedWeightLb : set.weightLb;
     const plannedReps = Number.isFinite(set.plannedReps) ? set.plannedReps : set.reps;
     if (Math.abs(plannedWeight - set.weightLb) > 0.001 || plannedReps !== set.reps) {
@@ -492,7 +496,8 @@ function openDetail(s, exerciseByName) {
         const setName = isStrengthEntry(e, exercise) ? "work set" : "completed set";
         const summaryBits = [`${working.length} ${setName}${working.length === 1 ? "" : "s"}`];
         if (top && exercise?.type !== "conditioning" && exercise?.type !== "timed") {
-          summaryBits.push(`top ${top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb)}×${top.reps}`);
+          const topYards = C.carryYards(e.exerciseName, top.distanceMiles);
+          summaryBits.push(`top ${top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb)}×${topYards !== null ? C.carryDistanceLabel(topYards) : top.reps}`);
         }
         if (volume > 0) summaryBits.push(`${ui.fmtWeight(volume)} volume`);
         const card = ui.h("div", { class: "card" },
@@ -511,7 +516,7 @@ function openDetail(s, exerciseByName) {
             card.append(editableHistorySetRow(x, exercise?.type, draftFor(x)));
             continue;
           }
-          const shown = historySetPresentationForTest(x, exercise?.type);
+          const shown = historySetPresentationForTest(x, exercise?.type, e.exerciseName);
           const tags = ui.h("div", { class: "history-set-tags" },
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
             x.bodyFlagSite ? ui.h("span", { class: "pill hard", text: x.bodyFlagSite + (x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : "") }) : null);

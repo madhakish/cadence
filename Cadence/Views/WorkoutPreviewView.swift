@@ -147,6 +147,10 @@ struct WorkoutPreviewView: View {
                         let sets = ProgramProgression.recoveryAccessorySets(
                             ordinarySets: acc.sets, rotation: program.currentWeek
                         )
+                        // [INV-CARRY-LOGS-DISTANCE] "3 × 40 yd @ 50 lb each".
+                        let volume = CardioFormat.logsCarryDistance(exerciseName: acc.exerciseName)
+                            ? "\(sets) × \(CardioFormat.carryDistanceLabel(yards: CardioFormat.carryDefaultYards))"
+                            : "\(sets)×\(accReps)"
                         HStack {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: acc.exerciseName)
@@ -158,8 +162,8 @@ struct WorkoutPreviewView: View {
                             Text(isTimed
                                  ? "\(sets) × \(CardioFormat.durationLabel(seconds: acc.targetSeconds))"
                                  : (acc.weightLb > 0
-                                    ? "\(sets)×\(accReps) @ \(unitDisplay.format(lb: acc.weightLb))\(exercise?.loadBasis.shortSuffix ?? "")"
-                                    : "\(sets)×\(accReps)"))
+                                    ? "\(volume) @ \(unitDisplay.format(lb: acc.weightLb))\(exercise?.loadBasis.shortSuffix ?? "")"
+                                    : volume))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

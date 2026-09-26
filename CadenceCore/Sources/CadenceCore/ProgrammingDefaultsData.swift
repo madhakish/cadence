@@ -64,6 +64,13 @@ public enum ProgrammingDefaultsData {
         Recommendation(exerciseName: "Lat Pulldown", slotCategory: "Accessory", exerciseType: "machine", weightLb: 20, estimatedMaxLb: 35, incrementLb: 5),
         Recommendation(exerciseName: "Lying Leg Curl", slotCategory: "Accessory", exerciseType: "machine", weightLb: 20, estimatedMaxLb: 35, incrementLb: 5),
 
+        // Loaded carries, per hand. A carry is grip- and trunk-limited, so the
+        // light accessory-dumbbell fallback (5 lb) is not a training load.
+        Recommendation(exerciseName: "Farmer Carry", slotCategory: "Accessory", exerciseType: "dumbbell", weightLb: 50, estimatedMaxLb: 70, incrementLb: 5),
+        Recommendation(exerciseName: "Suitcase Carry", slotCategory: "Accessory", exerciseType: "dumbbell", weightLb: 50, estimatedMaxLb: 70, incrementLb: 5),
+        Recommendation(exerciseName: "Front-rack Carry", slotCategory: "Accessory", exerciseType: "kettlebell", weightLb: 35, estimatedMaxLb: 53, incrementLb: 5),
+        Recommendation(exerciseName: "Overhead Carry", slotCategory: "Accessory", exerciseType: "dumbbell", weightLb: 25, estimatedMaxLb: 35, incrementLb: 5),
+
         // Slot/equipment fallbacks cover imported and user-created exercises.
         Recommendation(slotCategory: "Main", exerciseType: "barbell", weightLb: 45, estimatedMaxLb: 65, incrementLb: 5),
         Recommendation(slotCategory: "Main", exerciseType: "dumbbell", weightLb: 10, estimatedMaxLb: 20, incrementLb: 5),

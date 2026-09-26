@@ -230,9 +230,42 @@ export const supportsLoadableIncrement = (exercise) => resolvedLoadBasis(exercis
 export const hasLoadStep = (incrementLb, exercise) =>
   supportsLoadableIncrement(exercise) && incrementLb > 0;
 
-export const resolvedImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
+// Movements whose conventional implement count differs from what their
+// equipment type implies: an overhead triceps extension is one dumbbell held in
+// both hands, a front-rack carry is two kettlebells. Named so existing library
+// rows pick the count up without a store rewrite. Mirrors CadenceCore
+// LoadSemantics.conventionalImplementCounts.
+export const CONVENTIONAL_IMPLEMENT_COUNTS = Object.freeze({
+  "DB Overhead Triceps Extension": 1,
+  "Farmer Carry": 2,
+  "Suitcase Carry": 1,
+  "Front-rack Carry": 2,
+  "Overhead Carry": 1,
+});
+
+// The count a backup carries for an exercise row: what the row stores, or its
+// equipment-type default when unset. Deliberately NOT the named convention —
+// that is a read-time rule, and writing it into a backup would turn a
+// convention into a stored choice on restore. Mirrors CadenceCore
+// LoadSemantics.backupImplementCount.
+export const backupImplementCount = (exercise) => resolvedLoadBasis(exercise) === "perImplement"
   ? Math.max(1, Number.isInteger(exercise?.implementCount) && exercise.implementCount > 0
     ? exercise.implementCount : inferredImplementCount(exercise?.type)) : 1;
+
+// A stored count that merely repeats the equipment-type default (or is unset)
+// is not a decision anyone made, so a named convention replaces it; any other
+// stored count is an explicit choice and wins. Sets snapshot the result, so
+// history keeps whatever count it was logged with. Mirrors CadenceCore
+// LoadSemantics.resolvedImplementCount(stored:exerciseType:exerciseName:basis:).
+export const resolvedImplementCount = (exercise) => {
+  if (resolvedLoadBasis(exercise) !== "perImplement") return 1;
+  const stored = Number.isInteger(exercise?.implementCount) ? exercise.implementCount : 0;
+  const typeDefault = inferredImplementCount(exercise?.type);
+  const named = Object.hasOwn(CONVENTIONAL_IMPLEMENT_COUNTS, exercise?.name ?? "")
+    ? CONVENTIONAL_IMPLEMENT_COUNTS[exercise.name] : null;
+  const explicit = stored > 0 && (named === null || stored !== typeDefault);
+  return Math.max(1, explicit ? stored : (named ?? typeDefault));
+};
 export const supportsLoadPR = (basis) => ["totalBar", "perImplement", "externalTotal"].includes(basis);
 export function loadVolume(set) {
   const basis = LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : "externalTotal";
@@ -240,6 +273,22 @@ export function loadVolume(set) {
   const implementMultiplier = basis === "perImplement" ? Math.max(1, set.implementCount || 1) : 1;
   return set.weightLb * set.reps * implementMultiplier * (set.isPerSide ? 2 : 1);
 }
+
+// Tonnage of a distance-carry set: the rep formula with yards in place of reps
+// — per-hand load × yards × implements × sides. Mirrors CadenceCore
+// LoadSemantics.carryVolume.
+export function carryVolume(set, yards) {
+  const basis = LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : "externalTotal";
+  if (!supportsLoadPR(basis) || !(set.weightLb >= 0) || !(yards > 0)) return null;
+  const implementMultiplier = basis === "perImplement" ? Math.max(1, set.implementCount || 1) : 1;
+  return set.weightLb * yards * implementMultiplier * (set.isPerSide ? 2 : 1);
+}
+
+// The hero load with its basis stated: "50 lb · 22.7 kg each". A
+// per-implement number without "each" reads as the total in the hands.
+// Mirrors CadenceCore LoadSemantics.heroLoadLabel.
+export const heroLoadLabel = (weightLb, basis) => (weightLb > 0
+  ? `${trim(weightLb)} lb · ${trim(kgFromLb(weightLb))} kg${loadBasisSuffix(basis)}` : "BW");
 
 // ---- Explicit set lifecycle -------------------------------------------------
 export const SET_STATUSES = ["planned", "completed", "skipped"];
@@ -1450,8 +1499,10 @@ export const linearPlan = (baseWeightLb) => ({ weightLb: baseWeightLb, sets: 3, 
 
 // ---- PR detection ----------------------------------------------------------
 
-// sets: [{ weightLb, reps }]
-export const prVolume = (sets) => sets.reduce((sum, set) => sum + (loadVolume(set) ?? 0), 0);
+// sets: [{ weightLb, reps, distanceYards? }]. A distance-carry set counts
+// weight × yards instead (`carryVolume`).
+export const prVolume = (sets) => sets.reduce((sum, set) => sum
+  + ((set.distanceYards > 0 ? carryVolume(set, set.distanceYards) : loadVolume(set)) ?? 0), 0);
 
 // The scheme the athlete ACTUALLY performed at the session's top weight: the
 // largest group of top-weight sets sharing one rep count, breaking a tie toward
@@ -1487,8 +1538,17 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
   const events = [];
   const weightLabel = formatWeight || trim;
   const basis = LOAD_BASES.includes(sessionSets[0].loadBasis) ? sessionSets[0].loadBasis : "totalBar";
-  const comparableSession = sessionSets.filter((set) => (set.loadBasis || basis) === basis);
-  const comparableHistory = historySets.filter((set) => (set.loadBasis || basis) === basis);
+  // [INV-CARRY-LOGS-DISTANCE] A distance carry is compared only with distance
+  // carries: its "reps" are a placeholder, so it earns the heaviest-load and
+  // volume (load × yards) records and never a scheme or rep PR. A carry logged
+  // as reps before stays in the rep lane.
+  const isCarry = (set) => set.distanceYards > 0;
+  const carries = sessionSets.some(isCarry);
+  const comparableSession = sessionSets.filter((set) => (set.loadBasis || basis) === basis && isCarry(set) === carries);
+  const comparableHistory = historySets.filter((set) => (set.loadBasis || basis) === basis && isCarry(set) === carries);
+  if (carries) {
+    return carryPREvents(exercise, basis, comparableSession, comparableHistory, historyVolumes, weightLabel, formatWeight);
+  }
   const priorMax = comparableHistory.length ? Math.max(...comparableHistory.map((s) => s.weightLb)) : 0;
   const top = prTopScheme(comparableSession);
   const schemes = historySchemes instanceof Set ? historySchemes : new Set(historySchemes);
@@ -1549,6 +1609,26 @@ export function prEvaluate({ exercise, sessionSets, historySets, historyVolumes,
         ? `Rep PR — ${weightLabel(best.weightLb)} × ${best.reps} ${exercise.toLowerCase()}`
         : `Rep PR — ${best.reps} reps ${exercise.toLowerCase()}`,
     });
+  }
+  return events;
+}
+
+function carryPREvents(exercise, basis, session, history, historyVolumes, weightLabel, formatWeight) {
+  const events = [];
+  const priorMax = history.length ? Math.max(...history.map((s) => s.weightLb)) : 0;
+  const top = Math.max(...session.map((s) => s.weightLb));
+  if (supportsLoadPR(basis) && top > priorMax + 1e-9) {
+    const yards = Math.max(0, ...session.filter((s) => Math.abs(s.weightLb - top) < 1e-9).map((s) => s.distanceYards));
+    events.push({ kind: "heaviestSet", exercise,
+      label: `${weightLabel(top)} × ${carryDistanceLabel(yards)} — heaviest ${exercise.toLowerCase()} logged` });
+  }
+  // A first distance session has no distance baseline: the prior volumes are
+  // rep tonnage, a different quantity, so beating them is no record.
+  const vol = prVolume(session);
+  const priorVolMax = historyVolumes.length ? Math.max(...historyVolumes) : 0;
+  if (supportsLoadPR(basis) && history.length && vol > priorVolMax + 1e-9) {
+    const volumeLabel = formatWeight ? formatWeight(vol) : `${trim(vol)} lb`;
+    events.push({ kind: "volumePR", exercise, label: `Volume PR — ${volumeLabel}·yd total ${exercise.toLowerCase()}` });
   }
   return events;
 }
@@ -3109,10 +3189,12 @@ export function cardioFlightsLabel(flights) {
 // affordance line, so a row can never advertise a field the editor withholds.
 export function cardioFields(exerciseName, flights, distanceMiles, inclinePercent) {
   const climbs = cardioClimbsFlights(exerciseName);
+  const coversGround = !climbs && !TIME_ONLY_CONDITIONING.has(exerciseName);
   const f = {
     load: cardioCarriesLoad(exerciseName),
     flights: climbs || flights > 0,
-    distance: !climbs || distanceMiles > 0,
+    // A set already holding a distance keeps the field that can fix it.
+    distance: coversGround || distanceMiles > 0,
     // A climber's grade is the machine, not a setting — unless a legacy set
     // already carries one.
     incline: !climbs || inclinePercent > 0,
@@ -3148,6 +3230,46 @@ export const cardioDefaultLoadLb = (exerciseName) => (exerciseName === "Ruck" ? 
 
 // Loaded carries move in plates and full pack increments, not barbell steps.
 export const CARDIO_LOAD_INCREMENT_LB = 10;
+
+// ---- Distance carries ----
+// Loaded carries logged as sets of DISTANCE with a per-hand load: a farmer
+// walk is "50 lb each for 40 yd", not "50 lb × 5 reps". Unlike a ruck these
+// stay strength-typed (dumbbell/kettlebell, per implement), so no duration
+// branch ever zeroes the load and the implement count stays.
+//
+// Named, not typed: the library row's equipment type is never rewritten, so
+// existing rows pick this up by name with no schema or backup change. Distance
+// lives in the existing `distanceMiles` (yards ÷ 1760) and is entered and shown
+// in yards. A carry set holding no distance — one logged as reps before this
+// existed — keeps its reps ([INV-CARRY-LOGS-DISTANCE]). Mirrors CadenceCore
+// CardioFormat (distanceCarries …).
+export const DISTANCE_CARRIES = new Set(["Farmer Carry", "Suitcase Carry", "Front-rack Carry", "Overhead Carry"]);
+export const logsCarryDistance = (exerciseName) => DISTANCE_CARRIES.has(exerciseName);
+export const CARRY_DEFAULT_YARDS = 40;
+export const CARRY_YARDS_STEP = 5;
+export const YARDS_PER_MILE = 1760;
+// Exact — never routed through the four-decimal speed rounding.
+export const milesFromYards = (yards) => yards / YARDS_PER_MILE;
+// Rounded to a tenth so the division's float noise never shows.
+export const yardsFromMiles = (miles) => Math.round(miles * YARDS_PER_MILE * 10) / 10;
+// The yards a set carried, or null when it is not a distance-carry set: the
+// movement must be a registered carry AND the set must hold a distance.
+export const carryYards = (exerciseName, distanceMiles) =>
+  (logsCarryDistance(exerciseName) && distanceMiles > 0 ? yardsFromMiles(distanceMiles) : null);
+// Whether a set belongs in lifting tonnage (Σ load × reps). Any set that logged
+// ground covered, flights, or time does not — a ruck, a sled, a hold, and a
+// distance carry alike: 50 lb for 40 yd would count like eight five-rep sets
+// and distort every total. A carry is compared with other carries by load ×
+// yards (prEvaluate), never folded in here. Mirrors CadenceCore
+// CardioFormat.countsTowardTonnage.
+export const countsTowardTonnage = (set) => !(set.distanceMiles > 0 || set.flights > 0 || set.durationSeconds > 0);
+
+// "40 yd", "40 yd / side".
+export const carryDistanceLabel = (yards, isPerSide = false) => `${trim(yards)} yd${isPerSide ? " / side" : ""}`;
+
+// Conditioning measured by time alone. Ropes go nowhere, so a distance and a
+// speed describe them with a unit they do not have.
+export const TIME_ONLY_CONDITIONING = new Set(["Battle Ropes", "Jump Rope"]);
 
 // Format a duration as minutes and seconds, including hours when needed.
 export function cardioDurationLabel(seconds) {

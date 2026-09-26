@@ -928,7 +928,12 @@ async function programDayEditor(p, day) {
             ui.h("div", { class: "row" }, ui.h("span", { text: "Sets" }),
               ui.stepper(a.sets, { min: 1, max: 8, format: (v) => `${v}`, onChange: async (v) => { a.sets = v; await Programs.save(p); } })),
             isTimed ? ui.h("div", { class: "row" }, ui.h("span", { text: isConditioning ? "Duration" : "Hold time" }),
-              ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } })) : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
+              ui.stepper(a.targetSeconds || 30, { min: 5, max: 1800, step: 5, format: C.cardioDurationLabel, onChange: async (v) => { a.targetSeconds = v; await Programs.save(p); } }))
+            // [INV-CARRY-LOGS-DISTANCE] A carry is sets of distance; a rep
+            // window means nothing for it and slots hold no distance yet.
+            : C.logsCarryDistance(a.exerciseName) ? ui.h("div", { class: "row" }, ui.h("span", { text: "Distance" }),
+              ui.h("span", { class: "sub mono", text: `${C.carryDistanceLabel(C.CARRY_DEFAULT_YARDS)} per set · adjust in the logger` }))
+            : ui.h("div", { class: "row" }, ui.h("span", { text: "Rep range" }),
               (() => {
                 // Same rules as the lift window above: endpoints only, and a
                 // carry swaps the sibling stepper in place — never a full
@@ -1303,7 +1308,7 @@ async function exerciseInsight(wrap, e) {
         ui.h("span", { class: "title", text: `${ui.fmtDate(h.date)}${h.prog ? ` · ${h.prog}` : ""}` }),
         ui.h("span", { class: "sub mono", text: h.sets.map((set) => {
           const rir = C.setRIR(set.flags || []);
-          return historySetPresentationForTest(set, e.type).actual + (rir ? ` · ${C.SET_RIR_LABELS[rir]}` : "");
+          return historySetPresentationForTest(set, e.type, e.name).actual + (rir ? ` · ${C.SET_RIR_LABELS[rir]}` : "");
         }).join(", ") }))));
   }
   wrap.append(card);

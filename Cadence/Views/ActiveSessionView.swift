@@ -1372,6 +1372,15 @@ private struct ExerciseSection: View {
         return CardioFormat.defaultLoadLb(exerciseName: name) ?? 0
     }
 
+    /// [INV-CARRY-LOGS-DISTANCE] The distance a new carry set starts with:
+    /// the previous set's, or the default when this is the first. A previous
+    /// set logged as reps keeps the entry on reps. nil for everything else.
+    private static func startingCarryMiles(entry: SessionExercise, last: SetEntry?) -> Double? {
+        guard let name = entry.exercise?.name, CardioFormat.logsCarryDistance(exerciseName: name) else { return nil }
+        guard let last else { return CardioFormat.miles(fromYards: CardioFormat.carryDefaultYards) }
+        return (last.distanceMiles ?? 0) > 0 ? last.distanceMiles : nil
+    }
+
     private func addSet() {
         let last = entry.orderedSets.last
         let isTimed = entry.exercise?.type == .timed || entry.exercise?.type == .conditioning
@@ -1382,18 +1391,20 @@ private struct ExerciseSection: View {
         // moment afterwards when it is distinguishable from one the lifter
         // deliberately set to zero.
         let carryLb = Self.startingCarryLoadLb(entry: entry, last: last)
+        let carryMiles = Self.startingCarryMiles(entry: entry, last: last)
         let set = SetEntry(
             order: entry.sets.count,
             weightLb: isTimed ? carryLb : (last?.weightLb ?? entry.plannedWeightLb ?? firstSetDefaultLb()),
-            reps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
+            reps: isTimed || carryMiles != nil ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             isPerSide: entry.exercise?.isUnilateral ?? false,
             enteredUnit: last?.enteredUnit ?? settings?.unitDisplay.primaryUnit ?? .lb,
             durationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
+            distanceMiles: carryMiles,
             loadBasis: last?.loadBasis ?? entry.exercise?.loadBasis,
             implementCount: last?.resolvedImplementCount ?? entry.exercise?.resolvedImplementCount ?? 1,
             targetWeightLb: last?.targetWeightLb ?? entry.targetWeightLb,
             plannedWeightLb: last?.weightLb ?? entry.plannedWeightLb,
-            plannedReps: isTimed ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
+            plannedReps: isTimed || carryMiles != nil ? 1 : (last?.reps ?? entry.plannedReps ?? 5),
             plannedDurationSeconds: isTimed ? (last?.durationSeconds ?? 30) : nil,
             prescriptionBlock: entry.exercise?.type == .conditioning ? .conditioning : .work
         )
@@ -1628,7 +1639,7 @@ private struct SetRow: View {
                         .foregroundStyle(set.isWarmup ? .secondary : .primary)
                     HStack(spacing: 6) {
                         if !isCardio && !isTimed {
-                            Text("× \(set.reps)\(set.isPerSide ? "/side" : "")")
+                            Text("× \(repsOrDistance)")
                                 .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         } else if isCardio {
@@ -1640,7 +1651,7 @@ private struct SetRow: View {
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
-                        if !isCardio && !isTimed,
+                        if !isCardio && !isTimed, set.carryYards == nil,
                            let plannedWeight = set.plannedWeightLb,
                            let plannedReps = set.plannedReps,
                            abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
@@ -1722,6 +1733,15 @@ private struct SetRow: View {
                     .presentationDetents([.large])
             }
         }
+    }
+
+    /// [INV-CARRY-LOGS-DISTANCE] "40 yd" for a distance carry — the row
+    /// then reads "50 lb each × 40 yd" — and the rep count otherwise.
+    private var repsOrDistance: String {
+        if let yards = set.carryYards {
+            return CardioFormat.carryDistanceLabel(yards: yards, isPerSide: set.isPerSide)
+        }
+        return "\(set.reps)\(set.isPerSide ? "/side" : "")"
     }
 
     private var weightLabel: String {
@@ -2191,6 +2211,9 @@ private struct SetDetailSheet: View {
     @State private var lb: Double = 0
     @State private var unit: WeightUnit = .lb
     @State private var reps: Int = 0
+    /// [INV-CARRY-LOGS-DISTANCE] Yards for a distance-carry set, captured
+    /// once on open; nil keeps the reps editor (a carry logged as reps too).
+    @State private var yards: Double?
     @State private var isWarmup = false
     @State private var isPerSide = false
     @State private var stoppedEarly = false
@@ -2287,12 +2310,19 @@ private struct SetDetailSheet: View {
                 }
 
                 Section {
-                    Stepper("Reps: \(reps)", value: $reps, in: 0...100)
+                    if let carried = yards {
+                        Stepper("Distance: \(CardioFormat.carryDistanceLabel(yards: carried, isPerSide: isPerSide))",
+                                value: Binding(get: { carried }, set: { yards = $0 }),
+                                in: CardioFormat.carryYardsStep...2000, step: CardioFormat.carryYardsStep)
+                    } else {
+                        Stepper("Reps: \(reps)", value: $reps, in: 0...100)
+                    }
                     Toggle("Warmup", isOn: $isWarmup)
                     Toggle("Per side", isOn: $isPerSide)
                     Toggle("Stopped early", isOn: $stoppedEarly)
                     if canApplyToRemaining {
-                        Toggle("Apply reps to remaining planned sets", isOn: $applyRepsToRemaining)
+                        Toggle(yards == nil ? "Apply reps to remaining planned sets" : "Apply distance to remaining planned sets",
+                               isOn: $applyRepsToRemaining)
                         Toggle("Apply weight to remaining planned sets", isOn: $applyWeightToRemaining)
                     }
                 }
@@ -2330,6 +2360,7 @@ private struct SetDetailSheet: View {
                 unit = set.enteredUnit
                 lb = set.weightLb
                 reps = set.reps
+                yards = set.carryYards
                 isWarmup = set.isWarmup
                 isPerSide = set.isPerSide
                 stoppedEarly = set.flags.contains(.stoppedEarly)
@@ -2385,13 +2416,17 @@ private struct SetDetailSheet: View {
         set.weightLb = lb
         set.enteredUnit = unit
         set.reps = reps
+        if let yards { set.distanceMiles = CardioFormat.miles(fromYards: yards) }
         if !isWarmup {
             let remaining = entry.plannedWorkingSets.filter { $0 !== set && $0.status == .planned }
             if applyWeightToRemaining {
                 for target in remaining { target.weightLb = lb; target.enteredUnit = unit }
             }
             if applyRepsToRemaining {
-                for target in remaining { target.reps = reps }
+                for target in remaining {
+                    if yards == nil { target.reps = reps }
+                    else if target.carryYards != nil { target.distanceMiles = set.distanceMiles }
+                }
             }
         }
         set.isWarmup = isWarmup
@@ -2655,10 +2690,18 @@ private struct CurrentSetHero: View {
                 .tracking(0.8)
                 .foregroundStyle(Theme.accent)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(set.reps)")
-                    .font(.title2.bold().monospacedDigit())
-                Text(set.isPerSide ? "reps / side" : "reps")
-                    .foregroundStyle(.secondary)
+                // [INV-CARRY-LOGS-DISTANCE] A distance carry states its yards.
+                if let yards = set.carryYards {
+                    Text(Weight.trim(yards))
+                        .font(.title2.bold().monospacedDigit())
+                    Text(set.isPerSide ? "yd / side" : "yd")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(set.reps)")
+                        .font(.title2.bold().monospacedDigit())
+                    Text(set.isPerSide ? "reps / side" : "reps")
+                        .foregroundStyle(.secondary)
+                }
                 if set.prescriptionBlock == .amrap {
                     Text("AMRAP")
                         .font(.caption.bold())
@@ -2681,13 +2724,20 @@ private struct CurrentSetHero: View {
                     Text("kg")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                    // The basis on the number itself: "50 lb · 22.7 kg each".
+                    // Without it a per-hand load reads as the total.
+                    if !set.loadBasis.shortSuffix.isEmpty {
+                        Text(set.loadBasis.shortSuffix.trimmingCharacters(in: .whitespaces))
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Text("BW")
                         .font(.system(size: numeralSize, weight: .black, design: .rounded))
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(set.weightLb > 0 ? "Set load \(Weight.both(lb: set.weightLb))\(set.loadBasis.shortSuffix)" : "Bodyweight")
+            .accessibilityLabel(set.weightLb > 0 ? "Set load \(LoadSemantics.heroLoadLabel(weightLb: set.weightLb, basis: set.loadBasis))" : "Bodyweight")
             Text(set.loadBasis == .totalBar ? "Set load · bar included" : "Set load · \(set.loadBasis.label)")
                 .font(.caption)
                 .foregroundStyle(.secondary)

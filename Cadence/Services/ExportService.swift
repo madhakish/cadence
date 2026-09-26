@@ -642,7 +642,8 @@ enum ExportService {
                                   secondaryMovementPattern: e.secondaryMovementPattern?.rawValue,
                                   aliases: e.aliases, strategyTags: e.strategyTags,
                                   isUnilateral: e.isUnilateral, loadBasis: e.loadBasis.rawValue,
-                                  implementCount: e.resolvedImplementCount,
+                                  implementCount: LoadSemantics.backupImplementCount(
+                                      stored: e.implementCount, exerciseType: e.typeRaw, basis: e.loadBasis),
                                   defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
                                   isShelved: e.isShelved, shelvedNote: e.shelvedNote,
                                   watchSite: e.watchSite?.rawValue, gateStatus: e.gateStatus.rawValue,
