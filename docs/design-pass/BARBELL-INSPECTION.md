@@ -71,6 +71,11 @@ or backup schema and needs no migration.
   original solution identity, inspect/toggle interactions, multiple diagrams,
   exact denominations, collars, and offline asset inclusion.
 - `cd CadenceCore && swift test` verifies the same scene and shared JSON fixture.
+- `cd web && npx playwright test tests/browser/plate-labels.spec.mjs` renders
+  F1–F8 at 390 and 1280 px in Chromium and WebKit, checks the final transformed
+  stamp size and the unscaled exact readout, and attaches all 16 screenshots
+  per engine. It also checks lb/kg totals do not overlap and that the exploded
+  fallback keeps legible stamps inside its scrolling track.
 - `node web/tools/render-barbell-proof.mjs /absolute/output` rasterizes production
   SVGs with the actual shipped sprite bytes at 390 and 1280 pixels. These are
   renderer proofs, not iPhone app screenshots.

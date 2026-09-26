@@ -115,10 +115,16 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   const scene = barbellScene(solution, style, exploded);
   const id = `bar-art-${++sceneID}`;
   const stackLabel = solution.perSide.length ? `${C.perSideLabel(solution.perSide)} per side` : solution.collarLb > 0 ? "with collars, no plates" : "bar only";
-  const svg = el('svg', { class: `barbell full ${style} realistic`,
+  const svg = el('svg', { id, class: `barbell full ${style} realistic`,
     viewBox: `0 0 ${scene.width} ${scene.height}`, role: 'group',
     'aria-label': `${exploded ? 'Exploded' : 'Assembled'} loaded bar, ${C.both(solution.totalLb)}, ${stackLabel}`,
     'data-exploded': exploded });
+  const minimumLegibleWidth = Math.max(320, scene.width * 12 / (exploded ? 14 : 10));
+  if (!exploded) {
+    const visibility = el('style');
+    visibility.textContent = `@container plate-stage (width < ${minimumLegibleWidth}px) { #${id} .barbell-plate-label { display: none; } }`;
+    svg.append(visibility);
+  }
   const defs = el('defs');
   const angle = exploded ? 'exploded' : 'assembled';
   for (const token of Object.keys(C.PLATE_COLOURS)) {
@@ -196,14 +202,14 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     root.append(label);
   }
   return { svg, solution, bar:solution.bar, plateStyle:style, scene,
-    minimumLegibleWidth: Math.max(320, scene.width * 12 / (exploded ? 14 : 10)), baseLabelSize: exploded ? 14 : 10 };
+    minimumLegibleWidth, baseLabelSize: exploded ? 14 : 10 };
 }
 
 // One responsive shell for every complete-bar presentation. Inline stages fit
 // their container and always offer inspection. The focused expanded screen
 // alone may scroll at natural scale; its exact stack list stays readable.
 export function barbellStage(rendered, {
-  caption = "", emphasis = "standard", onExpand = null, containerWidth = null,
+  caption = "", emphasis = "standard", onExpand = null,
 } = {}) {
   const stage = document.createElement("div");
   stage.className = `barbell-stage ${emphasis}`;
@@ -220,13 +226,6 @@ export function barbellStage(rendered, {
   const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
   const live = solid?.supported ? solid : null;
   stage.classList.toggle("solid", Boolean(live));
-  const fitLabels = (width) => {
-    if (width > 0) stage.classList.toggle("preview-small", width < rendered.minimumLegibleWidth);
-  };
-  fitLabels(containerWidth);
-  if (typeof ResizeObserver !== "undefined") {
-    new ResizeObserver(() => fitLabels(track.clientWidth)).observe(track);
-  }
   const paint = () => {
     const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
     if (live) {
@@ -241,7 +240,7 @@ export function barbellStage(rendered, {
   };
   paint();
   stage.append(track);
-  if (!live && !inspection) stage.append(barbellReadout(rendered.solution));
+  if (!inspection) stage.append(barbellReadout(rendered.solution));
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.

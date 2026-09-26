@@ -186,9 +186,8 @@ const heavyStage = B.barbellStage(heavyRendered, {
 const expandButton = heavyStage.querySelector(".barbell-expand");
 ok(heavyRendered.minimumLegibleWidth > 390 && !expandButton.hidden,
 "dense stack retains its computed geometry and inspection action");
-ok(heavyStage.classList.contains("preview-small")
-    && [...heavyStage.querySelectorAll(".barbell-plate-denomination")].every((label) => label.textContent.endsWith(" kg")),
-"phone preview hides undersized face stamps and keeps exact, readable plate labels");
+ok([...heavyStage.querySelectorAll(".barbell-plate-denomination")].every((label) => label.textContent.endsWith(" kg")),
+"phone preview keeps exact plate labels outside the scaled artwork");
 expandButton.click();
 ok(expanded, "expanded-view affordance is immediate and wired to its caller");
 ok(Math.abs(heavyRendered.minimumLegibleWidth - Math.max(320, heavyRendered.scene.width * 1.2)) < 1e-6,
