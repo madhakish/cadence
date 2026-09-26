@@ -139,7 +139,7 @@ ok(/aria-label[^\n]*Dumbbell/.test(barbell), "the dumbbell graphic carries a spo
 const plates = read("app/js/views/plates.js");
 ok(/Achieved total, bar included/.test(barbell)
   && /\[solution\.totalLb, "lb", true\][\s\S]*\[C\.kgFromLb\(solution\.totalLb\), "kg", false\]/.test(barbell)
-  && /loadoutSummary\(targetLb, solution(, \{ plateStyle \})?\)/.test(plates),
+  && /loadoutSummary\(targetLb, solution(, \{ plateStyle(, plateTheme)? \})?\)/.test(plates),
   "the shared calculator/session total is announced and displayed pounds first, then kilograms");
 ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the operating-system level");
 {

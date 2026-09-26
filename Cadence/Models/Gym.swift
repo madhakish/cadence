@@ -30,6 +30,13 @@ final class Gym {
     /// Combined collar/clip weight for the selected station, canonical pounds.
     var collarWeightLb: Double = 0
     var loadingPolicyRaw: String = "closest"
+    /// Raw `PlateThemeID` (schema V14). The literal "" default marks a row
+    /// migrated from V13 that has never been themed; `Seeder` replaces it
+    /// once with the inferred theme. A stored "custom" is a real choice and
+    /// is never re-inferred. Do not change the default to "custom": the
+    /// backfill could then no longer tell "never chosen" from a deliberate
+    /// Custom choice, and would overwrite that choice on every launch.
+    var plateThemeRaw: String = ""
     /// Photo of the membership barcode/key tag, so a second car key ring
     /// isn't needed. Shown full-screen at max brightness for the scanner.
     @Attribute(.externalStorage) var barcodeImageData: Data?
@@ -42,6 +49,7 @@ final class Gym {
         self.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: true) }
         self.collarWeightLb = 0
         self.loadingPolicyRaw = LoadingPolicy.closest.rawValue
+        self.plateThemeRaw = PlateThemeID.custom.rawValue
         self.barcodeLabel = "Membership tag"
     }
 
@@ -62,6 +70,11 @@ final class Gym {
     var loadingPolicy: LoadingPolicy {
         get { LoadingPolicy(rawValue: loadingPolicyRaw) ?? .closest }
         set { loadingPolicyRaw = newValue.rawValue }
+    }
+
+    var plateTheme: PlateThemeID {
+        get { PlateThemeID(rawValue: plateThemeRaw) ?? .custom }
+        set { plateThemeRaw = newValue.rawValue }
     }
 }
 

@@ -1,5 +1,6 @@
 // Presentation-only reference profiles. Never written into exercise/gym data.
 import * as C from "./core.js";
+import { plateThemeGeometry } from "./plate-theme.js";
 
 // The one spoken name for a plate on the bar, on both clients. Mirrors
 // CadenceCore BarbellScene.Disc.accessibilityLabel.
@@ -27,7 +28,7 @@ export function plateFamily(plate, style = 'steel') {
   if (STEEL[key]) return 'steel';
   return 'change';
 }
-export const plateFamilyLabel = (family) => ({ bumper: 'Bumpers', steel: 'Steel' })[family] || 'Change';
+export const plateFamilyLabel = (family) => ({ bumper: 'Bumpers', steel: 'Steel', ipf: 'Steel', machined: 'Steel', iron: 'Iron' })[family] || 'Change';
 
 export function plateGeometry(plate, style = 'steel') {
   const key = `${plate.value}-${plate.unit}`;
@@ -37,18 +38,42 @@ export function plateGeometry(plate, style = 'steel') {
 // Photographic face colourisation, mirrored from CadenceCore PlateFaceTint: a
 // 5×4 colour matrix (row-major R, G, B, A rows of five) that rebuilds every
 // channel from the texture's luminance, so the plate keeps its photographed
-// shading and takes its hue from the palette fill. Black iron is untinted.
+// shading and takes its hue from the palette fill.
 export const PLATE_TINT_IDENTITY = [1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0];
-// Median face luminance of each rendered sprite family (measured, hub excluded);
-// the lift maps it to 85% of the fill so highlights keep headroom.
-export const plateTintLift = (style) => 0.85 / (style === "bumper" ? 0.459 : 0.453);
-export const PLATE_TINT_GREY_MIX = 0.12;
+// Share of the palette fill each pigment's median face reaches under the scene
+// light, matched to the approved plate-loading mockups: coated rubber and
+// painted iron read deep and matte (blue deepest), while yellow and white stay
+// bright. Black iron keeps its own dark fill.
+export const PLATE_TINT_TARGET = Object.freeze({ red: 0.62, blue: 0.49, green: 0.6, yellow: 0.72, white: 0.72, black: 1 });
+export const plateTintTarget = (token) => PLATE_TINT_TARGET[token] ?? 0.6;
+// Median face luminance of each rendered sprite family (measured, hub excluded).
+export const plateTintLift = (style, token) => plateTintLiftForTarget(style, plateTintTarget(token));
+const plateTintLiftForTarget = (style, target) => target / (style === "bumper" ? 0.459 : 0.453);
+// A theme fill takes the target of the nearest palette pigment (sRGB
+// distance): dark iron and black rubber land on black and keep their own fill,
+// federation colours on their hue. Mirrors PlateFaceTint.target(forFill:).
+export function plateTintTargetForFill(fill) {
+  const rgb = (hex) => { const v = Number.parseInt(hex.slice(1), 16); return [16, 8, 0].map((s) => (v >> s) & 255); };
+  const a = rgb(fill);
+  let best = ["", Infinity];
+  for (const token of ["red", "blue", "green", "yellow", "white", "black"]) {
+    const b = rgb(C.PLATE_COLOURS[token].fill);
+    const d = a.reduce((sum, x, i) => sum + (x - b[i]) * (x - b[i]), 0);
+    if (d < best[1]) best = [token, d];
+  }
+  return plateTintTarget(best[0]);
+}
+export const PLATE_TINT_GREY_MIX = 0.04;
 export function plateTintMatrix(token, style = "steel") {
-  const fill = token === "black" ? null : C.PLATE_COLOURS[token]?.fill;
-  if (!fill) return PLATE_TINT_IDENTITY;
+  const fill = C.PLATE_COLOURS[token]?.fill;
+  return fill ? plateTintMatrixForFill(fill, style, plateTintTarget(token)) : PLATE_TINT_IDENTITY;
+}
+// Colourises the face from any "#rrggbb" fill (a theme's colour rule). target
+// overrides the pigment share; null takes the nearest pigment's.
+export function plateTintMatrixForFill(fill, style = "steel", target = null) {
   const hex = Number.parseInt(fill.slice(1), 16);
   const channels = [16, 8, 0].map((shift) => ((hex >> shift) & 255) / 255);
-  const lift = plateTintLift(style), grey = lift * PLATE_TINT_GREY_MIX;
+  const lift = plateTintLiftForTarget(style, target ?? plateTintTargetForFill(fill)), grey = lift * PLATE_TINT_GREY_MIX;
   const luma = [0.2126, 0.7152, 0.0722];
   const rows = [];
   for (const channel of channels) {
@@ -60,7 +85,7 @@ export function plateTintMatrix(token, style = "steel") {
 }
 // The colour a neutral texel of luminance l becomes: [r, g, b], clamped.
 export const plateTintApply = (matrix, l) => [0, 5, 10].map((i) => Math.min(1, matrix[i] * l + matrix[i + 1] * l + matrix[i + 2] * l));
-export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}) {
+export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}, theme = 'custom') {
   const angle = (exploded ? 38 : 18) * Math.PI / 180;
   const axisX = Math.cos(angle), axisY = -Math.sin(angle) * .24, faceScale = Math.sin(angle);
   const shoulder = (solution.bar.unit === 'kg' ? solution.bar.value === 15 : solution.bar.value === 35) ? 145 : 165;
@@ -69,7 +94,7 @@ export function barbellScene(solution, style = 'steel', exploded = false, geomet
   let cursor = shoulder + 8;
   let previousFaceRadius = 0;
   plates.forEach((plate, index) => {
-    const shape = geometry[`${plate.value}-${plate.unit}`] || plateGeometry(plate, style);
+    const shape = geometry[`${plate.value}-${plate.unit}`] || plateThemeGeometry(plate, theme, style);
     const radius = Math.max(1, shape.diameter) * .18, depth = Math.max(1, shape.thickness) * .36;
     const faceRadius = radius * faceScale;
     // Both adjacent faces must fit, especially large plates beside change plates.
@@ -77,7 +102,7 @@ export function barbellScene(solution, style = 'steel', exploded = false, geomet
     for (const side of [-1, 1]) {
       const center = side * (cursor + depth / 2);
       discs.push({ plate, side, index, x: center * axisX, y: center * axisY,
-        radius, faceRadius, depth: depth * axisX });
+        radius, faceRadius, depth: depth * axisX, theme });
     }
     cursor += depth + (exploded ? 0 : 2);
     previousFaceRadius = faceRadius;

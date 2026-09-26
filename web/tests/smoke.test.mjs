@@ -1695,7 +1695,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 14, `backup schema is pinned at 14 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 15, `backup schema is pinned at 15 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1859,7 +1859,7 @@ await withCleanup(async (keep) => {
   const original = await db.Settings.get();
   await db.Settings.save({ ...original, theme: "titanium" });
   const titanium = JSON.parse(await db.exportJSON());
-  ok(titanium.schemaVersion === 14 && titanium.settings.theme === "titanium", "titanium exports at current version");
+  ok(titanium.schemaVersion === 15 && titanium.settings.theme === "titanium", "titanium exports at current version");
   await db.importBundle(titanium);
   ok((await db.Settings.get()).theme === "titanium", "titanium survives the round trip");
   await db.importBundle({ ...titanium, schemaVersion: 12, settings: { ...titanium.settings, theme: "slate" } });
@@ -2390,7 +2390,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 14, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 15, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -4604,6 +4604,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     bundle = structuredClone(bundle);
     bundle.schemaVersion = db.BACKUP_SCHEMA_VERSION;
     if (bundle.settings) bundle.settings.gymTagFirstLaunchOfDay ??= false;
+    // Pre-v15 gyms restore as custom (never re-inferred).
+    for (const gym of bundle.gyms || []) gym.plateTheme ??= "custom";
     for (const program of bundle.programs || []) for (const day of program.days || []) {
       (day.lifts || []).forEach((lift, index) => {
         lift.order ??= index;
@@ -4647,7 +4649,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
     "v10 session entries derive their exercise ids");
   const reexport = await db.exportBundle();
-  ok(reexport.schemaVersion === 14, "importing v10 re-exports as the current version");
+  ok(reexport.schemaVersion === 15, "importing v10 re-exports as the current version");
 }
 
 

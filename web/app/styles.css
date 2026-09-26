@@ -349,7 +349,7 @@ canvas.barbell-gl { display: block; width: 100%; height: 320px; touch-action: au
 .barbell-disc-caption { position: absolute; transform: translate(-50%, 0); font-size: 14px; line-height: 1.4; font-weight: 650; font-variant-numeric: tabular-nums; color: #f4f5f7; white-space: nowrap; padding: 4px 8px; background: var(--scene-studio); border-radius: 4px; pointer-events: auto; }
 .barbell-disc-caption:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .barbell-focus-note:empty { display: none; }
-.barbell-plate-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.barbell-plate-label, .barbell-plate-unit { font-family: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; font-stretch: condensed; }
 .barbell-hero { padding: 12px 0 4px; }
 .barbell-hero svg.barbell { height: 84px; }
 .barbell-hero.full svg.barbell { width: 100%; height: auto; }

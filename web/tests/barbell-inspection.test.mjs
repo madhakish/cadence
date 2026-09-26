@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
+import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, plateTintTarget } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
@@ -36,18 +36,23 @@ for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
   const values = matrix.getAttribute('values').split(' ').map(Number);
   assert.deepEqual(values, plateTintMatrix(token, 'bumper'), 'the face filter is the style-specific colourisation');
 }
-// Luminance-driven: shading survives, the median lands near the fill, black iron is untouched.
+// Luminance-driven: shading survives, the median lands on the pigment's target
+// share of the fill, and black iron is a dark tint rather than the raw texture.
 const yellow = plateTintMatrix('yellow', 'steel');
-const median = 0.85 / plateTintLift('steel');
+const target = plateTintTarget('yellow');
+const median = target / plateTintLift('steel', 'yellow');
 const mid = plateTintApply(yellow, median);
 const fill = [0xE8, 0xB0, 0x08].map((v) => v / 255);
 for (let c = 0; c < 3; c++) {
-  const expected = Math.min(1, 0.85 * fill[c] + 0.85 * PLATE_TINT_GREY_MIX * (1 - fill[c]));
+  const expected = Math.min(1, target * fill[c] + target * PLATE_TINT_GREY_MIX * (1 - fill[c]));
   assert.ok(Math.abs(mid[c] - expected) < 0.01, `yellow steel median channel ${c} → ${mid[c]} vs ${expected}`);
 }
 const [bright, dark] = [plateTintApply(yellow, median * 1.3), plateTintApply(yellow, median * 0.75)];
 assert.ok(bright.every((v, i) => v > dark[i]), 'brighter texels stay brighter');
-assert.deepEqual(plateTintMatrix('black', 'bumper'), PLATE_TINT_IDENTITY);
+const blueMid = plateTintApply(plateTintMatrix('blue', 'bumper'), plateTintTarget('blue') / plateTintLift('bumper', 'blue'));
+assert.ok(Math.max(...blueMid) < 0.5, `blue bumpers read deep, not pastel (${blueMid})`);
+const blackMid = plateTintApply(plateTintMatrix('black', 'bumper'), 1 / plateTintLift('bumper', 'black'));
+assert.ok(Math.max(...blackMid) < 0.25, `black iron reads black, not raw grey (${blackMid})`);
 assert.equal(compact.svg.querySelectorAll('image.barbell-shaft').length, 1, 'one rendered shaft sprite');
 assert.equal(compact.svg.querySelectorAll('image.barbell-sleeve, image.barbell-sleeve-near').length, 2, 'a far and a near sleeve sprite');
 assert.ok([...compact.svg.querySelectorAll('.barbell-plate-hub')].every(hub=>!hub.hasAttribute('filter')),

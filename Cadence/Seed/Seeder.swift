@@ -269,6 +269,7 @@ enum Seeder {
         try snapshotLegacyLoadSemantics(context: context)
         try normalizeV4PrescriptionBlocks(context: context)
         try normalizeLegacyGymPlateInventories(context: context)
+        try inferLegacyGymPlateThemes(context: context)
         do { try context.save() }
         catch { context.rollback(); throw error }
     }
@@ -280,6 +281,17 @@ enum Seeder {
     private static func normalizeLegacyGymPlateInventories(context: ModelContext) throws {
         for gym in try context.fetch(FetchDescriptor<Gym>()) where gym.plateToggles.isEmpty {
             gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: true) }
+        }
+    }
+
+    /// V14 added `plateThemeRaw` with an empty literal default. A gym that
+    /// has never been themed takes the theme its enabled inventory implies
+    /// (single-unit → that unit's plainest real set, mixed or empty →
+    /// custom), exactly once. Mirrors web `migrateToV10`. Any stored value,
+    /// including a deliberate "custom", is left alone.
+    private static func inferLegacyGymPlateThemes(context: ModelContext) throws {
+        for gym in try context.fetch(FetchDescriptor<Gym>()) where gym.plateThemeRaw.isEmpty {
+            gym.plateTheme = PlateThemeID.inferred(from: gym.plateToggles.filter(\.enabled).map(\.plate.unit))
         }
     }
 

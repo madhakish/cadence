@@ -95,7 +95,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV8PolicyStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -139,7 +139,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV10IdentityStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let expectedID = StableID.exerciseLegacyID(name: "Legacy Row")
         do {
             let container = try ModelContainer(
@@ -197,7 +197,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV11WoodStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         var woodSessionID = ""
         do {
             let container = try ModelContainer(
@@ -267,6 +267,120 @@ final class PersistenceMigrationTests: XCTestCase {
         XCTAssertEqual(ActivitySession.estimatedStrikesTotal(for: [wood]), 340)
     }
 
+    /// V13 -> V14 (#55): the lightweight stage adds only `Gym.plateThemeRaw`
+    /// with a literal "" default, so a real on-disk V13 store upgrades
+    /// without touching inventory, bar, collars, or loading policy. The
+    /// production post-open backfill then infers a theme once from each
+    /// gym's enabled plates (all-lb → lbBlackIron, mixed → custom) and is
+    /// idempotent: a second run, or a later deliberate Custom choice, is
+    /// never overwritten.
+    func testV13StoreGainsInferredPlateThemeWithoutTouchingInventory() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-v13-plate-theme-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cadence.store")
+        let (lbToggles, mixedToggles) = try createV13GymStore(at: storeURL)
+
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
+        do {
+            let container = try ModelContainer(
+                for: schema,
+                migrationPlan: CadenceV13MigrationPlan.self,
+                configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+            )
+            let context = container.mainContext
+            let gyms = try context.fetch(FetchDescriptor<Gym>())
+            XCTAssertEqual(gyms.count, 2)
+            let garage = try XCTUnwrap(gyms.first { $0.name == "Garage" })
+            let club = try XCTUnwrap(gyms.first { $0.name == "Club" })
+            XCTAssertEqual(garage.plateThemeRaw, "", "the lightweight stage fills the literal default")
+            XCTAssertEqual(club.plateThemeRaw, "")
+            XCTAssertEqual(garage.plateToggles, lbToggles, "toggles survive exactly")
+            XCTAssertEqual(club.plateToggles, mixedToggles)
+            XCTAssertEqual(garage.defaultBarID, "35-lb")
+            XCTAssertEqual(garage.collarWeightLb, 2.5)
+            XCTAssertEqual(garage.loadingPolicy, .under)
+            XCTAssertTrue(garage.isDefault)
+            XCTAssertEqual(club.defaultBarID, "20-kg")
+            XCTAssertEqual(club.loadingPolicy, .closest)
+            XCTAssertFalse(club.isDefault)
+
+            try Seeder.syncLibrary(context: context)
+            XCTAssertEqual(garage.plateTheme, .lbBlackIron, "all enabled plates are lb")
+            XCTAssertEqual(club.plateTheme, .custom, "mixed inventory stays custom")
+            XCTAssertEqual(club.plateThemeRaw, "custom", "the backfill stamps the row so it never runs again")
+
+            try Seeder.syncLibrary(context: context)
+            XCTAssertEqual(garage.plateTheme, .lbBlackIron, "a second run changes nothing")
+            XCTAssertEqual(club.plateTheme, .custom)
+            XCTAssertEqual(garage.plateToggles, lbToggles, "the backfill never edits inventory")
+
+            garage.plateTheme = .custom
+            try context.save()
+            try Seeder.syncLibrary(context: context)
+            XCTAssertEqual(garage.plateTheme, .custom, "a deliberate Custom choice is never re-inferred")
+        }
+
+        let reopened = try ModelContainer(
+            for: schema,
+            migrationPlan: CadenceV13MigrationPlan.self,
+            configurations: ModelConfiguration("migration", schema: schema, url: storeURL)
+        )
+        let context = reopened.mainContext
+        let gyms = try context.fetch(FetchDescriptor<Gym>())
+        XCTAssertEqual(gyms.first { $0.name == "Garage" }?.plateThemeRaw, "custom", "the choice persists on disk")
+        XCTAssertEqual(gyms.first { $0.name == "Club" }?.plateThemeRaw, "custom")
+        XCTAssertEqual(gyms.first { $0.name == "Garage" }?.collarWeightLb, 2.5)
+    }
+
+    /// v15 carries the gym's plate theme; a v14 bundle restores as custom
+    /// (never re-inferred), and an unknown or missing v15 value fails
+    /// preflight before any write.
+    func testNativeBackupRoundTripsGymPlateTheme() throws {
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
+        func container() throws -> ModelContainer {
+            try ModelContainer(for: schema,
+                configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        }
+        let source = try container()
+        let context = source.mainContext
+        try Seeder.seedIfNeeded(context: context)
+        let gym = try XCTUnwrap(try context.fetch(FetchDescriptor<Gym>()).first)
+        XCTAssertEqual(gym.plateTheme, .custom, "a new gym starts custom")
+        gym.plateTheme = .ipfCalibrated
+        try context.save()
+
+        let backup = try ExportService.jsonData(context: context)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        XCTAssertEqual(json["schemaVersion"] as? Int, BackupContract.currentSchemaVersion)
+        let gymJSON = try XCTUnwrap((json["gyms"] as? [[String: Any]])?.first)
+        XCTAssertEqual(gymJSON["plateTheme"] as? String, "ipfCalibrated")
+        let restored = try container()
+        try ImportService.load(backup, into: restored.mainContext)
+        XCTAssertEqual(try restored.mainContext.fetch(FetchDescriptor<Gym>()).first?.plateTheme, .ipfCalibrated)
+
+        func bundle(version: Int, theme: String?) throws -> Data {
+            var copy = json
+            copy["schemaVersion"] = version
+            var gymCopy = gymJSON
+            gymCopy["plateTheme"] = theme
+            copy["gyms"] = [gymCopy]
+            return try JSONSerialization.data(withJSONObject: copy)
+        }
+        let legacy = try container()
+        try ImportService.load(try bundle(version: 14, theme: nil), into: legacy.mainContext)
+        XCTAssertEqual(try legacy.mainContext.fetch(FetchDescriptor<Gym>()).first?.plateThemeRaw, "custom",
+                       "a pre-v15 gym restores as custom")
+
+        for bad in [try bundle(version: 15, theme: nil), try bundle(version: 15, theme: "chrome")] {
+            let rejected = try container()
+            XCTAssertThrowsError(try ImportService.load(bad, into: rejected.mainContext))
+            XCTAssertEqual(try rejected.mainContext.fetch(FetchDescriptor<Gym>()).count, 0,
+                           "a rejected bundle writes nothing")
+        }
+    }
+
     /// The seed ships the registered activity kinds' canonical exercises by
     /// literal name (the web parity check parses the literals from source);
     /// this pins each literal to the registry constant the creator resolves
@@ -285,7 +399,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// non-finite Double makes JSONEncoder refuse the export outright. An
     /// app must never bank a row whose own backup it cannot restore.
     func testCreatorRejectsValuesItsOwnBackupWouldRefuse() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -329,7 +443,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// than delete/recreate. Identity matters to history ordering and backup
     /// diffs; the entry denomination matters when a kilogram maul is edited.
     func testActivityQuickEditPreservesIdentityAndOffProgramShape() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -399,7 +513,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// activity, mutating only the first set would preserve a contradictory
     /// record. Refuse it and leave every row available for explicit recovery.
     func testActivityQuickEditRejectsNoncanonicalSessionShape() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -473,7 +587,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV9IntervalStore(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         do {
             let container = try ModelContainer(
                 for: schema,
@@ -522,7 +636,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// same deterministic legacy ids web derives — cross-client identity for
     /// identical content.
     func testBackupRoundTripsIdentityAndDerivesLegacyIDs() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -577,7 +691,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupRoundTripsIntervalsAndManualBarMarker() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -660,7 +774,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// canonical set, and a v11 bundle restores with no detail invented
     /// anywhere [INV-WOOD-WORK-ROUND-TRIPS].
     func testNativeBackupRoundTripsActivityDetail() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -831,7 +945,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupCarriesTitaniumThemeAndRestoresOlderThemeBundles() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         func container() throws -> ModelContainer {
             try ModelContainer(
                 for: schema,
@@ -855,7 +969,7 @@ final class PersistenceMigrationTests: XCTestCase {
         // version and restores verbatim.
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 14)
+        XCTAssertEqual(json["schemaVersion"] as? Int, 15)
         XCTAssertEqual((json["settings"] as? [String: Any])?["theme"] as? String, "titanium")
         let restored = try container()
         try ImportService.load(backup, into: restored.mainContext)
@@ -899,7 +1013,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testExactRestDurationsRoundTripThroughTheExistingBackupContract() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         func container() throws -> ModelContainer {
             try ModelContainer(for: schema,
                 configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
@@ -922,7 +1036,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeBackupRoundTripsProgrammingPoliciesAndDefaultsLegacyBundles() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -976,7 +1090,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testNativeStandaloneProgramRoundTripsProgrammingPolicies() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1029,7 +1143,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV7Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         do {
             let container = try ModelContainer(for: schema, migrationPlan: CadenceV7MigrationPlan.self,
@@ -1072,7 +1186,7 @@ final class PersistenceMigrationTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Cadence.store")
         try createV6Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(for: schema, migrationPlan: CadenceV6MigrationPlan.self,
                                            configurations: configuration)
@@ -1143,7 +1257,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// native omits this one, restoring its own post-migration backup promotes
     /// a pull-up the lifter deliberately moved back to Accessory.
     func testNativeBackupRoundTripKeepsVerticalPullPromotionStamp() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1182,7 +1296,7 @@ final class PersistenceMigrationTests: XCTestCase {
     /// both restore as "gym inventory", matching web's wholesale-record
     /// replacement.
     func testRestoreClearsAStationPreferenceTheBackupDoesNotContain() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let source = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1228,7 +1342,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV4Store(at: storeURL, proteinEntries: 12)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV4MigrationPlan.self, configurations: configuration
@@ -1276,7 +1390,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createV5Store(at: storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema, migrationPlan: CadenceV5MigrationPlan.self, configurations: configuration
@@ -1324,7 +1438,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairRestoresIndependentLowerBDayAndIsIdempotent() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1400,7 +1514,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testRelationshipAliasRepairDoesNotGuessBetweenIdenticalCollidingSlots() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1441,7 +1555,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     func testMirroredLowerBMatrixRestoresRolesFromItsTaggedProgramDay() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: configuration)
         let context = container.mainContext
@@ -1551,7 +1665,7 @@ final class PersistenceMigrationTests: XCTestCase {
     }
 
     private func openUsingProductionStrategies(storeURL: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = {
             ModelConfiguration("migration", schema: schema, url: storeURL)
         }
@@ -1606,7 +1720,7 @@ final class PersistenceMigrationTests: XCTestCase {
 
         try createStore(storeURL)
 
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let configuration = ModelConfiguration("migration", schema: schema, url: storeURL)
         let container = try ModelContainer(
             for: schema,
@@ -2180,6 +2294,38 @@ final class PersistenceMigrationTests: XCTestCase {
         set.sessionExercise = entry
         context.insert(exercise); context.insert(session); context.insert(entry); context.insert(set)
         try context.save()
+    }
+
+    /// Two V13 gyms: an all-lb rack with a custom bar, collars, and policy
+    /// (a disabled kg plate must not count), and a mixed kg/lb rack.
+    private func createV13GymStore(at url: URL) throws -> ([PlateToggle], [PlateToggle]) {
+        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let configuration = ModelConfiguration("migration", schema: schema, url: url)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let context = container.mainContext
+
+        let lbToggles = [
+            PlateToggle(plate: Plate(value: 45, unit: .lb), enabled: true),
+            PlateToggle(plate: Plate(value: 25, unit: .lb), enabled: true),
+            PlateToggle(plate: Plate(value: 2.5, unit: .lb), enabled: false),
+            PlateToggle(plate: Plate(value: 20, unit: .kg), enabled: false),
+        ]
+        let mixedToggles = [
+            PlateToggle(plate: Plate(value: 20, unit: .kg), enabled: true),
+            PlateToggle(plate: Plate(value: 45, unit: .lb), enabled: true),
+        ]
+        let garage = CadenceSchemaV13.Gym(name: "Garage")
+        garage.defaultBarID = "35-lb"
+        garage.collarWeightLb = 2.5
+        garage.loadingPolicyRaw = "under"
+        garage.plateToggles = lbToggles
+        let club = CadenceSchemaV13.Gym(name: "Club")
+        club.isDefault = false
+        club.defaultBarID = "20-kg"
+        club.plateToggles = mixedToggles
+        context.insert(garage); context.insert(club)
+        try context.save()
+        return (lbToggles, mixedToggles)
     }
 
     private func createV9IntervalStore(at url: URL) throws {

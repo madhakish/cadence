@@ -20,21 +20,22 @@ final class BarbellSceneTests: XCTestCase {
     }
 
     /// The colourisation is luminance-driven: a plate keeps its photographed
-    /// shading (brighter texels stay brighter), the texture's median lands
-    /// near the palette fill, and black iron is left alone.
+    /// shading (brighter texels stay brighter), the texture's median lands on
+    /// the pigment's target share of the fill, and black iron reads black.
     func testColourisationKeepsShading() {
         let yellow = PlateFaceTint(token: "yellow", style: .steel)
-        // At the texture's median the face lands on 85% of the fill plus the grey mix.
-        let median = 0.85 / PlateFaceTint.lift(for: .steel)
+        let target = PlateFaceTint.target(for: "yellow")
+        let median = target / PlateFaceTint.lift(for: .steel, token: "yellow")
         let mid = yellow.apply(luminance: median)
         let fill = [0xE8, 0xB0, 0x08].map { Double($0) / 255 }
         for channel in 0..<3 {
-            let expected = min(1, 0.85 * fill[channel] + 0.85 * PlateFaceTint.greyMix * (1 - fill[channel]))
+            let expected = min(1, target * fill[channel] + target * PlateFaceTint.greyMix * (1 - fill[channel]))
             XCTAssertEqual(mid[channel], expected, accuracy: 0.01)
         }
         let bright = yellow.apply(luminance: median * 1.3), dark = yellow.apply(luminance: median * 0.75)
         for channel in 0..<3 { XCTAssertGreaterThan(bright[channel], dark[channel]) }
-        XCTAssertEqual(PlateFaceTint(token: "black", style: .bumper).matrix, PlateFaceTint.identity)
+        let blackMid = PlateFaceTint(token: "black", style: .bumper).apply(luminance: 1 / PlateFaceTint.lift(for: .bumper, token: "black"))
+        XCTAssertLessThan(blackMid.max() ?? 1, 0.25, "black iron reads black, not raw grey")
         let blue = PlateFaceTint(token: "blue", style: .bumper).apply(luminance: 0.152)
         XCTAssertGreaterThan(blue[2], blue[1]); XCTAssertGreaterThan(blue[1], blue[0])
     }
@@ -128,7 +129,7 @@ final class BarbellSceneTests: XCTestCase {
         XCTAssertEqual(PlatePalette.colour(for: "red").ink, 0xFFFFFF)
         XCTAssertEqual(PlatePalette.hex(PlatePalette.colour(for: "blue").fill), "#2f6fed")
         XCTAssertEqual(PlatePalette.colour(for: "chartreuse"), PlatePalette.fallback)
-        XCTAssertEqual(PlateFaceTint(token: "black", style: .steel).matrix, PlateFaceTint.identity, "black iron is the untinted texture")
+        XCTAssertEqual(PlateFaceTint(token: "chartreuse", style: .steel).matrix, PlateFaceTint.identity, "an unknown token keeps the untinted texture")
     }
 
     func testPlateFamilyNamesTheSummaryCell() {

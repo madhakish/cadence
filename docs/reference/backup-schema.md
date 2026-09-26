@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **13**. A missing version means the legacy version-0 shape.
+version **15**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,21 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 15 gym plate theme
+
+Version 15 (#55) adds one field on each gym record: `plateTheme`, the plate
+look the gym has chosen. Allowed values are `iwfCompetition`, `iwfTraining`,
+`ipfCalibrated`, `ipfCalibratedGloss`, `lbColourBumpers`, `lbBlackIron`,
+`lbGreyHammertone`, `lbMachinedSteel`, `blackBumpersBand`, `cadenceHouse`, and
+`custom`. It is presentation only: plate toggles, bar, collars, loading
+policy, and every recorded weight keep their meaning.
+
+A version-15 exporter always writes `plateTheme`, and an unknown value
+rejects the bundle in preflight. A version-14-or-older bundle has no theme;
+each gym restores as `custom`, and the restore never re-infers a theme from
+the inventory. Older importers reject a version-15 bundle on the version gate
+rather than silently dropping the gym's chosen look.
 
 ## Version 13 Titanium theme
 
@@ -317,7 +332,8 @@ keeps historical tonnage and PR comparisons stable if an exercise definition
 is edited later. Exercise definitions carry the same defaults. Gym records may
 carry combined `collarWeightLb` and a `loadingPolicy` (`closest`, `under`,
 `over`, or `exact`); both clients fall back to zero-weight collars and closest
-loading when those optional keys are absent.
+loading when those optional keys are absent. Version 15 adds `plateTheme`
+(see above), restored as `custom` when absent.
 
 Programs, program lift/accessory slots, and gyms each export their stable ID.
 The session exercise's `programSlotId` points at the exact lift or accessory

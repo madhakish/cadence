@@ -12,31 +12,509 @@ export const PLATE_SPRITES = {
   "bumper:15-kg": "bumper-450x48",
   "bumper:10-kg": "bumper-450x35",
   "bumper:5-kg": "bumper-450x25",
-  "bumper:10-lb": "bumper-450x25",
   "bumper:55-lb": "bumper-450x75",
   "bumper:45-lb": "bumper-450x65",
   "bumper:35-lb": "bumper-450x52",
   "bumper:25-lb": "bumper-450x40",
+  "bumper:10-lb": "bumper-450x25",
   "steel:25-kg": "steel-450x27",
-  "steel:45-lb": "steel-450x27",
   "steel:20-kg": "steel-450x22",
   "steel:15-kg": "steel-400x21",
   "steel:10-kg": "steel-325x20",
   "steel:5-kg": "steel-230x20",
-  "steel:10-lb": "steel-230x20",
   "steel:55-lb": "steel-450x30",
+  "steel:45-lb": "steel-450x27",
   "steel:35-lb": "steel-400x25",
   "steel:25-lb": "steel-325x23",
+  "steel:10-lb": "steel-230x20",
   "change:2.5-kg": "change-210x19",
   "change:2-kg": "change-190x19",
-  "change:5-lb": "change-190x19",
   "change:1.5-kg": "change-175x18",
   "change:1.25-kg": "change-160x16",
   "change:1-kg": "change-160x16",
-  "change:2.5-lb": "change-160x16",
   "change:0.5-kg": "change-135x12",
-  "change:1.25-lb": "change-135x12"
+  "change:5-lb": "change-190x19",
+  "change:2.5-lb": "change-160x16",
+  "change:1.25-lb": "change-135x12",
+  "ipf:25-kg": "ipf-450x27",
+  "ipf:20-kg": "ipf-450x22p5",
+  "ipf:15-kg": "ipf-400x21",
+  "ipf:10-kg": "ipf-325x21",
+  "ipf:5-kg": "ipf-228x21p5",
+  "ipf:2.5-kg": "ipf-190x16",
+  "ipf:1.25-kg": "ipf-160x12",
+  "ipf:45-lb": "ipf-448x38",
+  "ipf:35-lb": "ipf-360x38",
+  "ipf:25-lb": "ipf-300x38",
+  "ipf:10-lb": "ipf-228x31",
+  "ipf:5-lb": "ipf-195x21",
+  "ipf:2.5-lb": "ipf-162x16",
+  "iron:45-lb": "iron-450x50",
+  "iron:35-lb": "iron-360x34p5",
+  "iron:25-lb": "iron-276x34p5",
+  "iron:10-lb": "iron-229x20",
+  "iron:5-lb": "iron-190x14p5",
+  "iron:2.5-lb": "iron-162x12",
+  "iron:20-kg": "iron-450x36",
+  "iron:15-kg": "iron-400x32",
+  "iron:10-kg": "iron-345x29",
+  "iron:5-kg": "iron-275x22",
+  "iron:2.5-kg": "iron-225x18",
+  "iron:1.25-kg": "iron-170x14",
+  "machined:45-lb": "machined-448x38",
+  "machined:35-lb": "machined-360x38",
+  "machined:25-lb": "machined-300x38",
+  "machined:10-lb": "machined-228x31",
+  "machined:5-lb": "machined-195x21",
+  "machined:2.5-lb": "machined-162x16",
+  "machined:25-kg": "machined-450x27",
+  "machined:20-kg": "machined-450x22p5",
+  "machined:15-kg": "machined-400x21",
+  "machined:10-kg": "machined-325x21",
+  "machined:5-kg": "machined-228x21p5",
+  "machined:2.5-kg": "machined-190x16",
+  "machined:1.25-kg": "machined-160x12"
  },
+ "shapes": [
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 21,
+   "key": "bumper-450x21"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 25,
+   "key": "bumper-450x25"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 29,
+   "key": "bumper-450x29"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 35,
+   "key": "bumper-450x35"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 38,
+   "key": "bumper-450x38"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 40,
+   "key": "bumper-450x40"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 42,
+   "key": "bumper-450x42"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 48,
+   "key": "bumper-450x48"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 49,
+   "key": "bumper-450x49"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 52,
+   "key": "bumper-450x52"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 55,
+   "key": "bumper-450x55"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 60,
+   "key": "bumper-450x60"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 65,
+   "key": "bumper-450x65"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 66,
+   "key": "bumper-450x66"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 70,
+   "key": "bumper-450x70"
+  },
+  {
+   "family": "bumper",
+   "diameter": 450,
+   "thickness": 75,
+   "key": "bumper-450x75"
+  },
+  {
+   "family": "change",
+   "diameter": 133,
+   "thickness": 10,
+   "key": "change-133x10"
+  },
+  {
+   "family": "change",
+   "diameter": 135,
+   "thickness": 12,
+   "key": "change-135x12"
+  },
+  {
+   "family": "change",
+   "diameter": 135,
+   "thickness": 12.5,
+   "key": "change-135x12p5"
+  },
+  {
+   "family": "change",
+   "diameter": 160,
+   "thickness": 12,
+   "key": "change-160x12"
+  },
+  {
+   "family": "change",
+   "diameter": 160,
+   "thickness": 15,
+   "key": "change-160x15"
+  },
+  {
+   "family": "change",
+   "diameter": 160,
+   "thickness": 16,
+   "key": "change-160x16"
+  },
+  {
+   "family": "change",
+   "diameter": 162,
+   "thickness": 15,
+   "key": "change-162x15"
+  },
+  {
+   "family": "change",
+   "diameter": 175,
+   "thickness": 18,
+   "key": "change-175x18"
+  },
+  {
+   "family": "change",
+   "diameter": 190,
+   "thickness": 19,
+   "key": "change-190x19"
+  },
+  {
+   "family": "change",
+   "diameter": 210,
+   "thickness": 19,
+   "key": "change-210x19"
+  },
+  {
+   "family": "change",
+   "diameter": 230,
+   "thickness": 26,
+   "key": "change-230x26"
+  },
+  {
+   "family": "ipf",
+   "diameter": 160,
+   "thickness": 12,
+   "key": "ipf-160x12"
+  },
+  {
+   "family": "ipf",
+   "diameter": 162,
+   "thickness": 16,
+   "key": "ipf-162x16"
+  },
+  {
+   "family": "ipf",
+   "diameter": 190,
+   "thickness": 16,
+   "key": "ipf-190x16"
+  },
+  {
+   "family": "ipf",
+   "diameter": 195,
+   "thickness": 21,
+   "key": "ipf-195x21"
+  },
+  {
+   "family": "ipf",
+   "diameter": 228,
+   "thickness": 21.5,
+   "key": "ipf-228x21p5"
+  },
+  {
+   "family": "ipf",
+   "diameter": 228,
+   "thickness": 31,
+   "key": "ipf-228x31"
+  },
+  {
+   "family": "ipf",
+   "diameter": 300,
+   "thickness": 38,
+   "key": "ipf-300x38"
+  },
+  {
+   "family": "ipf",
+   "diameter": 325,
+   "thickness": 21,
+   "key": "ipf-325x21"
+  },
+  {
+   "family": "ipf",
+   "diameter": 360,
+   "thickness": 38,
+   "key": "ipf-360x38"
+  },
+  {
+   "family": "ipf",
+   "diameter": 400,
+   "thickness": 21,
+   "key": "ipf-400x21"
+  },
+  {
+   "family": "ipf",
+   "diameter": 448,
+   "thickness": 38,
+   "key": "ipf-448x38"
+  },
+  {
+   "family": "ipf",
+   "diameter": 450,
+   "thickness": 22.5,
+   "key": "ipf-450x22p5"
+  },
+  {
+   "family": "ipf",
+   "diameter": 450,
+   "thickness": 27,
+   "key": "ipf-450x27"
+  },
+  {
+   "family": "iron",
+   "diameter": 162,
+   "thickness": 12,
+   "key": "iron-162x12"
+  },
+  {
+   "family": "iron",
+   "diameter": 170,
+   "thickness": 14,
+   "key": "iron-170x14"
+  },
+  {
+   "family": "iron",
+   "diameter": 190,
+   "thickness": 14.5,
+   "key": "iron-190x14p5"
+  },
+  {
+   "family": "iron",
+   "diameter": 225,
+   "thickness": 18,
+   "key": "iron-225x18"
+  },
+  {
+   "family": "iron",
+   "diameter": 229,
+   "thickness": 20,
+   "key": "iron-229x20"
+  },
+  {
+   "family": "iron",
+   "diameter": 275,
+   "thickness": 22,
+   "key": "iron-275x22"
+  },
+  {
+   "family": "iron",
+   "diameter": 276,
+   "thickness": 34.5,
+   "key": "iron-276x34p5"
+  },
+  {
+   "family": "iron",
+   "diameter": 345,
+   "thickness": 29,
+   "key": "iron-345x29"
+  },
+  {
+   "family": "iron",
+   "diameter": 360,
+   "thickness": 34.5,
+   "key": "iron-360x34p5"
+  },
+  {
+   "family": "iron",
+   "diameter": 400,
+   "thickness": 32,
+   "key": "iron-400x32"
+  },
+  {
+   "family": "iron",
+   "diameter": 450,
+   "thickness": 36,
+   "key": "iron-450x36"
+  },
+  {
+   "family": "iron",
+   "diameter": 450,
+   "thickness": 50,
+   "key": "iron-450x50"
+  },
+  {
+   "family": "machined",
+   "diameter": 160,
+   "thickness": 12,
+   "key": "machined-160x12"
+  },
+  {
+   "family": "machined",
+   "diameter": 162,
+   "thickness": 16,
+   "key": "machined-162x16"
+  },
+  {
+   "family": "machined",
+   "diameter": 190,
+   "thickness": 16,
+   "key": "machined-190x16"
+  },
+  {
+   "family": "machined",
+   "diameter": 195,
+   "thickness": 21,
+   "key": "machined-195x21"
+  },
+  {
+   "family": "machined",
+   "diameter": 228,
+   "thickness": 21.5,
+   "key": "machined-228x21p5"
+  },
+  {
+   "family": "machined",
+   "diameter": 228,
+   "thickness": 31,
+   "key": "machined-228x31"
+  },
+  {
+   "family": "machined",
+   "diameter": 300,
+   "thickness": 38,
+   "key": "machined-300x38"
+  },
+  {
+   "family": "machined",
+   "diameter": 325,
+   "thickness": 21,
+   "key": "machined-325x21"
+  },
+  {
+   "family": "machined",
+   "diameter": 360,
+   "thickness": 38,
+   "key": "machined-360x38"
+  },
+  {
+   "family": "machined",
+   "diameter": 400,
+   "thickness": 21,
+   "key": "machined-400x21"
+  },
+  {
+   "family": "machined",
+   "diameter": 448,
+   "thickness": 38,
+   "key": "machined-448x38"
+  },
+  {
+   "family": "machined",
+   "diameter": 450,
+   "thickness": 22.5,
+   "key": "machined-450x22p5"
+  },
+  {
+   "family": "machined",
+   "diameter": 450,
+   "thickness": 27,
+   "key": "machined-450x27"
+  },
+  {
+   "family": "steel",
+   "diameter": 230,
+   "thickness": 20,
+   "key": "steel-230x20"
+  },
+  {
+   "family": "steel",
+   "diameter": 325,
+   "thickness": 20,
+   "key": "steel-325x20"
+  },
+  {
+   "family": "steel",
+   "diameter": 325,
+   "thickness": 23,
+   "key": "steel-325x23"
+  },
+  {
+   "family": "steel",
+   "diameter": 400,
+   "thickness": 21,
+   "key": "steel-400x21"
+  },
+  {
+   "family": "steel",
+   "diameter": 400,
+   "thickness": 25,
+   "key": "steel-400x25"
+  },
+  {
+   "family": "steel",
+   "diameter": 450,
+   "thickness": 22,
+   "key": "steel-450x22"
+  },
+  {
+   "family": "steel",
+   "diameter": 450,
+   "thickness": 27,
+   "key": "steel-450x27"
+  },
+  {
+   "family": "steel",
+   "diameter": 450,
+   "thickness": 30,
+   "key": "steel-450x30"
+  }
+ ],
  "sprites": {
   "bar-collar-assembled": {
    "file": "bar-collar-assembled.png",
@@ -218,17 +696,55 @@ export const PLATE_SPRITES = {
    ],
    "spanUnits": 150
   },
+  "plate-bumper-450x21-assembled": {
+   "file": "plate-bumper-450x21-assembled.png",
+   "family": "bumper",
+   "shape": "450x21",
+   "diameter": 450,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    245.97,
+    256.78
+   ],
+   "faceRadius": 222.67,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x21-exploded": {
+   "file": "plate-bumper-450x21-exploded.png",
+   "family": "bumper",
+   "shape": "450x21",
+   "diameter": 450,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    247.68,
+    257.56
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
   "plate-bumper-450x25-assembled": {
    "file": "plate-bumper-450x25-assembled.png",
    "family": "bumper",
    "shape": "450x25",
+   "diameter": 450,
+   "thickness": 25,
    "angle": "assembled",
    "faceCenter": [
     244.06,
     256.93
    ],
    "faceRadius": 222.71,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -238,13 +754,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x25-exploded.png",
    "family": "bumper",
    "shape": "450x25",
+   "diameter": 450,
+   "thickness": 25,
    "angle": "exploded",
    "faceCenter": [
     246.1,
     257.86
    ],
    "faceRadius": 222.93,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x29-assembled": {
+   "file": "plate-bumper-450x29-assembled.png",
+   "family": "bumper",
+   "shape": "450x29",
+   "diameter": 450,
+   "thickness": 29,
+   "angle": "assembled",
+   "faceCenter": [
+    242.15,
+    257.08
+   ],
+   "faceRadius": 222.75,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x29-exploded": {
+   "file": "plate-bumper-450x29-exploded.png",
+   "family": "bumper",
+   "shape": "450x29",
+   "diameter": 450,
+   "thickness": 29,
+   "angle": "exploded",
+   "faceCenter": [
+    244.51,
+    258.15
+   ],
+   "faceRadius": 223,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -254,13 +808,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x35-assembled.png",
    "family": "bumper",
    "shape": "450x35",
+   "diameter": 450,
+   "thickness": 35,
    "angle": "assembled",
    "faceCenter": [
     239.28,
     257.3
    ],
    "faceRadius": 222.8,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -270,13 +826,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x35-exploded.png",
    "family": "bumper",
    "shape": "450x35",
+   "diameter": 450,
+   "thickness": 35,
    "angle": "exploded",
    "faceCenter": [
     242.12,
     258.6
    ],
    "faceRadius": 223.11,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x38-assembled": {
+   "file": "plate-bumper-450x38-assembled.png",
+   "family": "bumper",
+   "shape": "450x38",
+   "diameter": 450,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    237.84,
+    257.42
+   ],
+   "faceRadius": 222.83,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x38-exploded": {
+   "file": "plate-bumper-450x38-exploded.png",
+   "family": "bumper",
+   "shape": "450x38",
+   "diameter": 450,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    240.93,
+    258.83
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -286,13 +880,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x40-assembled.png",
    "family": "bumper",
    "shape": "450x40",
+   "diameter": 450,
+   "thickness": 40,
    "angle": "assembled",
    "faceCenter": [
     236.88,
     257.49
    ],
    "faceRadius": 222.84,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -302,13 +898,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x40-exploded.png",
    "family": "bumper",
    "shape": "450x40",
+   "diameter": 450,
+   "thickness": 40,
    "angle": "exploded",
    "faceCenter": [
     240.13,
     258.97
    ],
    "faceRadius": 223.2,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x42-assembled": {
+   "file": "plate-bumper-450x42-assembled.png",
+   "family": "bumper",
+   "shape": "450x42",
+   "diameter": 450,
+   "thickness": 42,
+   "angle": "assembled",
+   "faceCenter": [
+    235.93,
+    257.57
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x42-exploded": {
+   "file": "plate-bumper-450x42-exploded.png",
+   "family": "bumper",
+   "shape": "450x42",
+   "diameter": 450,
+   "thickness": 42,
+   "angle": "exploded",
+   "faceCenter": [
+    239.34,
+    259.12
+   ],
+   "faceRadius": 223.23,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -318,13 +952,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x48-assembled.png",
    "family": "bumper",
    "shape": "450x48",
+   "diameter": 450,
+   "thickness": 48,
    "angle": "assembled",
    "faceCenter": [
     233.05,
     257.79
    ],
    "faceRadius": 222.91,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -334,13 +970,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x48-exploded.png",
    "family": "bumper",
    "shape": "450x48",
+   "diameter": 450,
+   "thickness": 48,
    "angle": "exploded",
    "faceCenter": [
     236.95,
     259.57
    ],
    "faceRadius": 223.34,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x49-assembled": {
+   "file": "plate-bumper-450x49-assembled.png",
+   "family": "bumper",
+   "shape": "450x49",
+   "diameter": 450,
+   "thickness": 49,
+   "angle": "assembled",
+   "faceCenter": [
+    232.57,
+    257.83
+   ],
+   "faceRadius": 222.92,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x49-exploded": {
+   "file": "plate-bumper-450x49-exploded.png",
+   "family": "bumper",
+   "shape": "450x49",
+   "diameter": 450,
+   "thickness": 49,
+   "angle": "exploded",
+   "faceCenter": [
+    236.55,
+    259.65
+   ],
+   "faceRadius": 223.36,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -350,13 +1024,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x52-assembled.png",
    "family": "bumper",
    "shape": "450x52",
+   "diameter": 450,
+   "thickness": 52,
    "angle": "assembled",
    "faceCenter": [
     231.14,
     257.94
    ],
    "faceRadius": 222.95,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -366,13 +1042,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x52-exploded.png",
    "family": "bumper",
    "shape": "450x52",
+   "diameter": 450,
+   "thickness": 52,
    "angle": "exploded",
    "faceCenter": [
     235.35,
     259.87
    ],
    "faceRadius": 223.41,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x55-assembled": {
+   "file": "plate-bumper-450x55-assembled.png",
+   "family": "bumper",
+   "shape": "450x55",
+   "diameter": 450,
+   "thickness": 55,
+   "angle": "assembled",
+   "faceCenter": [
+    229.7,
+    258.05
+   ],
+   "faceRadius": 222.98,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x55-exploded": {
+   "file": "plate-bumper-450x55-exploded.png",
+   "family": "bumper",
+   "shape": "450x55",
+   "diameter": 450,
+   "thickness": 55,
+   "angle": "exploded",
+   "faceCenter": [
+    234.16,
+    260.1
+   ],
+   "faceRadius": 223.46,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -382,13 +1096,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x60-assembled.png",
    "family": "bumper",
    "shape": "450x60",
+   "diameter": 450,
+   "thickness": 60,
    "angle": "assembled",
    "faceCenter": [
     227.3,
     258.24
    ],
    "faceRadius": 223.02,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -398,13 +1114,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x60-exploded.png",
    "family": "bumper",
    "shape": "450x60",
+   "diameter": 450,
+   "thickness": 60,
    "angle": "exploded",
    "faceCenter": [
     232.16,
     260.47
    ],
    "faceRadius": 223.55,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -414,13 +1132,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x65-assembled.png",
    "family": "bumper",
    "shape": "450x65",
+   "diameter": 450,
+   "thickness": 65,
    "angle": "assembled",
    "faceCenter": [
     224.9,
     258.42
    ],
    "faceRadius": 223.07,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -430,13 +1150,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x65-exploded.png",
    "family": "bumper",
    "shape": "450x65",
+   "diameter": 450,
+   "thickness": 65,
    "angle": "exploded",
    "faceCenter": [
     230.16,
     260.84
    ],
    "faceRadius": 223.64,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x66-assembled": {
+   "file": "plate-bumper-450x66-assembled.png",
+   "family": "bumper",
+   "shape": "450x66",
+   "diameter": 450,
+   "thickness": 66,
+   "angle": "assembled",
+   "faceCenter": [
+    224.42,
+    258.46
+   ],
+   "faceRadius": 223.07,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-bumper-450x66-exploded": {
+   "file": "plate-bumper-450x66-exploded.png",
+   "family": "bumper",
+   "shape": "450x66",
+   "diameter": 450,
+   "thickness": 66,
+   "angle": "exploded",
+   "faceCenter": [
+    229.77,
+    260.92
+   ],
+   "faceRadius": 223.66,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -446,13 +1204,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x70-assembled.png",
    "family": "bumper",
    "shape": "450x70",
+   "diameter": 450,
+   "thickness": 70,
    "angle": "assembled",
    "faceCenter": [
     222.5,
     258.61
    ],
    "faceRadius": 223.11,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -462,13 +1222,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x70-exploded.png",
    "family": "bumper",
    "shape": "450x70",
+   "diameter": 450,
+   "thickness": 70,
    "angle": "exploded",
    "faceCenter": [
     228.17,
     261.22
    ],
    "faceRadius": 223.73,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -478,13 +1240,15 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x75-assembled.png",
    "family": "bumper",
    "shape": "450x75",
+   "diameter": 450,
+   "thickness": 75,
    "angle": "assembled",
    "faceCenter": [
     220.1,
     258.8
    ],
    "faceRadius": 223.15,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
    "size": [
     512,
     512
@@ -494,13 +1258,51 @@ export const PLATE_SPRITES = {
    "file": "plate-bumper-450x75-exploded.png",
    "family": "bumper",
    "shape": "450x75",
+   "diameter": 450,
+   "thickness": 75,
    "angle": "exploded",
    "faceCenter": [
     226.17,
     261.59
    ],
    "faceRadius": 223.82,
-   "hubRadius": 0.235,
+   "hubRadius": 0.47,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-133x10-assembled": {
+   "file": "plate-change-133x10-assembled.png",
+   "family": "change",
+   "shape": "133x10",
+   "diameter": 133,
+   "thickness": 10,
+   "angle": "assembled",
+   "faceCenter": [
+    239.83,
+    257.26
+   ],
+   "faceRadius": 222.79,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-133x10-exploded": {
+   "file": "plate-change-133x10-exploded.png",
+   "family": "change",
+   "shape": "133x10",
+   "diameter": 133,
+   "thickness": 10,
+   "angle": "exploded",
+   "faceCenter": [
+    242.59,
+    258.52
+   ],
+   "faceRadius": 223.09,
+   "hubRadius": 0.2,
    "size": [
     512,
     512
@@ -510,6 +1312,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-135x12-assembled.png",
    "family": "change",
    "shape": "135x12",
+   "diameter": 135,
+   "thickness": 12,
    "angle": "assembled",
    "faceCenter": [
     236.88,
@@ -526,6 +1330,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-135x12-exploded.png",
    "family": "change",
    "shape": "135x12",
+   "diameter": 135,
+   "thickness": 12,
    "angle": "exploded",
    "faceCenter": [
     240.13,
@@ -538,10 +1344,120 @@ export const PLATE_SPRITES = {
     512
    ]
   },
+  "plate-change-135x12p5-assembled": {
+   "file": "plate-change-135x12p5-assembled.png",
+   "family": "change",
+   "shape": "135x12p5",
+   "diameter": 135,
+   "thickness": 12.5,
+   "angle": "assembled",
+   "faceCenter": [
+    236.09,
+    257.55
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-135x12p5-exploded": {
+   "file": "plate-change-135x12p5-exploded.png",
+   "family": "change",
+   "shape": "135x12p5",
+   "diameter": 135,
+   "thickness": 12.5,
+   "angle": "exploded",
+   "faceCenter": [
+    239.47,
+    259.1
+   ],
+   "faceRadius": 223.23,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-160x12-assembled": {
+   "file": "plate-change-160x12-assembled.png",
+   "family": "change",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "assembled",
+   "faceCenter": [
+    239.87,
+    257.26
+   ],
+   "faceRadius": 222.79,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-160x12-exploded": {
+   "file": "plate-change-160x12-exploded.png",
+   "family": "change",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "exploded",
+   "faceCenter": [
+    242.62,
+    258.51
+   ],
+   "faceRadius": 223.09,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-160x15-assembled": {
+   "file": "plate-change-160x15-assembled.png",
+   "family": "change",
+   "shape": "160x15",
+   "diameter": 160,
+   "thickness": 15,
+   "angle": "assembled",
+   "faceCenter": [
+    235.84,
+    257.57
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-160x15-exploded": {
+   "file": "plate-change-160x15-exploded.png",
+   "family": "change",
+   "shape": "160x15",
+   "diameter": 160,
+   "thickness": 15,
+   "angle": "exploded",
+   "faceCenter": [
+    239.26,
+    259.14
+   ],
+   "faceRadius": 223.23,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
   "plate-change-160x16-assembled": {
    "file": "plate-change-160x16-assembled.png",
    "family": "change",
    "shape": "160x16",
+   "diameter": 160,
+   "thickness": 16,
    "angle": "assembled",
    "faceCenter": [
     234.49,
@@ -558,6 +1474,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-160x16-exploded.png",
    "family": "change",
    "shape": "160x16",
+   "diameter": 160,
+   "thickness": 16,
    "angle": "exploded",
    "faceCenter": [
     238.14,
@@ -570,10 +1488,48 @@ export const PLATE_SPRITES = {
     512
    ]
   },
+  "plate-change-162x15-assembled": {
+   "file": "plate-change-162x15-assembled.png",
+   "family": "change",
+   "shape": "162x15",
+   "diameter": 162,
+   "thickness": 15,
+   "angle": "assembled",
+   "faceCenter": [
+    236.09,
+    257.55
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-162x15-exploded": {
+   "file": "plate-change-162x15-exploded.png",
+   "family": "change",
+   "shape": "162x15",
+   "diameter": 162,
+   "thickness": 15,
+   "angle": "exploded",
+   "faceCenter": [
+    239.47,
+    259.1
+   ],
+   "faceRadius": 223.23,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
   "plate-change-175x18-assembled": {
    "file": "plate-change-175x18-assembled.png",
    "family": "change",
    "shape": "175x18",
+   "diameter": 175,
+   "thickness": 18,
    "angle": "assembled",
    "faceCenter": [
     233.87,
@@ -590,6 +1546,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-175x18-exploded.png",
    "family": "change",
    "shape": "175x18",
+   "diameter": 175,
+   "thickness": 18,
    "angle": "exploded",
    "faceCenter": [
     237.63,
@@ -606,6 +1564,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-190x19-assembled.png",
    "family": "change",
    "shape": "190x19",
+   "diameter": 190,
+   "thickness": 19,
    "angle": "assembled",
    "faceCenter": [
     234.49,
@@ -622,6 +1582,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-190x19-exploded.png",
    "family": "change",
    "shape": "190x19",
+   "diameter": 190,
+   "thickness": 19,
    "angle": "exploded",
    "faceCenter": [
     238.14,
@@ -638,6 +1600,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-210x19-assembled.png",
    "family": "change",
    "shape": "210x19",
+   "diameter": 210,
+   "thickness": 19,
    "angle": "assembled",
    "faceCenter": [
     236.54,
@@ -654,6 +1618,8 @@ export const PLATE_SPRITES = {
    "file": "plate-change-210x19-exploded.png",
    "family": "change",
    "shape": "210x19",
+   "diameter": 210,
+   "thickness": 19,
    "angle": "exploded",
    "faceCenter": [
     239.85,
@@ -666,10 +1632,1416 @@ export const PLATE_SPRITES = {
     512
    ]
   },
+  "plate-change-230x26-assembled": {
+   "file": "plate-change-230x26-assembled.png",
+   "family": "change",
+   "shape": "230x26",
+   "diameter": 230,
+   "thickness": 26,
+   "angle": "assembled",
+   "faceCenter": [
+    231.68,
+    257.9
+   ],
+   "faceRadius": 222.94,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-change-230x26-exploded": {
+   "file": "plate-change-230x26-exploded.png",
+   "family": "change",
+   "shape": "230x26",
+   "diameter": 230,
+   "thickness": 26,
+   "angle": "exploded",
+   "faceCenter": [
+    235.81,
+    259.79
+   ],
+   "faceRadius": 223.39,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-160x12-assembled": {
+   "file": "plate-ipf-160x12-assembled.png",
+   "family": "ipf",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "assembled",
+   "faceCenter": [
+    239.87,
+    257.26
+   ],
+   "faceRadius": 222.79,
+   "hubRadius": 0.4156,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-160x12-exploded": {
+   "file": "plate-ipf-160x12-exploded.png",
+   "family": "ipf",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "exploded",
+   "faceCenter": [
+    242.62,
+    258.51
+   ],
+   "faceRadius": 223.09,
+   "hubRadius": 0.4156,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-162x16-assembled": {
+   "file": "plate-ipf-162x16-assembled.png",
+   "family": "ipf",
+   "shape": "162x16",
+   "diameter": 162,
+   "thickness": 16,
+   "angle": "assembled",
+   "faceCenter": [
+    234.76,
+    257.66
+   ],
+   "faceRadius": 222.88,
+   "hubRadius": 0.4105,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-162x16-exploded": {
+   "file": "plate-ipf-162x16-exploded.png",
+   "family": "ipf",
+   "shape": "162x16",
+   "diameter": 162,
+   "thickness": 16,
+   "angle": "exploded",
+   "faceCenter": [
+    238.37,
+    259.31
+   ],
+   "faceRadius": 223.27,
+   "hubRadius": 0.4105,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-190x16-assembled": {
+   "file": "plate-ipf-190x16-assembled.png",
+   "family": "ipf",
+   "shape": "190x16",
+   "diameter": 190,
+   "thickness": 16,
+   "angle": "assembled",
+   "faceCenter": [
+    237.89,
+    257.41
+   ],
+   "faceRadius": 222.82,
+   "hubRadius": 0.35,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-190x16-exploded": {
+   "file": "plate-ipf-190x16-exploded.png",
+   "family": "ipf",
+   "shape": "190x16",
+   "diameter": 190,
+   "thickness": 16,
+   "angle": "exploded",
+   "faceCenter": [
+    240.97,
+    258.82
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.35,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-195x21-assembled": {
+   "file": "plate-ipf-195x21-assembled.png",
+   "family": "ipf",
+   "shape": "195x21",
+   "diameter": 195,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    232.83,
+    257.81
+   ],
+   "faceRadius": 222.92,
+   "hubRadius": 0.341,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-195x21-exploded": {
+   "file": "plate-ipf-195x21-exploded.png",
+   "family": "ipf",
+   "shape": "195x21",
+   "diameter": 195,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    236.76,
+    259.61
+   ],
+   "faceRadius": 223.35,
+   "hubRadius": 0.341,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-228x21p5-assembled": {
+   "file": "plate-ipf-228x21p5-assembled.png",
+   "family": "ipf",
+   "shape": "228x21p5",
+   "diameter": 228,
+   "thickness": 21.5,
+   "angle": "assembled",
+   "faceCenter": [
+    235.72,
+    257.58
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-228x21p5-exploded": {
+   "file": "plate-ipf-228x21p5-exploded.png",
+   "family": "ipf",
+   "shape": "228x21p5",
+   "diameter": 228,
+   "thickness": 21.5,
+   "angle": "exploded",
+   "faceCenter": [
+    239.17,
+    259.16
+   ],
+   "faceRadius": 223.24,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-228x31-assembled": {
+   "file": "plate-ipf-228x31-assembled.png",
+   "family": "ipf",
+   "shape": "228x31",
+   "diameter": 228,
+   "thickness": 31,
+   "angle": "assembled",
+   "faceCenter": [
+    226.73,
+    258.28
+   ],
+   "faceRadius": 223.03,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-228x31-exploded": {
+   "file": "plate-ipf-228x31-exploded.png",
+   "family": "ipf",
+   "shape": "228x31",
+   "diameter": 228,
+   "thickness": 31,
+   "angle": "exploded",
+   "faceCenter": [
+    231.69,
+    260.56
+   ],
+   "faceRadius": 223.57,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-300x38-assembled": {
+   "file": "plate-ipf-300x38-assembled.png",
+   "family": "ipf",
+   "shape": "300x38",
+   "diameter": 300,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    228.74,
+    258.13
+   ],
+   "faceRadius": 222.99,
+   "hubRadius": 0.2217,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-300x38-exploded": {
+   "file": "plate-ipf-300x38-exploded.png",
+   "family": "ipf",
+   "shape": "300x38",
+   "diameter": 300,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    233.36,
+    260.25
+   ],
+   "faceRadius": 223.5,
+   "hubRadius": 0.2217,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-325x21-assembled": {
+   "file": "plate-ipf-325x21-assembled.png",
+   "family": "ipf",
+   "shape": "325x21",
+   "diameter": 325,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    242.11,
+    257.08
+   ],
+   "faceRadius": 222.75,
+   "hubRadius": 0.2046,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-325x21-exploded": {
+   "file": "plate-ipf-325x21-exploded.png",
+   "family": "ipf",
+   "shape": "325x21",
+   "diameter": 325,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    244.48,
+    258.16
+   ],
+   "faceRadius": 223,
+   "hubRadius": 0.2046,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-360x38-assembled": {
+   "file": "plate-ipf-360x38-assembled.png",
+   "family": "ipf",
+   "shape": "360x38",
+   "diameter": 360,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    233.29,
+    257.77
+   ],
+   "faceRadius": 222.91,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-360x38-exploded": {
+   "file": "plate-ipf-360x38-exploded.png",
+   "family": "ipf",
+   "shape": "360x38",
+   "diameter": 360,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    237.15,
+    259.53
+   ],
+   "faceRadius": 223.33,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-400x21-assembled": {
+   "file": "plate-ipf-400x21-assembled.png",
+   "family": "ipf",
+   "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    244.72,
+    256.88
+   ],
+   "faceRadius": 222.7,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-400x21-exploded": {
+   "file": "plate-ipf-400x21-exploded.png",
+   "family": "ipf",
+   "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    246.64,
+    257.75
+   ],
+   "faceRadius": 222.91,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-448x38-assembled": {
+   "file": "plate-ipf-448x38-assembled.png",
+   "family": "ipf",
+   "shape": "448x38",
+   "diameter": 448,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    237.76,
+    257.42
+   ],
+   "faceRadius": 222.83,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-448x38-exploded": {
+   "file": "plate-ipf-448x38-exploded.png",
+   "family": "ipf",
+   "shape": "448x38",
+   "diameter": 448,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    240.86,
+    258.84
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-450x22p5-assembled": {
+   "file": "plate-ipf-450x22p5-assembled.png",
+   "family": "ipf",
+   "shape": "450x22p5",
+   "diameter": 450,
+   "thickness": 22.5,
+   "angle": "assembled",
+   "faceCenter": [
+    245.25,
+    256.84
+   ],
+   "faceRadius": 222.69,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-450x22p5-exploded": {
+   "file": "plate-ipf-450x22p5-exploded.png",
+   "family": "ipf",
+   "shape": "450x22p5",
+   "diameter": 450,
+   "thickness": 22.5,
+   "angle": "exploded",
+   "faceCenter": [
+    247.09,
+    257.67
+   ],
+   "faceRadius": 222.89,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-450x27-assembled": {
+   "file": "plate-ipf-450x27-assembled.png",
+   "family": "ipf",
+   "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
+   "angle": "assembled",
+   "faceCenter": [
+    243.1,
+    257.01
+   ],
+   "faceRadius": 222.73,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-ipf-450x27-exploded": {
+   "file": "plate-ipf-450x27-exploded.png",
+   "family": "ipf",
+   "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
+   "angle": "exploded",
+   "faceCenter": [
+    245.3,
+    258.01
+   ],
+   "faceRadius": 222.97,
+   "hubRadius": 0.2,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-162x12-assembled": {
+   "file": "plate-iron-162x12-assembled.png",
+   "family": "iron",
+   "shape": "162x12",
+   "diameter": 162,
+   "thickness": 12,
+   "angle": "assembled",
+   "faceCenter": [
+    240.07,
+    257.24
+   ],
+   "faceRadius": 222.78,
+   "hubRadius": 0.3117,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-162x12-exploded": {
+   "file": "plate-iron-162x12-exploded.png",
+   "family": "iron",
+   "shape": "162x12",
+   "diameter": 162,
+   "thickness": 12,
+   "angle": "exploded",
+   "faceCenter": [
+    242.79,
+    258.48
+   ],
+   "faceRadius": 223.08,
+   "hubRadius": 0.3117,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-170x14-assembled": {
+   "file": "plate-iron-170x14-assembled.png",
+   "family": "iron",
+   "shape": "170x14",
+   "diameter": 170,
+   "thickness": 14,
+   "angle": "assembled",
+   "faceCenter": [
+    238.29,
+    257.38
+   ],
+   "faceRadius": 222.82,
+   "hubRadius": 0.2971,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-170x14-exploded": {
+   "file": "plate-iron-170x14-exploded.png",
+   "family": "iron",
+   "shape": "170x14",
+   "diameter": 170,
+   "thickness": 14,
+   "angle": "exploded",
+   "faceCenter": [
+    241.3,
+    258.76
+   ],
+   "faceRadius": 223.14,
+   "hubRadius": 0.2971,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-190x14p5-assembled": {
+   "file": "plate-iron-190x14p5-assembled.png",
+   "family": "iron",
+   "shape": "190x14p5",
+   "diameter": 190,
+   "thickness": 14.5,
+   "angle": "assembled",
+   "faceCenter": [
+    239.59,
+    257.28
+   ],
+   "faceRadius": 222.79,
+   "hubRadius": 0.2658,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-190x14p5-exploded": {
+   "file": "plate-iron-190x14p5-exploded.png",
+   "family": "iron",
+   "shape": "190x14p5",
+   "diameter": 190,
+   "thickness": 14.5,
+   "angle": "exploded",
+   "faceCenter": [
+    242.39,
+    258.55
+   ],
+   "faceRadius": 223.1,
+   "hubRadius": 0.2658,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-225x18-assembled": {
+   "file": "plate-iron-225x18-assembled.png",
+   "family": "iron",
+   "shape": "225x18",
+   "diameter": 225,
+   "thickness": 18,
+   "angle": "assembled",
+   "faceCenter": [
+    238.8,
+    257.34
+   ],
+   "faceRadius": 222.81,
+   "hubRadius": 0.2244,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-225x18-exploded": {
+   "file": "plate-iron-225x18-exploded.png",
+   "family": "iron",
+   "shape": "225x18",
+   "diameter": 225,
+   "thickness": 18,
+   "angle": "exploded",
+   "faceCenter": [
+    241.73,
+    258.68
+   ],
+   "faceRadius": 223.13,
+   "hubRadius": 0.2244,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-229x20-assembled": {
+   "file": "plate-iron-229x20-assembled.png",
+   "family": "iron",
+   "shape": "229x20",
+   "diameter": 229,
+   "thickness": 20,
+   "angle": "assembled",
+   "faceCenter": [
+    237.22,
+    257.46
+   ],
+   "faceRadius": 222.84,
+   "hubRadius": 0.2205,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-229x20-exploded": {
+   "file": "plate-iron-229x20-exploded.png",
+   "family": "iron",
+   "shape": "229x20",
+   "diameter": 229,
+   "thickness": 20,
+   "angle": "exploded",
+   "faceCenter": [
+    240.41,
+    258.92
+   ],
+   "faceRadius": 223.18,
+   "hubRadius": 0.2205,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-275x22-assembled": {
+   "file": "plate-iron-275x22-assembled.png",
+   "family": "iron",
+   "shape": "275x22",
+   "diameter": 275,
+   "thickness": 22,
+   "angle": "assembled",
+   "faceCenter": [
+    238.8,
+    257.34
+   ],
+   "faceRadius": 222.81,
+   "hubRadius": 0.1836,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-275x22-exploded": {
+   "file": "plate-iron-275x22-exploded.png",
+   "family": "iron",
+   "shape": "275x22",
+   "diameter": 275,
+   "thickness": 22,
+   "angle": "exploded",
+   "faceCenter": [
+    241.73,
+    258.68
+   ],
+   "faceRadius": 223.13,
+   "hubRadius": 0.1836,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-276x34p5-assembled": {
+   "file": "plate-iron-276x34p5-assembled.png",
+   "family": "iron",
+   "shape": "276x34p5",
+   "diameter": 276,
+   "thickness": 34.5,
+   "angle": "assembled",
+   "faceCenter": [
+    229.1,
+    258.1
+   ],
+   "faceRadius": 222.99,
+   "hubRadius": 0.183,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-276x34p5-exploded": {
+   "file": "plate-iron-276x34p5-exploded.png",
+   "family": "iron",
+   "shape": "276x34p5",
+   "diameter": 276,
+   "thickness": 34.5,
+   "angle": "exploded",
+   "faceCenter": [
+    233.66,
+    260.19
+   ],
+   "faceRadius": 223.48,
+   "hubRadius": 0.183,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-345x29-assembled": {
+   "file": "plate-iron-345x29-assembled.png",
+   "family": "iron",
+   "shape": "345x29",
+   "diameter": 345,
+   "thickness": 29,
+   "angle": "assembled",
+   "faceCenter": [
+    237.92,
+    257.41
+   ],
+   "faceRadius": 222.82,
+   "hubRadius": 0.1464,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-345x29-exploded": {
+   "file": "plate-iron-345x29-exploded.png",
+   "family": "iron",
+   "shape": "345x29",
+   "diameter": 345,
+   "thickness": 29,
+   "angle": "exploded",
+   "faceCenter": [
+    241,
+    258.81
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.1464,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-360x34p5-assembled": {
+   "file": "plate-iron-360x34p5-assembled.png",
+   "family": "iron",
+   "shape": "360x34p5",
+   "diameter": 360,
+   "thickness": 34.5,
+   "angle": "assembled",
+   "faceCenter": [
+    235.39,
+    257.61
+   ],
+   "faceRadius": 222.87,
+   "hubRadius": 0.1403,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-360x34p5-exploded": {
+   "file": "plate-iron-360x34p5-exploded.png",
+   "family": "iron",
+   "shape": "360x34p5",
+   "diameter": 360,
+   "thickness": 34.5,
+   "angle": "exploded",
+   "faceCenter": [
+    238.89,
+    259.21
+   ],
+   "faceRadius": 223.25,
+   "hubRadius": 0.1403,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-400x32-assembled": {
+   "file": "plate-iron-400x32-assembled.png",
+   "family": "iron",
+   "shape": "400x32",
+   "diameter": 400,
+   "thickness": 32,
+   "angle": "assembled",
+   "faceCenter": [
+    238.8,
+    257.34
+   ],
+   "faceRadius": 222.81,
+   "hubRadius": 0.1263,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-400x32-exploded": {
+   "file": "plate-iron-400x32-exploded.png",
+   "family": "iron",
+   "shape": "400x32",
+   "diameter": 400,
+   "thickness": 32,
+   "angle": "exploded",
+   "faceCenter": [
+    241.73,
+    258.68
+   ],
+   "faceRadius": 223.13,
+   "hubRadius": 0.1263,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-450x36-assembled": {
+   "file": "plate-iron-450x36-assembled.png",
+   "family": "iron",
+   "shape": "450x36",
+   "diameter": 450,
+   "thickness": 36,
+   "angle": "assembled",
+   "faceCenter": [
+    238.8,
+    257.34
+   ],
+   "faceRadius": 222.81,
+   "hubRadius": 0.1122,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-450x36-exploded": {
+   "file": "plate-iron-450x36-exploded.png",
+   "family": "iron",
+   "shape": "450x36",
+   "diameter": 450,
+   "thickness": 36,
+   "angle": "exploded",
+   "faceCenter": [
+    241.73,
+    258.68
+   ],
+   "faceRadius": 223.13,
+   "hubRadius": 0.1122,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-450x50-assembled": {
+   "file": "plate-iron-450x50-assembled.png",
+   "family": "iron",
+   "shape": "450x50",
+   "diameter": 450,
+   "thickness": 50,
+   "angle": "assembled",
+   "faceCenter": [
+    232.09,
+    257.86
+   ],
+   "faceRadius": 222.93,
+   "hubRadius": 0.1122,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-iron-450x50-exploded": {
+   "file": "plate-iron-450x50-exploded.png",
+   "family": "iron",
+   "shape": "450x50",
+   "diameter": 450,
+   "thickness": 50,
+   "angle": "exploded",
+   "faceCenter": [
+    236.15,
+    259.72
+   ],
+   "faceRadius": 223.37,
+   "hubRadius": 0.1122,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-160x12-assembled": {
+   "file": "plate-machined-160x12-assembled.png",
+   "family": "machined",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "assembled",
+   "faceCenter": [
+    239.87,
+    257.26
+   ],
+   "faceRadius": 222.79,
+   "hubRadius": 0.4156,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-160x12-exploded": {
+   "file": "plate-machined-160x12-exploded.png",
+   "family": "machined",
+   "shape": "160x12",
+   "diameter": 160,
+   "thickness": 12,
+   "angle": "exploded",
+   "faceCenter": [
+    242.62,
+    258.51
+   ],
+   "faceRadius": 223.09,
+   "hubRadius": 0.4156,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-162x16-assembled": {
+   "file": "plate-machined-162x16-assembled.png",
+   "family": "machined",
+   "shape": "162x16",
+   "diameter": 162,
+   "thickness": 16,
+   "angle": "assembled",
+   "faceCenter": [
+    234.76,
+    257.66
+   ],
+   "faceRadius": 222.88,
+   "hubRadius": 0.4105,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-162x16-exploded": {
+   "file": "plate-machined-162x16-exploded.png",
+   "family": "machined",
+   "shape": "162x16",
+   "diameter": 162,
+   "thickness": 16,
+   "angle": "exploded",
+   "faceCenter": [
+    238.37,
+    259.31
+   ],
+   "faceRadius": 223.27,
+   "hubRadius": 0.4105,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-190x16-assembled": {
+   "file": "plate-machined-190x16-assembled.png",
+   "family": "machined",
+   "shape": "190x16",
+   "diameter": 190,
+   "thickness": 16,
+   "angle": "assembled",
+   "faceCenter": [
+    237.89,
+    257.41
+   ],
+   "faceRadius": 222.82,
+   "hubRadius": 0.35,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-190x16-exploded": {
+   "file": "plate-machined-190x16-exploded.png",
+   "family": "machined",
+   "shape": "190x16",
+   "diameter": 190,
+   "thickness": 16,
+   "angle": "exploded",
+   "faceCenter": [
+    240.97,
+    258.82
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.35,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-195x21-assembled": {
+   "file": "plate-machined-195x21-assembled.png",
+   "family": "machined",
+   "shape": "195x21",
+   "diameter": 195,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    232.83,
+    257.81
+   ],
+   "faceRadius": 222.92,
+   "hubRadius": 0.341,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-195x21-exploded": {
+   "file": "plate-machined-195x21-exploded.png",
+   "family": "machined",
+   "shape": "195x21",
+   "diameter": 195,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    236.76,
+    259.61
+   ],
+   "faceRadius": 223.35,
+   "hubRadius": 0.341,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-228x21p5-assembled": {
+   "file": "plate-machined-228x21p5-assembled.png",
+   "family": "machined",
+   "shape": "228x21p5",
+   "diameter": 228,
+   "thickness": 21.5,
+   "angle": "assembled",
+   "faceCenter": [
+    235.72,
+    257.58
+   ],
+   "faceRadius": 222.86,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-228x21p5-exploded": {
+   "file": "plate-machined-228x21p5-exploded.png",
+   "family": "machined",
+   "shape": "228x21p5",
+   "diameter": 228,
+   "thickness": 21.5,
+   "angle": "exploded",
+   "faceCenter": [
+    239.17,
+    259.16
+   ],
+   "faceRadius": 223.24,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-228x31-assembled": {
+   "file": "plate-machined-228x31-assembled.png",
+   "family": "machined",
+   "shape": "228x31",
+   "diameter": 228,
+   "thickness": 31,
+   "angle": "assembled",
+   "faceCenter": [
+    226.73,
+    258.28
+   ],
+   "faceRadius": 223.03,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-228x31-exploded": {
+   "file": "plate-machined-228x31-exploded.png",
+   "family": "machined",
+   "shape": "228x31",
+   "diameter": 228,
+   "thickness": 31,
+   "angle": "exploded",
+   "faceCenter": [
+    231.69,
+    260.56
+   ],
+   "faceRadius": 223.57,
+   "hubRadius": 0.2917,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-300x38-assembled": {
+   "file": "plate-machined-300x38-assembled.png",
+   "family": "machined",
+   "shape": "300x38",
+   "diameter": 300,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    228.74,
+    258.13
+   ],
+   "faceRadius": 222.99,
+   "hubRadius": 0.2217,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-300x38-exploded": {
+   "file": "plate-machined-300x38-exploded.png",
+   "family": "machined",
+   "shape": "300x38",
+   "diameter": 300,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    233.36,
+    260.25
+   ],
+   "faceRadius": 223.5,
+   "hubRadius": 0.2217,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-325x21-assembled": {
+   "file": "plate-machined-325x21-assembled.png",
+   "family": "machined",
+   "shape": "325x21",
+   "diameter": 325,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    242.11,
+    257.08
+   ],
+   "faceRadius": 222.75,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-325x21-exploded": {
+   "file": "plate-machined-325x21-exploded.png",
+   "family": "machined",
+   "shape": "325x21",
+   "diameter": 325,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    244.48,
+    258.16
+   ],
+   "faceRadius": 223,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-360x38-assembled": {
+   "file": "plate-machined-360x38-assembled.png",
+   "family": "machined",
+   "shape": "360x38",
+   "diameter": 360,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    233.29,
+    257.77
+   ],
+   "faceRadius": 222.91,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-360x38-exploded": {
+   "file": "plate-machined-360x38-exploded.png",
+   "family": "machined",
+   "shape": "360x38",
+   "diameter": 360,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    237.15,
+    259.53
+   ],
+   "faceRadius": 223.33,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-400x21-assembled": {
+   "file": "plate-machined-400x21-assembled.png",
+   "family": "machined",
+   "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
+   "angle": "assembled",
+   "faceCenter": [
+    244.72,
+    256.88
+   ],
+   "faceRadius": 222.7,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-400x21-exploded": {
+   "file": "plate-machined-400x21-exploded.png",
+   "family": "machined",
+   "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
+   "angle": "exploded",
+   "faceCenter": [
+    246.64,
+    257.75
+   ],
+   "faceRadius": 222.91,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-448x38-assembled": {
+   "file": "plate-machined-448x38-assembled.png",
+   "family": "machined",
+   "shape": "448x38",
+   "diameter": 448,
+   "thickness": 38,
+   "angle": "assembled",
+   "faceCenter": [
+    237.76,
+    257.42
+   ],
+   "faceRadius": 222.83,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-448x38-exploded": {
+   "file": "plate-machined-448x38-exploded.png",
+   "family": "machined",
+   "shape": "448x38",
+   "diameter": 448,
+   "thickness": 38,
+   "angle": "exploded",
+   "faceCenter": [
+    240.86,
+    258.84
+   ],
+   "faceRadius": 223.16,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-450x22p5-assembled": {
+   "file": "plate-machined-450x22p5-assembled.png",
+   "family": "machined",
+   "shape": "450x22p5",
+   "diameter": 450,
+   "thickness": 22.5,
+   "angle": "assembled",
+   "faceCenter": [
+    245.25,
+    256.84
+   ],
+   "faceRadius": 222.69,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-450x22p5-exploded": {
+   "file": "plate-machined-450x22p5-exploded.png",
+   "family": "machined",
+   "shape": "450x22p5",
+   "diameter": 450,
+   "thickness": 22.5,
+   "angle": "exploded",
+   "faceCenter": [
+    247.09,
+    257.67
+   ],
+   "faceRadius": 222.89,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-450x27-assembled": {
+   "file": "plate-machined-450x27-assembled.png",
+   "family": "machined",
+   "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
+   "angle": "assembled",
+   "faceCenter": [
+    243.1,
+    257.01
+   ],
+   "faceRadius": 222.73,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
+  "plate-machined-450x27-exploded": {
+   "file": "plate-machined-450x27-exploded.png",
+   "family": "machined",
+   "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
+   "angle": "exploded",
+   "faceCenter": [
+    245.3,
+    258.01
+   ],
+   "faceRadius": 222.97,
+   "hubRadius": 0.22,
+   "size": [
+    512,
+    512
+   ]
+  },
   "plate-steel-230x20-assembled": {
    "file": "plate-steel-230x20-assembled.png",
    "family": "steel",
    "shape": "230x20",
+   "diameter": 230,
+   "thickness": 20,
    "angle": "assembled",
    "faceCenter": [
     237.3,
@@ -686,6 +3058,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-230x20-exploded.png",
    "family": "steel",
    "shape": "230x20",
+   "diameter": 230,
+   "thickness": 20,
    "angle": "exploded",
    "faceCenter": [
     240.48,
@@ -702,6 +3076,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-325x20-assembled.png",
    "family": "steel",
    "shape": "325x20",
+   "diameter": 325,
+   "thickness": 20,
    "angle": "assembled",
    "faceCenter": [
     242.77,
@@ -718,6 +3094,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-325x20-exploded.png",
    "family": "steel",
    "shape": "325x20",
+   "diameter": 325,
+   "thickness": 20,
    "angle": "exploded",
    "faceCenter": [
     245.03,
@@ -734,6 +3112,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-325x23-assembled.png",
    "family": "steel",
    "shape": "325x23",
+   "diameter": 325,
+   "thickness": 23,
    "angle": "assembled",
    "faceCenter": [
     240.79,
@@ -750,6 +3130,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-325x23-exploded.png",
    "family": "steel",
    "shape": "325x23",
+   "diameter": 325,
+   "thickness": 23,
    "angle": "exploded",
    "faceCenter": [
     243.38,
@@ -766,6 +3148,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-400x21-assembled.png",
    "family": "steel",
    "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
    "angle": "assembled",
    "faceCenter": [
     244.72,
@@ -782,6 +3166,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-400x21-exploded.png",
    "family": "steel",
    "shape": "400x21",
+   "diameter": 400,
+   "thickness": 21,
    "angle": "exploded",
    "faceCenter": [
     246.64,
@@ -798,6 +3184,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-400x25-assembled.png",
    "family": "steel",
    "shape": "400x25",
+   "diameter": 400,
+   "thickness": 25,
    "angle": "assembled",
    "faceCenter": [
     242.57,
@@ -814,6 +3202,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-400x25-exploded.png",
    "family": "steel",
    "shape": "400x25",
+   "diameter": 400,
+   "thickness": 25,
    "angle": "exploded",
    "faceCenter": [
     244.86,
@@ -830,6 +3220,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x22-assembled.png",
    "family": "steel",
    "shape": "450x22",
+   "diameter": 450,
+   "thickness": 22,
    "angle": "assembled",
    "faceCenter": [
     245.49,
@@ -846,6 +3238,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x22-exploded.png",
    "family": "steel",
    "shape": "450x22",
+   "diameter": 450,
+   "thickness": 22,
    "angle": "exploded",
    "faceCenter": [
     247.29,
@@ -862,6 +3256,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x27-assembled.png",
    "family": "steel",
    "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
    "angle": "assembled",
    "faceCenter": [
     243.1,
@@ -878,6 +3274,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x27-exploded.png",
    "family": "steel",
    "shape": "450x27",
+   "diameter": 450,
+   "thickness": 27,
    "angle": "exploded",
    "faceCenter": [
     245.3,
@@ -894,6 +3292,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x30-assembled.png",
    "family": "steel",
    "shape": "450x30",
+   "diameter": 450,
+   "thickness": 30,
    "angle": "assembled",
    "faceCenter": [
     241.67,
@@ -910,6 +3310,8 @@ export const PLATE_SPRITES = {
    "file": "plate-steel-450x30-exploded.png",
    "family": "steel",
    "shape": "450x30",
+   "diameter": 450,
+   "thickness": 30,
    "angle": "exploded",
    "faceCenter": [
     244.11,
