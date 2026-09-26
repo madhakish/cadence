@@ -1,115 +1,139 @@
 # Photographic barbell inspection
 
-The previously demonstrated plate faces are now production inputs, not static
-mockups placed over a fictitious load. Native and web project the exact solver
-or reverse-mode stack through `BarbellScene` / `barbell-scene.js`.
+The September 20, 2026 refinement presents one loaded sleeve in two authored
+views: assembled and nearly straight ahead, then closer and angled with the
+plates separated. The solver or reverse-mode loadout remains the source of
+plate identity, order, count, mass, bar and collars. Inspection state stays in
+the view and never writes to SwiftData, IndexedDB or a backup.
 
-## Asset provenance
+## Rendering and asset provenance
 
-The loaded bar is composed from rendered sprites (September 19, 2026): one
-greyscale plate per shape (diameter × thickness) at each scene angle, plus a
-shaft, far and near sleeves, and collars, produced by
-`web/tools/render-plate-sprites.py` (a deterministic signed-distance ray
-marcher with a studio rig) and installed byte-for-byte into
-`web/app/assets/plates/` and `Cadence/Assets.xcassets/PlateSprites` by
-`web/tools/install-plate-sprites.mjs`, with placement metadata generated into
-`plate-sprites.js` and `PlateSprites.swift`. The sprites carry no denomination,
-so the renderer stamps the actual plate value without changing the artwork.
+Where Metal (iOS) or WebGL2 (web) is available, `BarbellInspector` /
+`barbell-inspector.js` supplies the shared physical layout, camera endpoints,
+framing, spacing and minimum diagram width. SceneKit and WebGL render the near
+sleeve with beveled edges, machining detail, restrained knurling, brushed steel,
+a fixed studio environment, and an annular lock collar when configured.
 
-The owner-approved September 6, 2026 photographs (`PlateSteel` /
-`plate-steel.png`, `PlateBumper` / `plate-bumper.png`) remain in both clients
-unchanged but are no longer drawn by the diagram. No gorilla emboss is added;
-the existing Vitruvian artwork is unchanged. Coloured faces are colourised
-from the sprite's luminance by the shared matrix and retain an untinted metal
-hub. SVG paint-server identifiers are unique per view.
+Plate faces combine the solid geometry with two original AI-generated,
+photographic-style orthographic textures. The 768-pixel PNGs are paired
+byte-for-byte across clients:
+
+| Face | Web asset | Native image set |
+| --- | --- | --- |
+| Bumper | `web/app/assets/plates/bumper-face-detail.png` | `PlateBumperFaceDetail` |
+| Steel/change | `web/app/assets/plates/steel-face-detail.png` | `PlateSteelFaceDetail` |
+
+Runtime tinting applies the existing denomination palette to the coated body
+while retaining the photographed chrome hub. The renderer clips the physical
+bore and prints the actual value and unit over the face. A constant face
+material preserves the texture's baked studio illumination; the solid supplies
+thickness and silhouette. Original CADENCE stamps do not imply a manufacturer
+or federation certification. These textures are generated artwork, not scraped
+manufacturer photographs. See [the face-texture provenance](PLATE-FACE-TEXTURES.md)
+for the source and installation record.
+
+Compact rows, inline full-bar diagrams and the no-3D fallback retain the
+September 19, 2026 rendered sprites: one greyscale plate per shape and scene
+angle, plus shaft, near/far sleeves and collars. These were produced by
+`web/tools/render-plate-sprites.py`, a deterministic signed-distance ray marcher,
+and installed into both clients by `web/tools/install-plate-sprites.mjs` with
+placement metadata in `plate-sprites.js` and `PlateSprites.swift`. Their shared
+luminance matrix restores the untinted hub, and the renderer adds denominations.
+This refinement does not regenerate those sprites.
+
+The owner-approved September 6 photographs (`PlateSteel` / `plate-steel.png`
+and `PlateBumper` / `plate-bumper.png`) remain unchanged. They are separate from
+the new face-detail textures and are not the diagram's sprite inputs. The
+Vitruvian artwork and anatomy highlighting are unchanged.
 
 ## Shared behavior
 
-- Every normal hero bar offers **Inspect plates**, not just overflowing stacks.
-- The calculator, current workout set, and contextual exercise pane open the
-  same inspector: straight ahead and assembled first; a tap explodes it (the
-  solid swings to 35° and frames the near stack; the sprite scene shows 38°).
-- Assemble/explode is view-local. It never saves to SwiftData or IndexedDB.
-- The same dimensions feed both camera views. Explicit reference catalogs
-  replace threshold-based plate sizes. Full-size 5 kg training bumpers stay
-  full size; explicit geometry can represent a different change-plate profile.
-- The input's plate order, identity, mass, bar, and collars remain authoritative.
-  Reverse-mode order is preserved. Painter order is separate from loading order.
-- The enlarged exploded scene scrolls inside its own track. Exact per-side
-  denomination/count rows remain readable below it.
-- Where Metal (iOS) or WebGL2 (web) is available, the inspection is a real-time
-  solid built from the shared `BarbellInspector` model: drag orbits, pinch or
-  wheel zooms, a tap explodes or assembles with an animated cut, double tap or
-  **Reset view** returns to the front view, and Studio / Dark / Paper backdrops
-  switch the lighting mood. Without it the sprite scene above is the inspection.
-- The explode cut is instant under Reduce Motion / `prefers-reduced-motion` on
-  both clients. The sprite view's assemble/explode remains immediate on web.
-- The solid keeps every plate exposed to assistive technology: native reuses
-  the per-plate accessibility children; web keeps the sprite SVG over the canvas
-  as an invisible, focusable plate layer and names the focused plate in a note.
-- Compact rows use the same rendered sprite scene as full views on both clients.
-- Native and web colourise the full face with the same luminance matrix and
-  restore the untinted metal hub; the camera sits at the −x end, so far parts
-  paint first and near parts last, and every plate bore is open in the sprites
-  so the shaft shows through wherever the plate's own thickness lets it. Native accessibility exposes each plate's side,
-  position and exact denomination independently of the inspection button.
-- Existing plate references, inventory, and solving policy are unchanged.
+- The calculator, current workout set and contextual exercise pane open the
+  same inspector. A normal stack offers inspection even when it fits inline.
+- The initial 3D camera has yaw 8° and pitch 6°. A tap changes it to yaw 50°,
+  pitch 10°, frames the near stack and separates adjacent discs. Another tap
+  returns to the initial state. The first disc stays against the bar shoulder.
+- The camera endpoints are fixed. There is no orbit drag, pinch/wheel zoom,
+  double-tap reset, reset button or backdrop picker. The studio lighting stays
+  fixed. Page gestures remain available.
+- The native and web 3D cut lasts 260 ms. Reduce Motion /
+  `prefers-reduced-motion` makes the state change immediate. The offline sprite
+  fallback uses its existing fixed angles with the same two-state interaction.
+- Each exploded disc has a screen-space value-and-unit caption, including
+  duplicates and custom precision such as 0.625 kg. These captions are distinct
+  from the smaller printed face stamps and do not shrink with camera distance.
+  Native captions follow Dynamic Type. The per-side denomination/count list
+  remains below the artwork.
+- Long exploded diagrams scroll horizontally within their own track. Scrolling
+  does not change the camera, order or loadout. The assembled view fits its
+  container; sparse inspections crop unused sleeve space.
+- The toggle button supplies the keyboard and VoiceOver action. Native keeps
+  individual plate accessibility children. Web makes the visible exploded
+  captions focusable and exposes denomination and inside-to-outside position;
+  the decorative canvas or fallback SVG is hidden from assistive technology.
+  There is no invisible focusable SVG overlay on the 3D artwork.
+- The same physical dimensions feed both views. Full-size 5 kg training bumpers
+  remain full size; steel and change plates retain their reference profiles.
+  Geometry, input order, identity and mass do not change during the transition.
+- Kilogram colours retain the shared IWF/IPF-aware denomination conventions;
+  pound colours remain manufacturer conventions. Existing inventories, solving
+  policies, totals and collar inclusion are unchanged.
 
-These illustrative dimensions are not a new physical inventory contract.
-Persisting manufacturer-specific dimensions and named gym profiles (#55) is a
-separate feature requiring a migration. This implementation changes no store
-or backup schema and needs no migration.
+These are illustrative equipment profiles, not manufacturer measurements or a
+sleeve-capacity check. Unknown custom denominations keep their exact labels and
+use a neutral reference shape. Persisting manufacturer-specific dimensions or
+named gym profiles (#55) remains a separate feature requiring a migration.
+This refinement changes no persisted schema or backup format.
 
-## Reproduce verification
+## Verification and evidence
 
-- `cd web && npm test` covers geometry, mirrored ordering, five-kilogram shape,
-  original solution identity, inspect/toggle interactions, multiple diagrams,
-  exact denominations, collars, and offline asset inclusion.
-- `cd CadenceCore && swift test` verifies the same scene and shared JSON fixture.
-- `node web/tools/render-barbell-proof.mjs /absolute/output` rasterizes production
-  SVGs with the actual shipped sprite bytes at 390 and 1280 pixels. These are
-  renderer proofs, not iPhone app screenshots.
-- `node web/tests/plate-sprites.test.mjs` proves the sprite family is
-  byte-identical on both clients and that both placement manifests agree.
-- `node web/tests/barbell-inspector.test.mjs` and `BarbellInspectorTests` prove
-  the 3D layout, explode fraction, camera limits, and lathe profiles agree
-  through `web/tests/fixtures/barbell-3d.json`; `barbell-gl.test.mjs` covers
-  the lathe meshes, the camera fit, and the no-WebGL fallback.
-- `web/tools/capture-web-proof.mjs` runs Chromium with software WebGL, reports
-  which renderer produced `web-plate-inspection-*.png`, and also captures the
-  exploded, orbited, and Paper-backdrop states.
-- Captured proofs of the solid live under `docs/design-pass/after/` as
-  `plate-inspector-3d-{assembled,exploded,orbit,paper}-{web,iphone}.png`
-  (iPhone from run `0810ca0` of the visual-proof workflow). Known gap on the
-  simulator captures: the floor shadow and the knurl normal map do not show
-  there, while the web solid renders both; device verification is pending.
-- `CadenceVisualProofUITests.test04PlateCalculatorHero` opens inspection for a
-  normal load, captures the exploded and assembled states, and — when the solid
-  is present — orbits it, switches to the Paper backdrop, and resets through the
-  control. Use the iPhone visual-proof workflow to capture it.
+Run the appropriate checks from this checkout:
 
-## Opt-in iPhone capture
+- `cd web && npm test` covers geometry, solution identity, input ordering,
+  inspector interaction, exact denominations, collars, fallback and offline
+  asset inclusion.
+- `cd CadenceCore && swift test` verifies the shared native model, profiles,
+  authored camera endpoints, framing and JSON fixture on a Swift toolchain.
+- `node web/tests/barbell-inspector.test.mjs` and `BarbellInspectorTests` compare
+  both models through `web/tests/fixtures/barbell-3d.json`.
+- `node web/tests/barbell-gl.test.mjs` covers meshes, camera fit and the
+  no-WebGL path; `barbell-inspection.test.mjs` covers inspection interaction.
+- `node web/tests/plate-sprites.test.mjs` checks the unchanged sprite pairs and
+  placement manifests. The new detail textures are separately paired assets.
+- `node web/tools/render-barbell-proof.mjs /absolute/output` rasterizes the
+  production sprite SVGs. Those are diagram proofs, not the photographic 3D
+  inspector or iPhone screenshots.
+- `web/tools/capture-web-proof.mjs` captures the app with Chromium software
+  WebGL and reports which renderer produced the images. Inspect the assembled,
+  exploded and returned-to-assembled states, plus narrow and heavy-stack cases.
+- `CadenceVisualProofUITests.test04PlateCalculatorHero` opens a normal load,
+  checks individual plate accessibility, toggles assembled/exploded and back,
+  checks the removed controls are absent, and captures steel and bumper states.
 
-Add the `visual-proof` label to a same-repository PR to capture the current-set,
-exercise-detail, calculator (steel and bumper), and workout-preview screens.
-The workflow waits for the latest CI attempt for that exact head to pass its
-fast Linux suites before starting the simulator; the macOS device build stays
-the merge gate. Measured on 2c9ddf7: the capture boots 1.7 minutes after a
-push instead of 7, and of its ~14.5-minute test step about 2.7 minutes is
-compilation and 9.5 minutes is the UI tests, so a DerivedData cache was tried
-and dropped for no gain. New commits cancel stale captures. Removing
-the label stops captures on future updates. Ordinary PRs keep one native build.
-Manual dispatch remains available.
+The local browser evidence for this September 20 pass is in
+`/home/madhakish/git/cadence-review-2026-09-20/plate-stack/final/`.
+It is synthetic browser evidence, not native proof. This Linux workspace has
+no Swift compiler or Xcode simulator; the new native renderer and updated UI
+proof have not been compiled or captured here. A source review or a passing
+web test is not a substitute for that platform verification.
 
-Each screenshot artifact includes `commit.txt` and includes its source SHA in
-the artifact name. Inspect the images before declaring visual verification.
-XCTest also checks individual plate accessibility and the inspect/toggle path;
-this does not claim a manual spoken VoiceOver session.
+The committed `docs/design-pass/after/plate-inspector-3d-*` screenshots are
+historical evidence from the earlier free-camera renderer. Their orbit/Paper
+states predate this refinement, and the iPhone captures came from visual-proof
+run `0810ca0`. They do not demonstrate the new two-state interaction, materials
+or captions. The earlier simulator observation about missing floor shadows and
+knurl detail is also historical; current native rendering remains unverified.
 
-CI and actual capture results belong in the PR. Compilation alone does not
-claim device rendering or VoiceOver verification.
+## iPhone capture
 
-The assembled overview keeps a 16px/body-size loading key inside the figure.
-Exploded artwork scrolls at natural scale with 14px/pt denomination numerals;
-unit and count remain in the adjacent exact load list. Text is never compressed
-with SVG textLength, and expanding never changes the solver result.
+Add the `visual-proof` label to a same-repository PR, or manually dispatch the
+visual-proof workflow, to capture current-set, exercise-detail, calculator and
+workout-preview screens. The workflow gates capture on the exact head's fast
+CI suites; the macOS device build remains the merge gate. New commits cancel
+stale captures. Removing the label stops captures on future updates.
+
+Artifacts include `commit.txt` and the source SHA in their names. Inspect the
+actual images before declaring visual verification. XCTest's accessibility
+checks do not claim a manual spoken VoiceOver session. Record exact-head CI,
+simulator capture and any device checks with the review; compilation alone
+proves neither rendering quality nor VoiceOver behavior.

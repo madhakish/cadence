@@ -851,10 +851,11 @@ export async function openSession(id) {
         wrap.append(barbellStage(rendered, {
           caption: "Exact mirrored stack · counts are per side", emphasis: "session",
           onExpand: () => {
-            ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
+            let inspectionStage;
+            ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, onClose: () => inspectionStage?.dispose?.(), build: (screen) => {
               const expanded = barbellSVG(solution, "full", plateStyle);
-              screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
-                loadoutSummary(requestedLb, solution, { plateStyle }));
+              inspectionStage = barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" });
+              screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle }));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
           },

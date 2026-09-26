@@ -126,28 +126,28 @@ try {
     const solid = await page.evaluate(() => Boolean(document.querySelector("#overlays .overlay:last-child .barbell-stage.solid canvas.barbell-gl")));
     console.log(`[${viewport.name}] plate-inspection renderer: ${solid ? "WebGL solid" : "sprite SVG fallback"}`);
     await shot("plate-inspection");
-    // The tap explodes: the blow-up at 35°, framed on the near stack.
+    // The tap opens the authored angled view of the near stack.
     await page.evaluate(() => document.querySelector("#overlays .overlay:last-child .barbell-explode")?.click());
     await settle(solid ? 800 : 200);
     await shot("plate-inspection-exploded");
     if (solid) {
-      // Orbit by drag, switch the backdrop, and reset, like the iPhone capture.
+      // Dragging leaves the fixed camera and inspection state unchanged.
+      const canvas = await page.$("#overlays .overlay:last-child canvas.barbell-gl");
+      const beforeDrag = await canvas.screenshot();
       const box = await (await page.$("#overlays .overlay:last-child canvas.barbell-gl")).boundingBox();
       await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
       await page.mouse.down();
       await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.35, { steps: 12 });
       await page.mouse.up();
       await settle(300);
-      await shot("plate-inspection-orbit");
-      await page.evaluate(() => document.querySelector("#overlays .overlay:last-child .barbell-backdrop button[data-backdrop='paper']")?.click());
-      await settle(300);
-      await shot("plate-inspection-paper");
-      await page.evaluate(() => {
-        document.querySelector("#overlays .overlay:last-child .barbell-backdrop button[data-backdrop='studio']")?.click();
-        document.querySelector("#overlays .overlay:last-child .barbell-reset-view")?.click();
-      });
-      await settle(300);
+      const afterDrag = await canvas.screenshot();
+      if (!Buffer.from(beforeDrag).equals(Buffer.from(afterDrag))) throw new Error("Dragging changed the fixed inspection camera");
     }
+    // Exercise artwork activation inside the real focusable app dialog.
+    await page.click("#overlays .overlay:last-child .barbell-inspection-surface");
+    await settle(solid ? 350 : 100);
+    const assembled = await page.$eval("#overlays .overlay:last-child .barbell-explode", button => button.getAttribute("aria-pressed") === "false");
+    if (!assembled) throw new Error("Tapping the artwork did not reassemble the stack");
     await closeTop(); await settle(200); await closeTop(); await settle(200);
 
     await page.evaluate(async () => {

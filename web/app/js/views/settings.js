@@ -1397,12 +1397,16 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             const requestedLb = current.targetWeightLb ?? sessionEntry.targetWeightLb ?? current.weightLb;
             live.append(barbellStage(rendered, {
               caption: "Exact mirrored stack · counts are per side", emphasis: "session",
-              onExpand: () => ui.pushScreen({ title: `${e.name} · loaded bar`, build: (screen) => {
-                screen.append(barbellStage(barbellSVG(solution, "full", style), {
-                  caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
-                }), loadoutSummary(requestedLb, solution, { plateStyle: style }));
-                const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
-              } }),
+              onExpand: () => {
+                let inspectionStage;
+                return ui.pushScreen({ title: `${e.name} · loaded bar`, onClose: () => inspectionStage?.dispose?.(), build: (screen) => {
+                  inspectionStage = barbellStage(barbellSVG(solution, "full", style), {
+                    caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
+                  });
+                  screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle: style }));
+                  const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
+                } });
+              },
             }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle: style }));
             const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
           }

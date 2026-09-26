@@ -9,11 +9,6 @@ import Foundation
 /// bar (right side positive), y is up, z is toward the viewer. `BarbellScene`
 /// stays the orthographic sprite model for compact rows; this is the solid.
 public enum BarbellInspector {
-    public enum Limits {
-        public static let pitchMin = -20.0, pitchMax = 70.0      // degrees above the bar
-        public static let zoomMin = 0.55, zoomMax = 3.0
-        public static let explodeGap = 65.0                      // mm between plates at explode = 1
-    }
     public static let boreRadius = 25.25                         // 50.5 mm Olympic bore
 
     public struct BarDimensions: Equatable, Sendable {
@@ -57,14 +52,19 @@ public enum BarbellInspector {
                               geometry: [String: PlateGeometry] = [:]) -> Layout {
         let bar = isWomensBar(loadout.bar) ? BarDimensions.womens : BarDimensions.mens
         let plates = loadout.perSide.flatMap { count in Array(repeating: count.plate, count: max(0, count.count)) }
-        let gap = explode * Limits.explodeGap
+        let shapes = plates.map { geometry[$0.id] ?? PlateGeometry.reference($0, style: style) }
+        let maxRadius = shapes.reduce(bar.collarRadius) { max($0, $1.diameter / 2) }
+        // At 50° yaw, a face projects radius*sin(yaw) along the stack. The gap
+        // exceeds diameter*tan(50°), with air between even the largest faces.
+        let fraction = min(1, max(0, explode))
+        let gap = fraction * (2 * maxRadius * 1.3 + 24)
         var discs: [Disc] = []
         var stackEnd = bar.shoulderEnd
         for side in [-1, 1] {
             var cursor = bar.shoulderEnd
             for (index, plate) in plates.enumerated() {
-                let shape = geometry[plate.id] ?? PlateGeometry.reference(plate, style: style)
-                let centerX = cursor + shape.thickness / 2 + gap * Double(index + 1)
+                let shape = shapes[index]
+                let centerX = cursor + shape.thickness / 2 + gap * Double(index)
                 discs.append(Disc(plate: plate, side: side, index: index,
                                   family: PlateGeometry.family(plate, style: style),
                                   centerX: Double(side) * centerX, radius: shape.diameter / 2, thickness: shape.thickness))
@@ -72,10 +72,10 @@ public enum BarbellInspector {
             }
             stackEnd = cursor
         }
-        let collarStart = stackEnd + gap * Double(plates.count + 1)
-        let collar = Collar(left: -collarStart, right: collarStart, length: bar.collarLength, radius: bar.collarRadius)
-        let extent = max(bar.shaftHalfLength + bar.sleeveLength, collarStart + bar.collarLength)
-        let maxRadius = discs.reduce(bar.collarRadius) { max($0, $1.radius) }
+        let hasCollar = loadout.collarLb > 0
+        let collarStart = stackEnd + gap * Double(max(0, plates.count - 1)) + (hasCollar && !plates.isEmpty ? min(gap, 80 * fraction) : 0)
+        let collar = Collar(left: -collarStart, right: collarStart, length: hasCollar ? bar.collarLength : 0, radius: hasCollar ? bar.collarRadius : 0)
+        let extent = max(bar.shaftHalfLength + bar.sleeveLength, collarStart + collar.length)
         return Layout(bar: bar, discs: discs, collar: collar, extent: extent, maxRadius: maxRadius)
     }
 
@@ -86,9 +86,8 @@ public enum BarbellInspector {
 
     /// Yaw is the angle between the bar axis and the screen plane (0 =
     /// side-on, 90 = looking down the bar from the −x end). Pitch is elevation
-    /// above the bar. Assembled is the straight-ahead view of the whole bar;
-    /// exploded swings to 35° and frames the near stack so plates and numerals
-    /// read clearly (see `frame(layout:explode:)`).
+    /// above the bar. Both authored views frame the near sleeve; the exploded
+    /// view swings to 50° so every separated plate face reads clearly.
     public struct Camera: Equatable, Sendable {
         public var yaw, pitch, zoom: Double
 
@@ -97,37 +96,19 @@ public enum BarbellInspector {
         }
 
         public static func initial(exploded: Bool) -> Camera {
-            exploded ? Camera(yaw: 35, pitch: 12, zoom: 1) : Camera(yaw: 8, pitch: 10, zoom: 1)
+            exploded ? Camera(yaw: 50, pitch: 10, zoom: 1) : Camera(yaw: 8, pitch: 6, zoom: 1)
         }
 
-        public func orbiting(yaw dYaw: Double, pitch dPitch: Double) -> Camera {
-            Camera(yaw: Self.wrapDegrees(yaw + dYaw),
-                   pitch: min(Limits.pitchMax, max(Limits.pitchMin, pitch + dPitch)), zoom: zoom)
-        }
-
-        public func zoomed(by factor: Double) -> Camera {
-            Camera(yaw: yaw, pitch: pitch, zoom: min(Limits.zoomMax, max(Limits.zoomMin, zoom * factor)))
-        }
-
-        /// Eye position relative to the orbit target for a base distance.
+        /// Eye position relative to the frame target for a base distance.
         public func position(distance: Double) -> Point3 {
             let d = distance / zoom
             let yawR = yaw * .pi / 180, pitchR = pitch * .pi / 180
             return Point3(x: -d * cos(pitchR) * sin(yawR), y: d * sin(pitchR), z: d * cos(pitchR) * cos(yawR))
         }
-
-        /// Wrap into (−180, 180], matching the web modulo arithmetic.
-        static func wrapDegrees(_ degrees: Double) -> Double {
-            let shifted = degrees + 180
-            let modulo = shifted - 360 * (shifted / 360).rounded(.down)
-            let wrapped = modulo - 180
-            return wrapped == -180 ? 180 : wrapped
-        }
     }
 
-    /// What the camera frames at zoom 1: the whole bar when assembled; the
-    /// near (−x) stack from the sleeve start to the lock collar when exploded,
-    /// blended by the explode fraction so the cut is one continuous move.
+    /// Assembled includes sleeve and shaft; inspection frames the actual plates
+    /// and any visible collar. Empty bars keep their full sleeve.
     public struct Frame: Equatable, Sendable {
         public let target: Point3
         public let halfWidth: Double
@@ -135,9 +116,17 @@ public enum BarbellInspector {
 
     public static func frame(layout: Layout, explode: Double) -> Frame {
         let t = min(1, max(0, explode))
-        let outer = layout.collar.left - layout.collar.length, inner = -layout.bar.shaftHalfLength
-        let stackCenter = (outer + inner) / 2, stackHalf = (inner - outer) / 2 + layout.maxRadius * 0.6
-        return Frame(target: Point3(x: stackCenter * t + 0, y: 0, z: 0), halfWidth: layout.extent * (1 - t) + stackHalf * t)
+        let stackOuter = layout.collar.left - layout.collar.length
+        let sleeveOuter = min(-layout.bar.shaftHalfLength - layout.bar.sleeveLength, stackOuter)
+        let outer = sleeveOuter * (1 - t) + (layout.discs.isEmpty ? sleeveOuter : stackOuter) * t
+        let inner = -layout.bar.shaftHalfLength + 260 * (1 - t) + 20 * t
+        return Frame(target: Point3(x: (outer + inner) / 2, y: 0, z: 0), halfWidth: (inner - outer) / 2 + layout.maxRadius * 0.6)
+    }
+
+    /// Keep every exploded denomination readable; large stacks scroll without
+    /// changing the camera. Assembled stays within the viewport.
+    public static func minimumWidth(layout: Layout, viewportWidth: Double, exploded: Bool) -> Double {
+        exploded ? max(viewportWidth, Double(layout.discs.filter { $0.side < 0 }.count) * 112 + 32) : viewportWidth
     }
 
     public struct ProfilePoint: Equatable, Sendable {
@@ -147,20 +136,25 @@ public enum BarbellInspector {
 
     /// Lathe profiles: closed outlines as (radius, axial) millimetre pairs from
     /// the bore on the −x face, over the rim, back to the bore on the +x face.
-    /// The renderers revolve them around the bar axis.
+    /// The renderers revolve them around the bar axis. The first and last two
+    /// edges form the chrome hub; the remaining edges belong to the coating.
     public static func plateProfile(family: String, diameter: Double, thickness: Double) -> [ProfilePoint] {
         let r = diameter / 2, ht = thickness / 2
         let half: [(Double, Double)]
         switch family {
         case "bumper":
-            let hub = 0.235 * r, proud = 1.5, recess = 0.14 * thickness, rim = 0.9 * r
-            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - recess)), (rim, -(ht - recess)), (rim, -ht), (r, -ht)]
+            let hub = max(boreRadius + 8, 0.47 * r), proud = 1.0
+            let recess = min(4, 0.1 * thickness), bevel = min(3, 0.15 * thickness)
+            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - recess)),
+                    (0.86 * r, -(ht - recess)), (0.91 * r, -ht), (r - bevel, -ht), (r, -(ht - bevel))]
         case "steel":
-            let hub = 0.2 * r, proud = 1.5, dish = 0.18 * thickness, lip = 0.86 * r
-            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - dish)), (lip, -ht), (r, -ht)]
+            let hub = max(boreRadius + 8, 0.2 * r), proud = 0.8
+            let dish = min(2.4, 0.12 * thickness), bevel = min(1.2, 0.15 * thickness)
+            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - dish)),
+                    (0.82 * r, -(ht - dish)), (0.89 * r, -ht), (r - bevel, -ht), (r, -(ht - bevel))]
         default:
-            let hub = max(boreRadius + 8, 0.25 * r), proud = 1.0
-            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -ht), (r, -ht)]
+            let hub = max(boreRadius + 8, 0.25 * r), proud = 0.7, bevel = min(1.5, 0.15 * thickness)
+            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -ht), (r - bevel, -ht), (r, -(ht - bevel))]
         }
         let front = half.map { ProfilePoint(radius: $0.0, axial: $0.1) }
         return front + front.reversed().map { ProfilePoint(radius: $0.radius, axial: -$0.axial) }

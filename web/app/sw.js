@@ -15,6 +15,8 @@ const CACHE_PREFIX = "cadence-app-";
 const CACHE = `${CACHE_PREFIX}__BUILD__`;
 const ownedByThisWorker = (key) => key.startsWith(CACHE_PREFIX);
 const ASSETS = [
+  "assets/plates/bumper-face-detail.png",
+  "assets/plates/steel-face-detail.png",
   "./", "index.html", "styles.css", "manifest.webmanifest",
   "js/app.js", "js/core.js", "js/db.js", "js/seed.js", "js/templates.js", "js/programming-defaults.js", "js/program-file.js", "js/program-equipment.js", "js/anatomy.js", "js/ui.js", "js/charts.js", "js/constants.js", "js/barbell.js", "js/barbell-scene.js", "js/barbell-inspector.js", "js/barbell-gl.js", "js/coaching-adapter.js", "js/workout-clock.js", "js/gym-tag.js", "js/hold-timer.js",
   "js/views/home.js", "js/views/program.js", "js/views/history.js", "js/views/activity.js", "js/views/body.js",

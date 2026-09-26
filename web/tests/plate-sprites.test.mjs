@@ -46,16 +46,20 @@ const parseNativeManifest = (source) => {
 };
 
 const files = readdirSync(webDir).filter((f) => f.endsWith(".png")).sort();
+const faceDetails = { "bumper-face-detail.png": "PlateBumperFaceDetail", "steel-face-detail.png": "PlateSteelFaceDetail" };
 assert.ok(files.length >= 16, "the sprite family is installed");
 const swift = readFileSync(new URL("Cadence/Views/PlateSprites.swift", root), "utf8");
 const native = parseNativeManifest(swift);
 for (const file of files) {
   const name = file.replace(/\.png$/, "");
-  const twin = new URL(`${name}.imageset/${file}`, iosDir);
+  const faceAsset = faceDetails[file];
+  const twin = faceAsset ? new URL(`Cadence/Assets.xcassets/${faceAsset}.imageset/${file}`, root)
+    : new URL(`${name}.imageset/${file}`, iosDir);
   assert.ok(existsSync(twin), `${file} has an asset-catalog twin`);
   assert.equal(sha(readFileSync(twin)), sha(readFileSync(new URL(file, webDir))), `${file} is byte-identical on both clients`);
-  assert.ok(PLATE_SPRITES.sprites[name], `${file} is in the web manifest`);
+  if (!faceAsset) assert.ok(PLATE_SPRITES.sprites[name], `${file} is in the web manifest`);
 }
+for (const file of Object.keys(faceDetails)) assert.ok(files.includes(file), `${file} photographic detail is installed`);
 assert.deepEqual(Object.keys(native.sprites).sort(), Object.keys(PLATE_SPRITES.sprites).sort(), "native/web manifests share the exact sprite key set");
 assert.deepEqual(native.plates, PLATE_SPRITES.plates, "native/web manifests share plate-to-shape mapping");
 assert.equal(native.unit, PLATE_SPRITES.unit, "both manifests share the scene unit");

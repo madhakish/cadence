@@ -9,7 +9,7 @@ the physical plate type:
   strength plates.
 
 In **Target** mode, enter the total you want. Cadence draws the achieved load
-on a complete bar and lists the count for one side. Load from each collar
+on a complete bar and lists the count for one side. Load from the inside
 outward in the listed order; the drawing mirrors that same order on the other
 sleeve.
 
@@ -18,7 +18,8 @@ sizes, the **lb / kg** selector sits below the number so both remain usable.
 
 In **On the bar** mode, enter the count of each denomination on one side.
 Cadence mirrors the stack and totals the bar, both sides, and configured
-collars. Plate colours follow the competition denomination scheme; the plate
+collars. Kilogram plate colours follow the shared IWF/IPF denomination
+conventions; pound plate colours use manufacturer-style conventions. The plate
 type changes physical diameter and thickness, not the loading math.
 
 Both modes show the achieved total **in pounds first, then kilograms**, with
@@ -32,15 +33,24 @@ Face-on plate badges keep the denomination and unit visible. Their adjacent
 text supplies the spoken label once; reverse-mode controls identify which
 plate they add or remove **per side** and expose the current count.
 
-Tap the bar or **Inspect plates** to open the loaded-bar inspection. It opens
-straight ahead with the bar assembled; tap the bar to explode the plates apart
-at an angle, up close, so every plate and its number reads. Drag to turn the
-bar, pinch to zoom, tap again to assemble, and double-tap or use **Reset view**
-to return to the default view. **Studio**, **Dark**, and **Paper** change the
-backdrop and lighting. On a device without 3D support the inspection is the
-same bar as a rendered diagram: **Assemble bar** and **Explode plates** toggle
-it, and on a phone you scroll the exploded bar horizontally. The ordered list
-below always gives exact denominations and counts **per side**.
+Tap the bar or **Inspect plates** to open the loaded-bar inspection. It starts
+with one assembled sleeve viewed nearly straight ahead, with enough shaft to
+recognize the bar. The opposite side has the same load. Tap the artwork to
+rotate to a closer, angled view and spread the plates apart; tap again to
+assemble it. The button beneath the artwork provides the same action for a
+keyboard or VoiceOver.
+
+Every separated plate has its own readable value-and-unit caption, including
+repeated denominations. Large stacks scroll horizontally within the diagram.
+Scrolling moves the diagram, not the camera; there is no free rotation, zoom,
+reset control, or lighting selector. Reduce Motion switches between the two
+views immediately. The ordered list below always gives exact denominations
+and counts **per side**.
+
+On devices with 3D support, the bar uses machined-metal geometry and the plates
+combine their physical profiles with original photographic-style face details.
+On devices without 3D support, the offline sprite diagram keeps the same
+assembled/inspection toggle and exact captions.
 
 The same inspection is available from the current barbell set during a workout
 and from its exercise information pane. Opening it never changes your load,

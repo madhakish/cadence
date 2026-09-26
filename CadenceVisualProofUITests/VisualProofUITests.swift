@@ -104,16 +104,8 @@ final class VisualProofUITests: XCTestCase {
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "Exploded")
         capture("barbell-exploded-iphone")
-        if app.buttons["barbell-reset-view"].exists {
-            // Orbit by hand, switch the backdrop, then return to the front view
-            // through the control that VoiceOver and keyboards use.
-            artwork.swipeLeft()
-            capture("barbell-orbit-iphone")
-            app.buttons["Paper"].tap()
-            capture("barbell-paper-backdrop-iphone")
-            app.buttons["Studio"].tap()
-            app.buttons["barbell-reset-view"].tap()
-        }
+        XCTAssertFalse(app.buttons["barbell-reset-view"].exists, "inspection has exactly two authored views")
+        XCTAssertFalse(app.segmentedControls["barbell-backdrop"].exists)
         toggle.tap()
         XCTAssertEqual(toggle.value as? String, "Assembled")
 
@@ -127,6 +119,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(inspect.isHittable)
         inspect.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "Exploded")
         capture("barbell-bumper-exploded-iphone")
     }
 

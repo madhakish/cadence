@@ -4546,7 +4546,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
 
     await history.render(host()); await tick();
     [...host().querySelectorAll(".seg button")].find((button) => button.textContent === "Log")?.click();
-    await tick();
+    // The mode change reads IndexedDB and rebuilds the log asynchronously.
+    await waitFor(() => host().querySelector(".activity-year")?.textContent.includes("340strikes"));
     ok(host().querySelector(".activity-year")?.textContent.includes("340strikes"),
       "the current-year activity summary includes recorded estimated strikes");
 

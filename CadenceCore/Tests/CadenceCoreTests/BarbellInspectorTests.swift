@@ -2,7 +2,7 @@ import XCTest
 @testable import CadenceCore
 
 /// Mirrors web/tests/barbell-inspector.test.mjs: the 3D inspector's physical
-/// layout, explode fraction, orbit camera, and lathe profiles agree with web.
+/// layout, explode fraction, authored cameras, and lathe profiles agree with web.
 final class BarbellInspectorTests: XCTestCase {
     private let bar45 = Bar(value: 45, unit: .lb)
     private var counts: [PlateCount] {
@@ -37,48 +37,94 @@ final class BarbellInspectorTests: XCTestCase {
         let closed = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0)
         let open = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 1)
         let half = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0.5)
-        let gap = BarbellInspector.Limits.explodeGap
+        let gap = 2 * closed.maxRadius * 1.3 + 24
         func right(_ layout: BarbellInspector.Layout, _ index: Int) -> BarbellInspector.Disc {
             layout.discs.first { $0.side > 0 && $0.index == index }!
         }
-        XCTAssertEqual(right(open, 0).centerX, right(closed, 0).centerX + gap, accuracy: 1e-9)
-        XCTAssertEqual(right(open, 2).centerX, right(closed, 2).centerX + 3 * gap, accuracy: 1e-9)
-        XCTAssertEqual(right(half, 2).centerX, right(closed, 2).centerX + 1.5 * gap, accuracy: 1e-9)
-        XCTAssertEqual(open.collar.right, right(open, 2).centerX + right(open, 2).thickness / 2 + gap, accuracy: 1e-9)
+        XCTAssertEqual(right(open, 0).centerX, right(closed, 0).centerX, accuracy: 1e-9)
+        XCTAssertEqual(right(open, 2).centerX, right(closed, 2).centerX + 2 * gap, accuracy: 1e-9)
+        XCTAssertEqual(right(half, 2).centerX, right(closed, 2).centerX + gap, accuracy: 1e-9)
+        XCTAssertEqual(open.collar.right, right(open, 2).centerX + right(open, 2).thickness / 2 + 80, accuracy: 1e-9)
+        XCTAssertEqual(half.collar.right, right(half, 2).centerX + right(half, 2).thickness / 2 + 40, accuracy: 1e-9)
         XCTAssertGreaterThan(open.collar.right, closed.collar.right)
         XCTAssertGreaterThanOrEqual(open.extent, closed.extent)
     }
 
-    func testCameraLimitsAndOrbit() {
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: true), BarbellInspector.Camera(yaw: 35, pitch: 12, zoom: 1))
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false), BarbellInspector.Camera(yaw: 8, pitch: 10, zoom: 1))
-        let exploded = BarbellInspector.Camera.initial(exploded: true)
-        XCTAssertEqual(exploded.orbiting(yaw: 10, pitch: -5), BarbellInspector.Camera(yaw: 45, pitch: 7, zoom: 1))
-        XCTAssertEqual(exploded.orbiting(yaw: 0, pitch: 200).pitch, BarbellInspector.Limits.pitchMax)
-        XCTAssertEqual(exploded.orbiting(yaw: 0, pitch: -200).pitch, BarbellInspector.Limits.pitchMin)
-        XCTAssertEqual(exploded.orbiting(yaw: 170, pitch: 0).yaw, -155)
-        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false).orbiting(yaw: -188, pitch: 0).yaw, 180)
-        XCTAssertEqual(exploded.zoomed(by: 100).zoom, BarbellInspector.Limits.zoomMax)
-        XCTAssertEqual(exploded.zoomed(by: 0).zoom, BarbellInspector.Limits.zoomMin)
-        XCTAssertEqual(exploded.zoomed(by: 1.5).zoom, 1.5, accuracy: 1e-9)
+    func testAuthoredCameraEndpoints() {
+        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: true), BarbellInspector.Camera(yaw: 50, pitch: 10, zoom: 1))
+        XCTAssertEqual(BarbellInspector.Camera.initial(exploded: false), BarbellInspector.Camera(yaw: 8, pitch: 6, zoom: 1))
         let eye = BarbellInspector.Camera.initial(exploded: false).position(distance: 1000)
         XCTAssertEqual((eye.x * eye.x + eye.y * eye.y + eye.z * eye.z).squareRoot(), 1000, accuracy: 1e-9)
         XCTAssertTrue(eye.x < 0 && eye.z > 0 && eye.y > 0)
         XCTAssertEqual(BarbellInspector.Camera(yaw: 90, pitch: 0, zoom: 1).position(distance: 10).x, -10, accuracy: 1e-9)
         XCTAssertEqual(BarbellInspector.Camera(yaw: 0, pitch: 0, zoom: 1).position(distance: 10).z, 10, accuracy: 1e-9)
-        XCTAssertEqual(BarbellInspector.Camera(yaw: 0, pitch: 0, zoom: 2).position(distance: 10).z, 5, accuracy: 1e-9)
     }
 
-    func testFrameIsTheBarAssembledAndTheNearStackExploded() {
+    func testBothFramesFocusOnTheNearSleeve() {
         let closed = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0)
         let open = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 1)
         let closedFrame = BarbellInspector.frame(layout: closed, explode: 0)
         let openFrame = BarbellInspector.frame(layout: open, explode: 1)
         let midFrame = BarbellInspector.frame(layout: BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 0.5), explode: 0.5)
-        XCTAssertEqual(closedFrame, BarbellInspector.Frame(target: BarbellInspector.Point3(x: 0, y: 0, z: 0), halfWidth: closed.extent))
-        XCTAssertTrue(openFrame.target.x < -closed.bar.shaftHalfLength && openFrame.target.x > -open.extent, "exploded frames the centre of the near stack")
-        XCTAssertTrue(openFrame.halfWidth < closed.extent && openFrame.halfWidth > (open.collar.right + open.collar.length - open.bar.shaftHalfLength) / 2)
-        XCTAssertTrue(midFrame.target.x < 0 && midFrame.target.x > openFrame.target.x && midFrame.halfWidth > openFrame.halfWidth)
+        XCTAssertLessThan(closedFrame.target.x, -closed.bar.shaftHalfLength)
+        XCTAssertLessThan(closedFrame.halfWidth, closed.extent * 0.6)
+        XCTAssertGreaterThan(closedFrame.target.x + closedFrame.halfWidth, -closed.bar.shaftHalfLength + 200, "assembled includes visible shaft")
+        XCTAssertTrue(openFrame.target.x < -closed.bar.shaftHalfLength && openFrame.target.x > -open.extent)
+        XCTAssertLessThan(openFrame.target.x - openFrame.halfWidth, open.collar.left - open.collar.length)
+        XCTAssertTrue(midFrame.target.x < closedFrame.target.x && midFrame.target.x > openFrame.target.x)
+        let empty = BarbellInspector.layout(loadout: loadout(Bar(value: 15, unit: .kg), []), style: .bumper, explode: 0)
+        let emptyFrame = BarbellInspector.frame(layout: empty, explode: 0)
+        XCTAssertLessThanOrEqual(emptyFrame.target.x - emptyFrame.halfWidth, -empty.bar.shaftHalfLength - empty.bar.sleeveLength)
+        XCTAssertEqual(BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: -1), closed)
+        XCTAssertEqual(BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 2), open)
+    }
+
+    func testSparseStacksFrameActualPlatesWithoutAnInvisibleCollar() {
+        for count in [1, 2] {
+            let sparse = Loadout(bar: bar45, perSide: [PlateCount(plate: Plate(value: 45, unit: .lb), count: count)], collarLb: 0)
+            let shut = BarbellInspector.layout(loadout: sparse, style: .steel, explode: 0)
+            let spread = BarbellInspector.layout(loadout: sparse, style: .steel, explode: 1)
+            let closedView = BarbellInspector.frame(layout: shut, explode: 0)
+            let openView = BarbellInspector.frame(layout: spread, explode: 1)
+            let discs = spread.discs.filter { $0.side < 0 }
+            XCTAssertEqual(discs[0].centerX, shut.discs[0].centerX, accuracy: 1e-9)
+            let last = discs.last!
+            XCTAssertEqual(spread.collar.left, last.centerX - last.thickness / 2, accuracy: 1e-9, "absent collar reserves no additional gap")
+            XCTAssertEqual(spread.collar.length, 0)
+            XCTAssertEqual(spread.collar.radius, 0)
+            let openYaw = BarbellInspector.Camera.initial(exploded: true).yaw * Double.pi / 180
+            let closedYaw = BarbellInspector.Camera.initial(exploded: false).yaw * Double.pi / 180
+            XCTAssertLessThan(openView.halfWidth * cos(openYaw), closedView.halfWidth * cos(closedYaw), "sparse inspection has a tighter projected frame")
+            if count == 1 { XCTAssertLessThan(openView.halfWidth, closedView.halfWidth * 0.5) }
+        }
+        let empty = BarbellInspector.layout(loadout: Loadout(bar: Bar(value: 15, unit: .kg), perSide: [], collarLb: 0), style: .bumper, explode: 1)
+        XCTAssertEqual(empty.collar.left, -empty.bar.shoulderEnd)
+        let frame = BarbellInspector.frame(layout: empty, explode: 1)
+        XCTAssertLessThanOrEqual(frame.target.x - frame.halfWidth, -empty.bar.shaftHalfLength - empty.bar.sleeveLength)
+    }
+
+    func testExplodedFacesDoNotOverlapAndLabelsKeepTheirWidth() {
+        let custom = [Plate(value: 45, unit: .lb).id: PlateGeometry(diameter: 600, thickness: 30)]
+        let geometries: [[String: PlateGeometry]] = [[:], custom]
+        for geometry in geometries {
+            let layout = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .bumper, explode: 1, geometry: geometry)
+            let discs = layout.discs.filter { $0.side < 0 }
+            let yaw = BarbellInspector.Camera.initial(exploded: true).yaw * Double.pi / 180
+            for index in 1..<discs.count {
+                let separation = abs(discs[index].centerX - discs[index - 1].centerX) * cos(yaw)
+                let faces = (discs[index].radius + discs[index - 1].radius) * sin(yaw)
+                XCTAssertGreaterThan(separation, faces + 10, "exploded faces have visible air between them")
+            }
+        }
+        let layout = BarbellInspector.layout(loadout: loadout(bar45, counts), style: .steel, explode: 1)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: layout, viewportWidth: 390, exploded: false), 390)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: layout, viewportWidth: 390, exploded: true), 390)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: layout, viewportWidth: 354, exploded: true), 368)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: layout, viewportWidth: 1280, exploded: true), 1280)
+        let empty = BarbellInspector.layout(loadout: loadout(bar45, []), style: .steel, explode: 1)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: empty, viewportWidth: 320, exploded: true), 320)
+        let heavy = BarbellInspector.layout(loadout: loadout(bar45, [PlateCount(plate: Plate(value: 20, unit: .kg), count: 8)]), style: .bumper, explode: 1)
+        XCTAssertEqual(BarbellInspector.minimumWidth(layout: heavy, viewportWidth: 390, exploded: true), 928)
     }
 
     func testProfilesAreClosedSymmetricAndInsideThePlate() {
@@ -94,6 +140,14 @@ final class BarbellInspectorTests: XCTestCase {
         }
         XCTAssertTrue(BarbellInspector.plateProfile(family: "bumper", diameter: 450, thickness: 60)
             .contains { $0.radius > 25.25 && $0.radius < 225 && abs($0.axial) < 30 - 1 }, "bumper faces are recessed inside the rim")
+        let bumper = BarbellInspector.plateProfile(family: "bumper", diameter: 450, thickness: 60)
+        XCTAssertGreaterThan(bumper[1].radius, 100, "competition bumper has a broad chrome hub")
+        XCTAssertTrue(bumper[2].axial >= -30 && bumper[2].axial <= -26, "bumper face is shallowly recessed")
+        for family in ["bumper", "steel", "change"] {
+            let profile = BarbellInspector.plateProfile(family: family, diameter: 450, thickness: 30)
+            XCTAssertTrue(profile.contains { $0.radius == 225 && abs($0.axial) < 15 }, "outer edge is chamfered")
+            XCTAssertEqual(profile[1].radius, profile[2].radius, "chrome has exactly a face and a hub wall")
+        }
         XCTAssertTrue(BarbellInspector.plateProfile(family: "steel", diameter: 450, thickness: 27)
             .contains { $0.radius < 0.3 * 225 && $0.axial > -13.5 }, "steel faces dish toward the hub")
     }
