@@ -332,8 +332,8 @@ for (const track of [
     && fullBar.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
     "the calculator bar is the rendered chrome shaft and sleeves rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
-    && fullRendered.minimumLegibleWidth <= 390,
-  "a normal complete bar derives a legible width that fits the primary phone viewport");
+    && fullRendered.minimumLegibleWidth >= fullRendered.scene.width * 1.2 - 1e-6,
+  "a complete bar's face stamps require 12 CSS pixels after scaling");
   ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
     plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
   "every visible plate exposes its exact denomination to keyboard and assistive technology");

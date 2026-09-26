@@ -369,7 +369,8 @@ export const resolvedPrescriptionBlock = (set) => set.prescriptionBlock || (set.
 
 export const plateLb = (p) => toLb(p.value, p.unit);
 export const plateId = (p) => `${p.value}-${p.unit}`;
-export const plateLabel = (p) => `${trim(p.value, 2)} ${p.unit}`;
+// A plate's stored denomination is exact; totals use the rounded trim formatter.
+export const plateLabel = (p) => `${String(p.value)} ${p.unit}`;
 
 // Move one visible reverse-mode denomination relative to its visible
 // neighbours while preserving IDs hidden by the active gym. Mirrors

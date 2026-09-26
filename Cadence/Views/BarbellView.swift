@@ -54,7 +54,7 @@ struct PlateFaceBadge: View {
                 .stroke(foreground.opacity(0.34), lineWidth: 1)
                 .padding(7)
             VStack(spacing: -2) {
-                Text(Weight.trim(plate.value, decimals: 2))
+                Text(plate.denomination)
                     .font(.system(size: 15, weight: .heavy, design: .rounded))
                 Text(plate.unit.rawValue)
                     .font(.system(size: 9, weight: .bold, design: .rounded))
@@ -78,14 +78,15 @@ struct BarbellView: View {
     var presentation: Presentation = .compactSide
     var exploded = false
     var emphasis: Emphasis = .standard
+    var showsReadout = true
 
     static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle) -> CGFloat {
-        CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 0.55))
+        CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 1.2))
     }
 
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
-        Canvas { context, size in
+        let artwork = Canvas { context, size in
             let scale = min(size.width / scene.width, size.height / scene.height)
             context.translateBy(x: size.width / 2, y: size.height / 2)
             context.scaleBy(x: scale, y: scale)
@@ -154,17 +155,27 @@ struct BarbellView: View {
                     untinted.clip(to: Path(ellipseIn: hub))
                     untinted.draw(image, in: frame)
                 }
-                let label = Text(Weight.trim(disc.plate.value, decimals: 2))
-                    .font(.system(size: exploded ? 14 : 10, weight: .heavy))
-                    .foregroundColor(colour.inkColor)
-                context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+                // An edge-on face cannot carry legible text once the bar is
+                // fitted to a phone. Its exact label remains in the readout.
+                if scale * (exploded ? 14 : 10) >= 12 {
+                    let label = Text(disc.plate.unit == solution.loadout.bar.unit
+                                     ? disc.plate.denomination : disc.plate.label)
+                        .font(.system(size: exploded ? 14 : 10, weight: .heavy))
+                        .foregroundColor(colour.inkColor)
+                    context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+                }
             }
             if solution.loadout.collarLb > 0,
                case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
                 placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - span / 2), to: point(-scene.collar + span / 2))
             }
         }
-        .frame(height: presentation == .compactSide ? 84 : nil)
+        VStack(alignment: .leading, spacing: 4) {
+            artwork.frame(height: presentation == .compactSide ? 84 : exploded ? CGFloat(scene.height) : 170)
+            if showsReadout && !solution.loadout.perSide.isEmpty {
+                PlateStackReadout(loadout: solution.loadout)
+            }
+        }
         .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
         .accessibilityChildren { Self.plateChildren(scene: scene, loadout: solution.loadout) }
@@ -189,6 +200,34 @@ struct BarbellView: View {
     }
 }
 
+/// A screen-size denomination for every position on each mirrored sleeve.
+/// The edge-on artwork is a load-order map, and cannot fit full-size text on
+/// the physical face at phone width. This readout never scales with the map.
+private struct PlateStackReadout: View {
+    let loadout: Loadout
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Text("Each side · inside → outside")
+                    .foregroundStyle(.secondary)
+                ForEach(Array(loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }.enumerated()), id: \.offset) { index, plate in
+                    Text(plate.label)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+                        .accessibilityLabel("\(plate.label) plate, \(index + 1) from inside, each side")
+                }
+            }
+            .font(.subheadline)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .accessibilityIdentifier("barbell-plate-readout")
+    }
+}
+
 /// Always offers inspection, even when a typical stack fits the phone.
 struct BarbellStageView: View {
     let solution: PlateSolution
@@ -201,7 +240,6 @@ struct BarbellStageView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let onExpand {
                 BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 170)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onExpand)
                 HStack {
@@ -220,7 +258,6 @@ struct BarbellStageView: View {
                 }
             } else {
                 BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 170)
                 Text(caption).font(.caption).foregroundStyle(.secondary)
             }
             if abs(solution.deviationLb) > 0.01 {
@@ -265,7 +302,7 @@ struct BarbellInspectionView: View {
                 } else {
                     GeometryReader { proxy in
                         ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
+                            BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded, showsReadout: false)
                                 .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
                                        height: exploded ? scene.height : 230)
                                 .contentShape(Rectangle())

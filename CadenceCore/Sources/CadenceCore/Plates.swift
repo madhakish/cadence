@@ -60,8 +60,13 @@ public struct Plate: Hashable, Codable, Sendable, Identifiable, Comparable {
     /// Canonical weight in pounds.
     public var lb: Double { Weight.toLb(value, from: unit) }
 
-    /// "45 lb" / "2.5 kg"
-    public var label: String { "\(Weight.trim(value, decimals: 2)) \(unit.rawValue)" }
+    /// Keep the stored denomination's precision; load totals have their own
+    /// rounded formatter. A custom 1.125 plate must never read as 1.13.
+    public var denomination: String {
+        let number = String(value)
+        return number.hasSuffix(".0") ? String(number.dropLast(2)) : number
+    }
+    public var label: String { "\(denomination) \(unit.rawValue)" }
 
     /// Plate colour token (the user's gym scheme); the UI maps token → hex.
     /// kg is IWF: 25 red · 20 blue · 15 yellow · 10 green · 5 white · 2.5 red change plate.

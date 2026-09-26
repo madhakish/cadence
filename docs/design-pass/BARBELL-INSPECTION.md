@@ -14,7 +14,7 @@ marcher with a studio rig) and installed byte-for-byte into
 `web/app/assets/plates/` and `Cadence/Assets.xcassets/PlateSprites` by
 `web/tools/install-plate-sprites.mjs`, with placement metadata generated into
 `plate-sprites.js` and `PlateSprites.swift`. The sprites carry no denomination,
-so the renderer stamps the actual plate value without changing the artwork.
+so the renderer stamps the stored denomination without changing the artwork.
 
 The owner-approved September 6, 2026 photographs (`PlateSteel` /
 `plate-steel.png`, `PlateBumper` / `plate-bumper.png`) remain in both clients
@@ -48,6 +48,11 @@ hub. SVG paint-server identifiers are unique per view.
   the per-plate accessibility children; web keeps the sprite SVG over the canvas
   as an invisible, focusable plate layer and names the focused plate in a note.
 - Compact rows use the same rendered sprite scene as full views on both clients.
+- At phone width, the edge-on face stamps would be under 12 px/pt after scene
+  scaling. Those stamps are suppressed, and a horizontally scrollable 14 px/pt
+  collar-outward readout names every plate on each mirrored side with its unit.
+  Expanded and wide artwork shows the exact stamp, including `kg` on a lb bar;
+  the inspector's per-side list remains available under the solid.
 - Native and web colourise the full face with the same luminance matrix and
   restore the untinted metal hub; the camera sits at the −x end, so far parts
   paint first and near parts last, and every plate bore is open in the sprites
@@ -109,7 +114,7 @@ this does not claim a manual spoken VoiceOver session.
 CI and actual capture results belong in the PR. Compilation alone does not
 claim device rendering or VoiceOver verification.
 
-The assembled overview keeps a 16px/body-size loading key inside the figure.
-Exploded artwork scrolls at natural scale with 14px/pt denomination numerals;
-unit and count remain in the adjacent exact load list. Text is never compressed
-with SVG textLength, and expanding never changes the solver result.
+The assembled overview keeps the label readout outside the scaled figure.
+Exploded artwork scrolls at natural scale with its exact denominations;
+the adjacent list remains readable. Text is never compressed with SVG
+textLength, and expanding never changes the solver result.

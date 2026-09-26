@@ -309,6 +309,7 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Plate(value: 45, unit: .lb).id, "45-lb")
         XCTAssertEqual(Plate(value: 2.5, unit: .lb).id, "2.5-lb")
         XCTAssertEqual(Plate(value: 1.25, unit: .kg).id, "1.25-kg")
+        XCTAssertEqual(Plate(value: 1.125, unit: .kg).label, "1.125 kg", "custom plates retain stored precision")
     }
 
     // MARK: - Plate colours + drawn size (mirrors the web "plate colours" block)

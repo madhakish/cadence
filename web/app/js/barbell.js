@@ -54,7 +54,7 @@ export function plateBadgeSVG(plate, style = "steel") {
   );
   const value = el("text", { x: 26, y: 24, "text-anchor": "middle",
     "font-size": 15, "font-weight": 800, fill: foreground });
-  value.textContent = C.trim(plate.value, 2);
+  value.textContent = String(plate.value);
   const unit = el("text", { x: 26, y: 36, "text-anchor": "middle",
     "font-size": 9, "font-weight": 700, fill: foreground });
   unit.textContent = plate.unit;
@@ -181,7 +181,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
       'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
       fill:colour.ink, 'data-side':side, 'data-stack-index':d.index, 'data-plate-value':d.plate.value,
       'data-plate-denomination':C.plateLabel(d.plate) });
-    label.textContent = C.trim(d.plate.value, 2);
+    label.textContent = d.plate.unit === solution.bar.unit ? String(d.plate.value) : C.plateLabel(d.plate);
     art.append(label);
   }
   focusable.sort((a, b) => (a.side - b.side) || (a.index - b.index));
@@ -196,7 +196,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     root.append(label);
   }
   return { svg, solution, bar:solution.bar, plateStyle:style, scene,
-    minimumLegibleWidth: Math.max(320, scene.width * .55), baseLabelSize: exploded ? 12 : 10 };
+    minimumLegibleWidth: Math.max(320, scene.width * 12 / (exploded ? 14 : 10)), baseLabelSize: exploded ? 14 : 10 };
 }
 
 // One responsive shell for every complete-bar presentation. Inline stages fit
@@ -220,6 +220,13 @@ export function barbellStage(rendered, {
   const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
   const live = solid?.supported ? solid : null;
   stage.classList.toggle("solid", Boolean(live));
+  const fitLabels = (width) => {
+    if (width > 0) stage.classList.toggle("preview-small", width < rendered.minimumLegibleWidth);
+  };
+  fitLabels(containerWidth);
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => fitLabels(track.clientWidth)).observe(track);
+  }
   const paint = () => {
     const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
     if (live) {
@@ -234,6 +241,7 @@ export function barbellStage(rendered, {
   };
   paint();
   stage.append(track);
+  if (!live && !inspection) stage.append(barbellReadout(rendered.solution));
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.
@@ -319,6 +327,23 @@ export function barbellStage(rendered, {
     stage.append(list);
   }
   return stage;
+}
+
+// Exact collar-outward order on both mirrored sleeves. SVG face stamps scale
+// with the physical bar; this companion text stays at a readable CSS size.
+export function barbellReadout(solution) {
+  const readout = uiText("div", "barbell-plate-readout", "");
+  if (!solution.perSide.length) return readout;
+  // The SVG already exposes each plate as a focusable, precisely named item.
+  readout.setAttribute("aria-hidden", "true");
+  readout.append(uiText("span", "barbell-plate-direction", "Each side · inside → outside"));
+  let index = 0;
+  for (const { plate, count } of solution.perSide) for (let n = 0; n < count; n++) {
+    const item = uiText("span", "barbell-plate-denomination", C.plateLabel(plate));
+    item.dataset.stackIndex = ++index;
+    readout.append(item);
+  }
+  return readout;
 }
 
 const uiText = (tag, className, value) => {
