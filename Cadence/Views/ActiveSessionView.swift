@@ -1338,8 +1338,8 @@ private struct ExerciseSection: View {
                         LoadoutSummaryView(
                             requestedLb: detail.requestedLb,
                             loadout: detail.solution.loadout,
-                            plateTheme: detail.theme,
-                            plateStyle: detail.style
+                            plateStyle: detail.style,
+                            plateTheme: detail.theme
                         )
                             .padding(.horizontal)
                     }
