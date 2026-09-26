@@ -103,6 +103,7 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test12AccessibilityAudit
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test13SetCompletionKeepsDominantBlockStill
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test15PlateThemesLoadedBar
       - name: Export screenshot attachments
         if: always()
         run: |
