@@ -465,6 +465,42 @@ final class VisualProofUITests: XCTestCase {
         text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
+    /// #55: the loaded-bar inspection under each shipped plate theme. The
+    /// proof seed reads `--plate-theme=<id>` and puts it on the fixture gym,
+    /// so every relaunch shows the same 139 lb target in a different theme:
+    /// both authored views, captured for the owner's visual judgement.
+    func test15PlateThemesLoadedBar() {
+        for theme in ["iwfCompetition", "ipfCalibrated", "lbColourBumpers", "lbBlackIron", "blackBumpersBand", "cadenceHouse"] {
+            app.terminate()
+            app.launchArguments.removeAll { $0.hasPrefix("--plate-theme=") }
+            app.launchArguments.append("--plate-theme=\(theme)")
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.buttons["Plate calculator"].tap()
+            XCTAssertTrue(element("plate-calculator-screen").waitForExistence(timeout: 6))
+            let target = app.textFields["plate-target"]
+            XCTAssertTrue(target.waitForExistence(timeout: 3))
+            target.tap()
+            target.typeText("139")
+            let done = app.buttons["plate-target-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            done.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+            let inspect = element("expand-loaded-bar")
+            for _ in 0..<3 where !inspect.isHittable { app.swipeUp() }
+            XCTAssertTrue(inspect.isHittable)
+            inspect.tap()
+            XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
+            let toggle = app.buttons["barbell-explode-toggle"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+            capture("after-15-theme-\(theme)-assembled-iphone")
+            toggle.tap()
+            XCTAssertTrue(app.buttons["barbell-explode-toggle"].waitForExistence(timeout: 3))
+            capture("after-15-theme-\(theme)-exploded-iphone")
+            app.buttons["Done"].tap()
+        }
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }

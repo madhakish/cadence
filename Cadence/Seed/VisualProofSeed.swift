@@ -38,6 +38,13 @@ enum VisualProofSeed {
         }
         gym.collarWeightLb = 0
         gym.loadingPolicy = .closest
+        // #55: `--plate-theme=<id>` puts a shipped theme on the fixture gym so
+        // the visual proof captures each look; without it the backfill's
+        // inference applies (an all-kilogram rack reads as IWF Competition).
+        if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--plate-theme=") }),
+           let theme = PlateThemeID(rawValue: String(argument.dropFirst("--plate-theme=".count))) {
+            gym.plateTheme = theme
+        }
         squat.stationDenomination = .kg
         rdl.stationDenomination = .kg
         squat.notes = "High-bar stance. Brace before the walkout; drive evenly through the whole foot."
