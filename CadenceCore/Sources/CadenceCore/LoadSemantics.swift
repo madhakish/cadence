@@ -74,6 +74,43 @@ public enum LoadSemantics {
         basis == .perImplement ? max(1, count) : 1
     }
 
+    /// Movements whose conventional implement count differs from what their
+    /// equipment type implies: an overhead triceps extension is one dumbbell
+    /// held in both hands, a front-rack carry is two kettlebells, a suitcase
+    /// carry is one bell in one hand. Named so existing library rows pick the
+    /// count up without a store rewrite.
+    public static let conventionalImplementCounts: [String: Int] = [
+        "DB Overhead Triceps Extension": 1,
+        "Farmer Carry": 2,
+        "Suitcase Carry": 1,
+        "Front-rack Carry": 2,
+        "Overhead Carry": 1,
+    ]
+
+    /// The count a backup carries for an exercise row: what the row stores,
+    /// or its equipment-type default when unset. Deliberately NOT the named
+    /// convention below — that is a read-time rule, and writing it into a
+    /// backup would turn a convention into a stored choice on restore.
+    /// Mirrored in web/app/js/core.js `backupImplementCount`.
+    public static func backupImplementCount(stored: Int, exerciseType: String?, basis: LoadBasis) -> Int {
+        normalizedImplementCount(stored > 0 ? stored : inferredImplementCount(exerciseType: exerciseType), basis: basis)
+    }
+
+    /// The implement count an exercise row resolves to. A stored count that
+    /// merely repeats the equipment-type default (or is unset) is not a
+    /// decision anyone made, so a named convention replaces it; any other
+    /// stored count is an explicit choice and wins. Sets snapshot the result,
+    /// so history keeps whatever count it was logged with.
+    /// Mirrored in web/app/js/core.js `resolvedImplementCount`.
+    public static func resolvedImplementCount(
+        stored: Int, exerciseType: String?, exerciseName: String?, basis: LoadBasis
+    ) -> Int {
+        let typeDefault = inferredImplementCount(exerciseType: exerciseType)
+        let named = exerciseName.flatMap { conventionalImplementCounts[$0] }
+        let explicit = stored > 0 && (named == nil || stored != typeDefault)
+        return normalizedImplementCount(explicit ? stored : (named ?? typeDefault), basis: basis)
+    }
+
     /// Total external tonnage. `nil` means tonnage is not a meaningful metric
     /// for this basis (unloaded bodyweight or assistance).
     public static func volume(
@@ -87,6 +124,29 @@ public enum LoadSemantics {
         let implements = normalizedImplementCount(implementCount, basis: basis)
         let sides = isPerSide ? 2 : 1
         return weightLb * Double(reps * implements * sides)
+    }
+
+    /// Tonnage of a distance-carry set: the rep formula with yards in place
+    /// of reps — per-hand load × yards × implements × sides. `nil` under the
+    /// same bases `volume` refuses.
+    public static func carryVolume(
+        weightLb: Double,
+        yards: Double,
+        isPerSide: Bool,
+        basis: LoadBasis,
+        implementCount: Int = 1
+    ) -> Double? {
+        guard basis.supportsVolume, weightLb >= 0, yards > 0 else { return nil }
+        let implements = normalizedImplementCount(implementCount, basis: basis)
+        let sides = isPerSide ? 2 : 1
+        return weightLb * yards * Double(implements * sides)
+    }
+
+    /// The hero load with its basis stated: "50 lb · 22.7 kg each". A
+    /// per-implement number without "each" reads as the total in the hands.
+    public static func heroLoadLabel(weightLb: Double, basis: LoadBasis) -> String {
+        guard weightLb > 0 else { return "BW" }
+        return "\(Weight.trim(weightLb)) lb · \(Weight.trim(Weight.kg(fromLb: weightLb))) kg\(basis.shortSuffix)"
     }
 
     /// Load PRs may only compare records that use the same interpretation.

@@ -1544,6 +1544,81 @@ eq(C.cardioFields("Stair Climber", null, 0.75, 6).names.join(","),
   "[INV-STAIRS-COUNT-FLIGHTS] a pre-flights climb keeps its distance and incline editable");
 eq(C.cardioFields("Stair Climber", null, null, null).names.join(","), "flights,time,pace",
   "an empty climb grows no distance block just because nothing is logged yet");
+// Ropes go nowhere: time only, unless a legacy set already holds a distance.
+eq(C.cardioFields("Battle Ropes", null, null, null).names.join(","), "time,incline",
+  "battle ropes offer no distance or speed row");
+eq(C.cardioFields("Jump Rope", null, null, null).names.join(","), "time,incline",
+  "jump rope offers no distance or speed row");
+eq(C.cardioFields("Jump Rope", null, 0.25, null).names.join(","), "distance,time,speed,incline",
+  "a rope set already holding a distance keeps the field that can correct it");
+
+// ---- Distance carries (mirrors CardioFormatTests / LoadSemanticsTests / PRDetectionTests) ----
+{
+  for (const name of ["Farmer Carry", "Suitcase Carry", "Front-rack Carry", "Overhead Carry"]) {
+    ok(C.logsCarryDistance(name), `[INV-CARRY-LOGS-DISTANCE] ${name} logs distance`);
+  }
+  ok(!C.logsCarryDistance("Ruck") && !C.logsCarryDistance("DB Curls"),
+    "a ruck stays conditioning and a curl stays reps");
+  eq(C.CARRY_DEFAULT_YARDS, 40, "[INV-CARRY-LOGS-DISTANCE] a new carry set starts at 40 yd");
+  eq(C.milesFromYards(40), 40 / 1760, "yards store as exact miles");
+  eq(C.yardsFromMiles(C.milesFromYards(40)), 40, "stored miles read back as the yards entered");
+  eq(C.carryYards("Farmer Carry", C.milesFromYards(40)), 40, "a carry set holding a distance is a distance set");
+  eq(C.carryYards("Farmer Carry", null), null,
+    "[INV-CARRY-LOGS-DISTANCE] a carry logged as reps before this existed stays a rep set");
+  eq(C.carryYards("Walk", 1), null, "conditioning distance is not a carry distance");
+  eq(C.carryDistanceLabel(40), "40 yd", "yards label");
+  eq(C.carryDistanceLabel(40, true), "40 yd / side", "per-side yards label");
+
+  // Implement counts: named convention over the type default, explicit choice wins.
+  const ex = (name, type, implementCount, loadBasis = "perImplement") => ({ name, type, implementCount, loadBasis });
+  eq(C.resolvedImplementCount(ex("DB Overhead Triceps Extension", "dumbbell", 2)), 1,
+    "an overhead triceps extension is one dumbbell, not a pair, even on a row that stored the type default");
+  eq(C.resolvedImplementCount(ex("DB Overhead Triceps Extension", "dumbbell", 0)), 1, "unset count takes the convention");
+  eq(C.resolvedImplementCount(ex("DB Overhead Triceps Extension", "dumbbell", 3)), 3, "a deliberate count still wins");
+  eq(C.resolvedImplementCount(ex("Farmer Carry", "dumbbell", 2)), 2, "a farmer carry is two implements");
+  eq(C.resolvedImplementCount(ex("Front-rack Carry", "kettlebell", 2)), 2, "a front-rack carry is two bells");
+  eq(C.resolvedImplementCount(ex("Front-rack Carry", "kettlebell", 0)), 2, "unset front-rack count takes the convention");
+  eq(C.resolvedImplementCount(ex("Suitcase Carry", "dumbbell", 1)), 1, "a suitcase carry is one implement");
+  eq(C.resolvedImplementCount(ex("DB Curls", "dumbbell", 2)), 2, "unnamed dumbbell work keeps the type default");
+
+  // Hero states the basis on the number.
+  eq(C.heroLoadLabel(50, "perImplement"), "50 lb · 22.7 kg each",
+    "[INV-CARRY-LOGS-DISTANCE] the hero load says each on a per-implement exercise");
+  eq(C.heroLoadLabel(135, "totalBar"), "135 lb · 61.2 kg", "a bar total has no suffix");
+  eq(C.heroLoadLabel(0, "perImplement"), "BW", "no load reads BW");
+
+  // Tonnage: per-hand load × yards × implements × sides.
+  const farmer = { weightLb: 50, reps: 1, isPerSide: false, loadBasis: "perImplement", implementCount: 2, distanceYards: 40 };
+  eq(C.carryVolume(farmer, 40), 4000, "[INV-CARRY-LOGS-DISTANCE] farmer tonnage is 50 × 40 yd × 2 hands");
+  eq(C.carryVolume({ ...farmer, implementCount: 1, isPerSide: true }, 40), 4000, "a suitcase carry counts both sides");
+  eq(C.carryVolume({ ...farmer, loadBasis: "bodyweight" }, 40), null, "no load, no tonnage");
+  eq(C.prVolume([farmer, farmer]), 8000, "carry comparison counts yards, not the placeholder rep");
+  ok(!C.countsTowardTonnage({ ...farmer, distanceMiles: C.milesFromYards(40) }),
+    "[INV-CARRY-LOGS-DISTANCE] a distance carry set contributes nothing to lifting tonnage");
+  ok(C.countsTowardTonnage({ ...farmer, reps: 5, distanceMiles: null }), "a carry logged as reps is still tonnage");
+  // Same load, longer walk: the lb×yd product beats the previous best.
+  const farther = C.prEvaluate({ exercise: "Farmer Carry", sessionSets: [{ ...farmer, distanceYards: 60 }],
+    historySets: [farmer], historyVolumes: [4000], historySchemes: new Set() });
+  eq(farther.map((e) => e.kind).join(","), "volumePR",
+    "[INV-CARRY-LOGS-DISTANCE] a carry whose load × yards beats the best earns a record while adding no tonnage");
+
+  // PRs: heaviest and volume from distance sets; never a scheme or rep PR.
+  const heavier = { ...farmer, weightLb: 60 };
+  const events = C.prEvaluate({ exercise: "Farmer Carry", sessionSets: [heavier, heavier],
+    historySets: [farmer, farmer], historyVolumes: [8000], historySchemes: new Set(["2×1"]) });
+  eq(events.map((e) => e.kind).join(","), "heaviestSet,volumePR",
+    "[INV-CARRY-LOGS-DISTANCE] a heavier carry earns heaviest and volume records only");
+  eq(events[0].label, "60 × 40 yd — heaviest farmer carry logged", "the heaviest carry names its distance");
+  eq(events[1].label, "Volume PR — 9600 lb·yd total farmer carry", "carry volume is load × yards");
+  const first = C.prEvaluate({ exercise: "Farmer Carry", sessionSets: [farmer],
+    historySets: [{ ...farmer, reps: 5, distanceYards: null }], historyVolumes: [500], historySchemes: new Set(["1×5"]) });
+  eq(first.map((e) => e.kind).join(","), "heaviestSet",
+    "the first distance session is not a volume record over rep tonnage, nor a new scheme");
+  const legacy = C.prEvaluate({ exercise: "Farmer Carry", sessionSets: [{ ...farmer, reps: 5, distanceYards: null }],
+    historySets: [farmer], historyVolumes: [4000], historySchemes: new Set() });
+  ok(legacy.some((e) => e.kind === "firstScheme") && legacy.every((e) => e.kind !== "volumePR"),
+    "a rep-based carry set stays in the rep lane, never compared with distance sets");
+}
 
 // ---- RestClock parity (RestClockTests.swift) ----
 {

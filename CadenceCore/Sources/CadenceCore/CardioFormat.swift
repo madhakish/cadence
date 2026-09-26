@@ -132,6 +132,78 @@ public enum CardioFormat {
     /// steps a barbell lift wants.
     public static let loadIncrementLb: Double = 10
 
+    // MARK: - Distance carries
+
+    /// Loaded carries logged as sets of **distance** with a **per-hand** load:
+    /// a farmer walk is "50 lb each for 40 yd", not "50 lb × 5 reps". Unlike a
+    /// ruck these stay strength-typed (dumbbell/kettlebell, per implement), so
+    /// no duration branch ever zeroes the load and the implement count stays.
+    ///
+    /// Named, not typed: the library row's equipment type is never rewritten,
+    /// so existing rows pick this up by name with no schema or backup change.
+    /// Distance lives in the existing `distanceMiles` (yards ÷ 1760) and is
+    /// entered and shown in yards. A carry set that holds no distance — one
+    /// logged as reps before this existed — keeps its reps
+    /// ([INV-CARRY-LOGS-DISTANCE]).
+    public static let distanceCarries: Set<String> = [
+        "Farmer Carry", "Suitcase Carry", "Front-rack Carry", "Overhead Carry",
+    ]
+
+    /// Whether new sets of this movement log a distance instead of reps.
+    public static func logsCarryDistance(exerciseName: String) -> Bool {
+        distanceCarries.contains(exerciseName)
+    }
+
+    /// Where a new carry set starts when nothing before it says otherwise.
+    public static let carryDefaultYards: Double = 40
+
+    /// One tap of the carry distance stepper.
+    public static let carryYardsStep: Double = 5
+
+    public static let yardsPerMile: Double = 1760
+
+    /// Stored miles for an entered yardage. Exact — never routed through the
+    /// four-decimal speed rounding, which would turn 40 yd into 39.9.
+    public static func miles(fromYards yards: Double) -> Double {
+        yards / yardsPerMile
+    }
+
+    /// Display yards for stored miles, rounded to a tenth so the division's
+    /// float noise never shows.
+    public static func yards(fromMiles miles: Double) -> Double {
+        (miles * yardsPerMile * 10).rounded() / 10
+    }
+
+    /// The yards a set carried, or nil when it is not a distance-carry set:
+    /// the movement must be a registered carry AND the set must hold a
+    /// distance. Keyed on both so a legacy rep-based carry set stays a rep set.
+    public static func carryYards(exerciseName: String, distanceMiles: Double?) -> Double? {
+        guard logsCarryDistance(exerciseName: exerciseName),
+              let miles = distanceMiles, miles > 0 else { return nil }
+        return yards(fromMiles: miles)
+    }
+
+    /// Whether a set belongs in lifting tonnage (Σ load × reps). Any set that
+    /// logged ground covered, flights, or time does not — a ruck, a sled, a
+    /// hold, and a distance carry alike: 50 lb for 40 yd would count like
+    /// eight five-rep sets and distort every total. A carry is compared with
+    /// other carries by load × yards (`PRDetection`), never folded in here.
+    /// Mirrored in web/app/js/core.js `countsTowardTonnage`.
+    public static func countsTowardTonnage(distanceMiles: Double?, flights: Double?, durationSeconds: Int?) -> Bool {
+        !((distanceMiles ?? 0) > 0 || (flights ?? 0) > 0 || (durationSeconds ?? 0) > 0)
+    }
+
+    /// "40 yd", "40 yd / side".
+    public static func carryDistanceLabel(yards: Double, isPerSide: Bool = false) -> String {
+        "\(Weight.trim(yards)) yd\(isPerSide ? " / side" : "")"
+    }
+
+    // MARK: - Time-only conditioning
+
+    /// Conditioning measured by time alone. Ropes go nowhere, so a distance
+    /// and a speed describe them with a unit they do not have.
+    public static let timeOnlyConditioning: Set<String> = ["Battle Ropes", "Jump Rope"]
+
     // MARK: - Which fields an editor offers
 
     /// Which fields a conditioning set is edited with.
@@ -179,10 +251,12 @@ public enum CardioFormat {
         exerciseName: String, flights: Double?, distanceMiles: Double?, inclinePercent: Double?
     ) -> CardioFields {
         let climbs = climbsFlights(exerciseName: exerciseName)
+        let coversGround = !climbs && !timeOnlyConditioning.contains(exerciseName)
         return CardioFields(
             load: carriesLoad(exerciseName: exerciseName),
             flights: climbs || (flights ?? 0) > 0,
-            distance: !climbs || (distanceMiles ?? 0) > 0,
+            // A set already holding a distance keeps the field that can fix it.
+            distance: coversGround || (distanceMiles ?? 0) > 0,
             // A climber's grade is the machine, not a setting — unless a legacy
             // set already carries one.
             incline: !climbs || (inclinePercent ?? 0) > 0

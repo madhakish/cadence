@@ -1795,25 +1795,33 @@ private struct ProgramAccessoryRow: View {
                 }
             } else {
                 Stepper("Weight: \(settingsList.unitDisplay.format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
-                // The endpoints carry each other rather than crossing. A
-                // crossed window is a state the engine has to guess at, and
-                // the guess used to hand the lifter a rep jump and a load
-                // step in the same exposure.
-                Stepper("Min reps: \(accessory.minReps)", value: Binding(
-                    get: { accessory.minReps },
-                    set: { (value: Int) in
-                        accessory.minReps = value
-                        accessory.maxReps = max(accessory.maxReps, value)
-                        // Endpoints only — see the lift window above.
-                    }
-                ), in: 1...20)
-                Stepper("Max reps: \(accessory.maxReps)", value: Binding(
-                    get: { accessory.maxReps },
-                    set: { (value: Int) in
-                        accessory.maxReps = value
-                        accessory.minReps = min(accessory.minReps, value)
-                    }
-                ), in: 1...30)
+                if CardioFormat.logsCarryDistance(exerciseName: accessory.exerciseName) {
+                    // [INV-CARRY-LOGS-DISTANCE] A carry is sets of distance; a
+                    // rep window means nothing for it and slots hold no
+                    // distance target yet.
+                    LabeledContent("Distance",
+                                   value: "\(CardioFormat.carryDistanceLabel(yards: CardioFormat.carryDefaultYards)) per set · adjust in the logger")
+                } else {
+                    // The endpoints carry each other rather than crossing. A
+                    // crossed window is a state the engine has to guess at, and
+                    // the guess used to hand the lifter a rep jump and a load
+                    // step in the same exposure.
+                    Stepper("Min reps: \(accessory.minReps)", value: Binding(
+                        get: { accessory.minReps },
+                        set: { (value: Int) in
+                            accessory.minReps = value
+                            accessory.maxReps = max(accessory.maxReps, value)
+                            // Endpoints only — see the lift window above.
+                        }
+                    ), in: 1...20)
+                    Stepper("Max reps: \(accessory.maxReps)", value: Binding(
+                        get: { accessory.maxReps },
+                        set: { (value: Int) in
+                            accessory.maxReps = value
+                            accessory.minReps = min(accessory.minReps, value)
+                        }
+                    ), in: 1...30)
+                }
                 Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
             }
         }

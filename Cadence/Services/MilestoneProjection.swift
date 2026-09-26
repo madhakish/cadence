@@ -15,7 +15,8 @@ enum MilestoneProjection {
 
     static func sample(_ set: SetEntry) -> SetSample {
         SetSample(weightLb: set.weightLb, reps: set.reps, isPerSide: set.isPerSide,
-                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount)
+                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount,
+                  distanceYards: set.carryYards)
     }
 
     /// All working sets / volumes / top schemes for an exercise across prior

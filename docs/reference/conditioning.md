@@ -107,6 +107,32 @@ implement and the surface, and guessing would be worse than asking.
 Unloaded conditioning — walking, running, cycling, ergs — records no weight
 at all.
 
+Battle ropes and jump rope are measured by **time alone**: they go nowhere,
+so their editor offers no distance or speed row. A rope set that already holds
+a distance keeps the field, so it stays correctable.
+
+## Farmer, suitcase, front-rack, and overhead carries
+
+These are strength work held in the hands, not cardio, so they keep a
+**per-hand** load and log **sets of distance in yards** instead of reps:
+
+- A new set starts at **40 yd**, or the previous set's distance.
+- With no history, the load per hand starts at **Farmer 50 lb, Suitcase
+  50 lb, Front-rack (kettlebells) 35 lb, Overhead 25 lb**. Your last logged
+  load wins once you have one.
+- A set reads `50 lb each × 40 yd`; suitcase and overhead carries are
+  `/ side`.
+- A carry adds nothing to the session's lifting tonnage (load × reps): 50 lb
+  for 40 yd would count like eight five-rep sets. Carries are compared with
+  each other by load per hand × yards × implements × sides, so a carry can earn
+  a heaviest-load and a volume record — never a rep or scheme record.
+
+Distance is stored in the same field as conditioning distance (in miles,
+converted exactly), so nothing about the file format changed. A carry you
+logged as reps before this keeps its reps and stays editable. Program slots
+have no distance target yet: a programmed carry is built at 40 yd per set and
+holds its load until that arrives.
+
 ## Comparing against Apple Health
 
 *(iOS only. The web app has no access to Health.)*
