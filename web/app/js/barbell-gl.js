@@ -7,6 +7,7 @@
 // Where WebGL2 is unavailable (jsdom, old browsers) `supported` is false and
 // barbell.js keeps the sprite SVG.
 import * as C from './core.js';
+import { plateThemeColour, plateThemeDescription, plateThemeMaterial, plateThemeRatios } from './plate-theme.js';
 import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera, inspectorFrame, BORE_RADIUS }
   from './barbell-inspector.js';
 
@@ -238,7 +239,7 @@ function labelTexture(plate) {
 
 // ---------------------------------------------------------------- renderer
 
-export function barbellGL(solution, style = 'steel', { exploded = false, onProject = () => {} } = {}) {
+export function barbellGL(solution, style = 'steel', { exploded = false, onProject = () => {}, plateTheme = 'custom' } = {}) {
   const canvas = document.createElement('canvas');
   canvas.className = 'barbell-gl';
   // jsdom and old browsers have no WebGL2 at all; asking would only log.
@@ -249,17 +250,32 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
   const program = link(gl, VERT, FRAG), depthProgram = link(gl, DEPTH_VERT, DEPTH_FRAG);
   const U = (name) => gl.getUniformLocation(program, name);
   const meshes = [];      // { vao, model, parts: [{ offset, count, material }] }
-  const layouts = { closed: barbellLayout(solution, style, 0), open: barbellLayout(solution, style, 1) };
+  const layouts = { closed: barbellLayout(solution, style, 0, {}, plateTheme), open: barbellLayout(solution, style, 1, {}, plateTheme) };
 
-  const plateColour = (plate) => C.plateColour(C.plateColorToken(plate, style));
+  // Theme: colour, material, hub/rim ratios and construction details per
+  // disc; custom reproduces today's token-driven look exactly.
+  const theme = plateThemeDescription(plateTheme);
+  const plateColour = (plate) => plateThemeColour(plate, plateTheme, style);
+  const FINISH = { rubber: 1, powder: 2, gloss: 0, castIron: 1, hammertone: 2, machined: 3 };
+  const blackOxide = theme.barFinish === 'blackOxide';
   const M = {
     chrome: { colour: [0.72, 0.76, 0.80], metal: 1, rough: 0.23, finish: 3 },
-    shaft: { colour: [0.52, 0.56, 0.60], metal: 1, rough: 0.31, finish: 3 },
-    knurl: { colour: [0.50, 0.54, 0.58], metal: 1, rough: 0.44, knurl: true },
+    blackSteel: { colour: [0.11, 0.11, 0.12], metal: 0.6, rough: 0.5, finish: 2 },
+    shaft: blackOxide ? { colour: [0.2, 0.21, 0.23], metal: 1, rough: 0.42, finish: 3 } : { colour: [0.52, 0.56, 0.60], metal: 1, rough: 0.31, finish: 3 },
+    knurl: blackOxide ? { colour: [0.19, 0.2, 0.22], metal: 1, rough: 0.5, knurl: true } : { colour: [0.50, 0.54, 0.58], metal: 1, rough: 0.44, knurl: true },
     collar: { colour: [0.16, 0.16, 0.16], metal: 0.4, rough: 0.55 },
-    plate: (family, fill) => ({ colour: linearRGB(fill), metal: family === 'bumper' ? 0 : 0.08,
-      rough: family === 'bumper' ? 0.68 : 0.36, finish: family === 'bumper' ? 1 : 2 }),
+    plate: (plate, fill) => {
+      const m = plateThemeMaterial(plate, plateTheme, style);
+      return { colour: linearRGB(fill), metal: m.metal, rough: m.roughness, finish: FINISH[m.finish] ?? 0 };
+    },
   };
+  const hubMaterial = (plate, fill) => {
+    const m = plateThemeMaterial(plate, plateTheme, style);
+    if (theme.hubFinish === 'blackSteel') return M.blackSteel;
+    if (theme.hubFinish === 'castIron' || theme.hubFinish === 'hammertone') return { ...M.plate(plate, fill) };
+    return M.chrome;
+  };
+  const details = new Set(theme.details || []);
 
   function upload(mesh) {
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -306,9 +322,11 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     const profile = plateProfile(disc.family, disc.radius * 2, disc.thickness);
     const mesh = latheMesh(profile, 96, 2);
     const colour = plateColour(disc.plate);
+    const material = plateThemeMaterial(disc.plate, plateTheme, style);
+    const ratios = plateThemeRatios(disc.plate, plateTheme, style);
     const entry = add(mesh, disc.centerX, null, [
-      { offset: 0, count: mesh.hubCount, material: M.chrome },
-      { offset: mesh.hubCount, count: mesh.bodyCount, material: M.plate(disc.family, colour.fill) },
+      { offset: 0, count: mesh.hubCount, material: hubMaterial(disc.plate, colour.fill) },
+      { offset: mesh.hubCount, count: mesh.bodyCount, material: M.plate(disc.plate, colour.fill) },
     ]);
     discEntries.push({ disc, entry });
     const R = disc.radius;
@@ -317,11 +335,19 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
       positions: new Float32Array([faceX, -extent, -extent, faceX, -extent, extent, faceX, extent, extent, faceX, extent, -extent]),
       normals: new Float32Array([-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0]),
       uvs: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]), indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
-    }, disc.centerX, { colour: hexToRGB(colour.fill), photo: true, family: disc.family,
-      hubRatio: disc.family === 'bumper' ? .57 : .245, boreRatio: BORE_RADIUS / R });
+    }, disc.centerX, { colour: hexToRGB(colour.fill), photo: true, family: disc.family, photoFamily: material.photoFamily,
+      hubRatio: ratios.photoHub, boreRatio: BORE_RADIUS / R });
     photoEntries.push({ disc, entry: photo });
-    const hub = Math.max(BORE_RADIUS + 8, (disc.family === 'bumper' ? 0.57 : .245) * R);
-    const rim = disc.family === 'bumper' ? 0.9 * R : disc.family === 'steel' ? 0.86 * R : R;
+    const hub = Math.max(BORE_RADIUS + 8, ratios.hub * R);
+    const rim = ratios.rim * R;
+    // Construction details follow the disc through explode (localOffset).
+    const detail = (mesh, offset, mat) => { const e = add(mesh, disc.centerX, mat); e.localOffset = offset; discEntries.push({ disc, entry: e }); };
+    if (details.has('boltedHub')) for (let i = 0; i < 6; i++) { const a = (i + .5) / 6 * Math.PI * 2, orbit = hub * .72; for (const s of [-1, 1]) detail(cylinderMesh(5, 2.8), [s * (disc.thickness / 2 + .2), Math.cos(a) * orbit, Math.sin(a) * orbit], { colour: [0.55, 0.57, 0.6], metal: 1, rough: 0.45 }); }
+    if (details.has('chromeBoreRing')) detail(cylinderMesh(BORE_RADIUS + 6, disc.thickness + 2.4), [0, 0, 0], M.chrome);
+    if (details.has('calibrationPlugs')) for (const a of [Math.PI / 4, Math.PI * 5 / 4]) detail(cylinderMesh(7, 2), [-(disc.thickness / 2 + .2), Math.cos(a) * .62 * R, Math.sin(a) * .62 * R], { colour: [0.7, 0.72, 0.75], metal: 1, rough: 0.3 });
+    if (details.has('machinedRimRing')) detail(cylinderMesh(R + .3, Math.max(2, disc.thickness * .35)), [0, 0, 0], { colour: [0.78, 0.8, 0.83], metal: 1, rough: 0.2, finish: 3 });
+    if (details.has('colourBand') && colour.band) detail(cylinderMesh(R + .6, Math.max(6, disc.thickness * .34)), [0, 0, 0], { colour: linearRGB(colour.band), metal: 0, rough: 0.7, finish: 1 });
+    if (details.has('hubRing')) detail(cylinderMesh(hub + 4, disc.thickness + 1.6), [0, 0, 0], { colour: linearRGB(colour.ink), metal: 0, rough: 0.5, finish: 2 });
     const cap = (rim - hub) * 0.5, w = cap * 2.2;
     const faceOffset = disc.thickness / 2 + 1.6;
     const y = (hub + rim) / 2;
@@ -342,7 +368,7 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     const brandPositions = new Float32Array(positions);
     for (let i = 1; i < brandPositions.length; i += 3) brandPositions[i] -= y * 2;
     const brand = add({ ...quad, positions: brandPositions }, disc.centerX,
-      { colour: hexToRGB(colour.ink), unlit: labelTexture({ value: 'CADENCE', unit: '' }) });
+      { colour: hexToRGB(colour.ink), unlit: labelTexture({ value: theme.brand ?? 'CADENCE', unit: '' }) });
     labelEntries.push({ disc, entry: brand });
   }
   const collarEntries = [];
@@ -394,7 +420,8 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       for (const { entry } of photoEntries) {
         const material = entry.parts[0].material;
-        if ((material.family === 'bumper' ? 'bumper' : 'steel') === family) material.texture = texture;
+        const wanted = material.photoFamily === null ? null : (material.photoFamily || (material.family === 'bumper' ? 'bumper' : 'steel'));
+        if (wanted === family) material.texture = texture;
       }
       request();
     };

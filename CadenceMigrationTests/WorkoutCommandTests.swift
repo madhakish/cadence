@@ -8,7 +8,7 @@ import XCTest
 @MainActor
 final class WorkoutCommandTests: XCTestCase {
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -289,7 +289,7 @@ final class WorkoutCommandTests: XCTestCase {
             .appendingPathComponent("cadence-command-identity-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let config = ModelConfiguration("command-identity", schema: schema, url: directory.appendingPathComponent("Cadence.store"))
         let command: WorkoutCommand
         let encoder = JSONEncoder()

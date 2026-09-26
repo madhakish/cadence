@@ -761,8 +761,19 @@ struct GymEditorView: View {
                         Text(policy.label).tag(policy)
                     }
                 }
+                Picker("Plate theme", selection: Binding(
+                    get: { gym.plateTheme },
+                    set: { gym.plateTheme = $0 }
+                )) {
+                    ForEach(PlateThemeID.allCases) { theme in
+                        Text(theme.label).tag(theme)
+                    }
+                }
             } footer: {
-                Text("Cadence includes collars in the achieved weight and applies this policy whenever a barbell prescription is snapped to your available plates.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cadence includes collars in the achieved weight and applies this policy whenever a barbell prescription is snapped to your available plates.")
+                    Text("Changes how plates look on the bar for this gym; inventory and totals are unchanged.")
+                }
             }
 
             Section {

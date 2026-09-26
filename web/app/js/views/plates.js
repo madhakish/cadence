@@ -9,12 +9,12 @@ const plateKey = (plate, style) => ui.h("span", { class: "plate-key" },
   plateBadgeSVG(plate, style),
   ui.h("span", { class: `title${plate.unit === "kg" ? " accent" : ""}`, text: C.plateLabel(plate) }));
 
-function expandedBar(solution, plateStyle, requestedLb = null) {
+function expandedBar(solution, plateStyle, requestedLb = null, plateTheme = "custom") {
   let inspectionStage;
   ui.pushScreen({ title: "Loaded bar", onClose: () => inspectionStage?.dispose?.(), build: (body) => {
-    const rendered = barbellSVG(solution, "full", plateStyle);
+    const rendered = barbellSVG(solution, "full", plateStyle, { plateTheme });
     inspectionStage = barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "expanded" });
-    body.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle }));
+    body.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle, plateTheme }));
   } });
 }
 
@@ -137,14 +137,15 @@ export async function openPlateCalculator() {
         const solution = C.solve(targetLb, bar, availablePlates(), 10,
           gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
         ui.clear(output);
-        const rendered = barbellSVG(solution, "full", plateStyle);
+        const plateTheme = gym?.plateTheme || "custom";
+        const rendered = barbellSVG(solution, "full", plateStyle, { plateTheme });
         output.append(ui.h("div", { class: "section-heading" },
           ui.h("div", { class: "section-title", text: "Load on the bar" })),
         barbellStage(rendered, {
           caption: "Tap to inspect", emphasis: "hero",
-          onExpand: () => expandedBar(solution, plateStyle, targetLb),
+          onExpand: () => expandedBar(solution, plateStyle, targetLb, plateTheme),
         }),
-        loadoutSummary(targetLb, solution, { plateStyle }));
+        loadoutSummary(targetLb, solution, { plateStyle, plateTheme }));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
         if (!solution.satisfiesPolicy) output.append(ui.h("div", { class: "warning-panel", text: `No available plate stack satisfies ${C.loadingPolicyLabel(solution.policy).toLowerCase()}; showing the closest load.` }));
         if (solution.isOffTarget) output.append(ui.h("div", { class: "warning-panel", text: `Closest load differs from the request by ${C.trim(Math.abs(solution.deviationLb), 2)} lb / ${C.trim(Math.abs(C.kgFromLb(solution.deviationLb)), 2)} kg.` }));
@@ -163,14 +164,15 @@ export async function openPlateCalculator() {
           .filter((count) => count.plate && count.count > 0);
         const solution = C.enteredPlateSolution(bar, perSide, gym?.collarWeightLb || 0);
         ui.clear(output);
-        const rendered = barbellSVG(solution, "full", plateStyle);
+        const plateTheme = gym?.plateTheme || "custom";
+        const rendered = barbellSVG(solution, "full", plateStyle, { plateTheme });
         output.append(ui.h("div", { class: "section-heading" },
           ui.h("div", { class: "section-title", text: "On the bar" })),
         barbellStage(rendered, {
           caption: "Entered stack · tap to inspect", emphasis: "hero",
-          onExpand: () => expandedBar(solution, plateStyle),
+          onExpand: () => expandedBar(solution, plateStyle, null, plateTheme),
         }),
-        loadoutSummary(null, solution, { plateStyle }));
+        loadoutSummary(null, solution, { plateStyle, plateTheme }));
         const mixed = mixedEquipmentNote(solution); if (mixed) output.append(mixed);
 
         ui.clear(orderEditor);

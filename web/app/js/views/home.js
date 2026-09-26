@@ -17,7 +17,7 @@ const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomin
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const wrap = ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
     barbellSVG(solution, "compact",
-      movementGroup === "olympic" ? "bumper" : "steel").svg);
+      movementGroup === "olympic" ? "bumper" : "steel", { plateTheme: gym?.plateTheme || "custom" }).svg);
   for (const detail of prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, stationDenomination)) {
     wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
   }

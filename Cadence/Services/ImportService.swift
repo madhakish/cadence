@@ -164,7 +164,7 @@ enum ImportService {
     }
     private struct GymDTO: Decodable {
         var id: String?; var name: String?; var isDefault: Bool?; var defaultBarId: String?
-        var collarWeightLb: Double?; var loadingPolicy: String?
+        var collarWeightLb: Double?; var loadingPolicy: String?; var plateTheme: String?
         var plateToggles: [PlateToggleDTO]?; var barcodeImage: String?; var barcodeLabel: String?
     }
     private struct PlateToggleDTO: Decodable { var value: Double?; var unit: String?; var enabled: Bool? }
@@ -588,6 +588,8 @@ enum ImportService {
             _ = try requiredText(gym.name, "gyms[\(i)].name")
             try finite(gym.collarWeightLb, "gyms[\(i)].collarWeightLb", min: 0, max: 20)
             try known(gym.loadingPolicy, Set(LoadingPolicy.allCases.map(\.rawValue)), "gyms[\(i)].loadingPolicy")
+            try known(gym.plateTheme, Set(PlateThemeID.allCases.map(\.rawValue)), "gyms[\(i)].plateTheme",
+                      required: schemaVersion >= 15)
             for (pi, plate) in (gym.plateToggles ?? []).enumerated() {
                 try finite(plate.value, "gyms[\(i)].plateToggles[\(pi)].value", required: true, min: Double.leastNonzeroMagnitude)
                 _ = try requiredText(plate.unit, "gyms[\(i)].plateToggles[\(pi)].unit")
@@ -913,13 +915,13 @@ enum ImportService {
         let incomingGyms = (bundle.gyms ?? []).map { g in
             BackupContract.NamedEntity(id: g.id ?? "", name: trimmed(g.name), signature: gymSignature(
                 isDefault: g.isDefault, defaultBarId: g.defaultBarId, collarWeightLb: g.collarWeightLb,
-                loadingPolicy: g.loadingPolicy, barcodeLabel: g.barcodeLabel))
+                loadingPolicy: g.loadingPolicy, plateTheme: g.plateTheme, barcodeLabel: g.barcodeLabel))
         }
         let currentGyms: [BackupContract.NamedEntity] = bundle.gyms == nil ? [] :
             try context.fetch(FetchDescriptor<Gym>()).map { g in
                 BackupContract.NamedEntity(id: g.id, name: g.name, signature: gymSignature(
                     isDefault: g.isDefault, defaultBarId: g.defaultBarID, collarWeightLb: g.collarWeightLb,
-                    loadingPolicy: g.loadingPolicyRaw, barcodeLabel: g.barcodeLabel))
+                    loadingPolicy: g.loadingPolicyRaw, plateTheme: g.plateThemeRaw, barcodeLabel: g.barcodeLabel))
             }
 
         // A session id that isn't a valid UUID can never match a current
@@ -1055,10 +1057,12 @@ enum ImportService {
 
     private static func gymSignature(
         isDefault: Bool?, defaultBarId: String?, collarWeightLb: Double?,
-        loadingPolicy: String?, barcodeLabel: String?
+        loadingPolicy: String?, plateTheme: String?, barcodeLabel: String?
     ) -> String {
-        [(isDefault ?? false) ? "1" : "0", defaultBarId ?? "", String(collarWeightLb ?? 0),
-         loadingPolicy ?? "", barcodeLabel ?? ""].joined(separator: "\u{1F}")
+        // A missing/unknown theme restores as custom, so it compares as custom.
+        let theme = (plateTheme.flatMap(PlateThemeID.init(rawValue:)) ?? .custom).rawValue
+        return [(isDefault ?? false) ? "1" : "0", defaultBarId ?? "", String(collarWeightLb ?? 0),
+                loadingPolicy ?? "", theme, barcodeLabel ?? ""].joined(separator: "\u{1F}")
     }
 
     // MARK: - Makers
@@ -1154,6 +1158,8 @@ enum ImportService {
         if let id = g.id { gym.id = id }
         gym.collarWeightLb = g.collarWeightLb ?? 0
         gym.loadingPolicy = g.loadingPolicy.flatMap(LoadingPolicy.init(rawValue:)) ?? .closest
+        // Pre-v15 bundles carry no theme: restore as custom, never re-infer.
+        gym.plateTheme = g.plateTheme.flatMap(PlateThemeID.init(rawValue:)) ?? .custom
         gym.plateToggles = (g.plateToggles ?? []).map {
             PlateToggle(plate: Plate(value: $0.value ?? 0, unit: WeightUnit(rawValue: $0.unit ?? "lb") ?? .lb), enabled: $0.enabled ?? true)
         }

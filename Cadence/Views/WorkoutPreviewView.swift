@@ -17,6 +17,7 @@ struct WorkoutPreviewView: View {
         let id = UUID()
         let solution: PlateSolution
         let style: PlateVisualStyle
+        var theme: PlateThemeID = .custom
         let requestedLb: Double
     }
 
@@ -114,8 +115,9 @@ struct WorkoutPreviewView: View {
                                         stationDenomination: previewExercise?.stationDenomination
                                     )
                                 let style: PlateVisualStyle = previewExercise?.movementGroup == "olympic" ? .bumper : .steel
-                                BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style) {
-                                    plateDetail = PreviewPlateDetail(solution: solution, style: style, requestedLb: target.weightLb)
+                                let theme = defaultGym?.plateTheme ?? .custom
+                                BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style, plateTheme: theme) {
+                                    plateDetail = PreviewPlateDetail(solution: solution, style: style, theme: theme, requestedLb: target.weightLb)
                                 }
                                 Text("\(solution.loadout.perSideLabel) / side")
                                     .font(.caption.monospacedDigit())
@@ -173,8 +175,8 @@ struct WorkoutPreviewView: View {
         .sheet(item: $plateDetail) { detail in
             NavigationStack {
                 ScrollView {
-                    BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
-                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout, plateStyle: detail.style)
+                    BarbellInspectionView(solution: detail.solution, plateStyle: detail.style, plateTheme: detail.theme)
+                    LoadoutSummaryView(requestedLb: detail.requestedLb, loadout: detail.solution.loadout, plateStyle: detail.style, plateTheme: detail.theme)
                         .padding(.horizontal)
                 }
                 .navigationTitle("Loaded bar")

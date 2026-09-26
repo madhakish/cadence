@@ -18,15 +18,40 @@ public struct PlateFaceTint: Equatable, Sendable {
     public var blue: Double { gains[2] }
 
     public static let identity: [Double] = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
+    /// Share of the palette fill each pigment's median face reaches under the
+    /// scene light, matched to the approved plate-loading mockups: coated
+    /// rubber and painted iron read deep and matte (blue deepest), while
+    /// yellow and white stay bright. Black iron keeps its own dark fill.
+    public static let targets: [String: Double] = ["red": 0.62, "blue": 0.49, "green": 0.6, "yellow": 0.72, "white": 0.72, "black": 1]
+    public static func target(for token: String) -> Double { targets[token] ?? 0.6 }
     /// Median face luminance of each rendered sprite family (measured on the
-    /// shipped PNGs, hub excluded). The lift maps it to 85% of the fill so
-    /// the brighter 15% of texels keep headroom before clamping.
-    public static func lift(for style: PlateVisualStyle) -> Double {
-        0.85 / (style == .bumper ? 0.459 : 0.453)
+    /// shipped PNGs, hub excluded), lifted to the pigment's target share.
+    public static func lift(for style: PlateVisualStyle, token: String) -> Double {
+        lift(for: style, target: target(for: token))
+    }
+    public static func lift(for style: PlateVisualStyle, target: Double) -> Double {
+        target / (style == .bumper ? 0.459 : 0.453)
+    }
+    /// A theme fill takes the target of the nearest palette pigment (sRGB
+    /// distance): dark iron and black rubber land on black and keep their own
+    /// fill, federation colours on their hue. Mirrors web plateTintTargetForFill.
+    public static func target(forFill fill: UInt32) -> Double {
+        func distance(_ a: UInt32, _ b: UInt32) -> Double {
+            [16, 8, 0].reduce(0.0) { sum, shift in
+                let d = Double((a >> UInt32(shift)) & 255) - Double((b >> UInt32(shift)) & 255)
+                return sum + d * d
+            }
+        }
+        var best = ("", Double.infinity)
+        for token in ["red", "blue", "green", "yellow", "white", "black"] {
+            let d = distance(fill, PlatePalette.colour(for: token).fill)
+            if d < best.1 { best = (token, d) }
+        }
+        return target(for: best.0)
     }
     /// Fraction of the lift mixed in as grey: highlights whiten instead of
     /// saturating to a single hue.
-    public static let greyMix = 0.12
+    public static let greyMix = 0.04
 
     private static func channelGains(token: String) -> [Double] {
         guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
@@ -40,16 +65,30 @@ public struct PlateFaceTint: Equatable, Sendable {
         self.init(token: token, style: .steel)
     }
 
-    /// Black iron is the untinted texture; every other token colourises the
-    /// face from the palette fill.
+    /// Every palette token colourises the face from its fill, black iron
+    /// included; an unknown token keeps the untinted texture.
     public init(token: String, style: PlateVisualStyle) {
-        gains = PlateFaceTint.channelGains(token: token)
-        guard token != "black", let hex = PlatePalette.colours[token]?.fill else {
-            matrix = PlateFaceTint.identity
+        let gains = PlateFaceTint.channelGains(token: token)
+        guard let hex = PlatePalette.colours[token]?.fill else {
+            self.init(matrix: PlateFaceTint.identity, gains: gains)
             return
         }
-        let fill = gains
-        let lift = PlateFaceTint.lift(for: style)
+        let tint = PlateFaceTint(fill: hex, style: style, target: PlateFaceTint.target(for: token))
+        self.init(matrix: tint.matrix, gains: gains)
+    }
+
+    private init(matrix: [Double], gains: [Double]) {
+        self.matrix = matrix
+        self.gains = gains
+    }
+
+    /// Colourises the face from any fill (a theme's colour rule). `target`
+    /// overrides the pigment share; nil takes the nearest pigment's. Mirrors
+    /// web plateTintMatrixForFill.
+    public init(fill hex: UInt32, style: PlateVisualStyle, target: Double? = nil) {
+        let fill = [Double((hex >> 16) & 255) / 255, Double((hex >> 8) & 255) / 255, Double(hex & 255) / 255]
+        gains = fill
+        let lift = PlateFaceTint.lift(for: style, target: target ?? PlateFaceTint.target(forFill: hex))
         let grey = lift * PlateFaceTint.greyMix
         let luma = [0.2126, 0.7152, 0.0722]
         var rows: [Double] = []
@@ -118,7 +157,8 @@ public struct PlateGeometry: Equatable, Sendable {
     public static func familyLabel(_ family: String) -> String {
         switch family {
         case "bumper": return "Bumpers"
-        case "steel": return "Steel"
+        case "steel", "ipf", "machined": return "Steel"
+        case "iron": return "Iron"
         default: return "Change"
         }
     }
@@ -137,6 +177,9 @@ public struct BarbellScene: Sendable {
         public let radius: Double
         public let faceRadius: Double
         public let depth: Double
+        /// The plate theme the disc was laid out in; renderers colour and pick
+        /// materials from it without re-resolving.
+        public var theme: PlateThemeID = .custom
 
         /// The one spoken name for a plate on the bar, on both clients:
         /// "20 kg plate, 1 from inside, left side". Mirrors web
@@ -157,7 +200,7 @@ public struct BarbellScene: Sendable {
     public let faceScale: Double
 
     public init(loadout: Loadout, style: PlateVisualStyle, exploded: Bool,
-                geometry: [String: PlateGeometry] = [:]) {
+                geometry: [String: PlateGeometry] = [:], theme: PlateThemeID = .custom) {
         let angle = (exploded ? 38.0 : 18.0) * Double.pi / 180
         axisX = cos(angle)
         axisY = -sin(angle) * 0.24
@@ -168,7 +211,7 @@ public struct BarbellScene: Sendable {
         var previousFaceRadius = 0.0
         var pending: [Disc] = []
         for (index, plate) in plates.enumerated() {
-            let shape = geometry[plate.id] ?? PlateGeometry.reference(plate, style: style)
+            let shape = geometry[plate.id] ?? PlateTheme.geometry(plate, theme: theme, style: style)
             let radius = max(1, shape.diameter) * 0.18
             let depth = max(1, shape.thickness) * 0.36
             let faceRadius = radius * faceScale
@@ -179,7 +222,7 @@ public struct BarbellScene: Sendable {
                 let center = Double(side) * (cursor + depth / 2)
                 pending.append(Disc(plate: plate, side: side, index: index,
                     x: center * axisX, y: center * axisY, radius: radius,
-                    faceRadius: faceRadius, depth: depth * axisX))
+                    faceRadius: faceRadius, depth: depth * axisX, theme: theme))
             }
             cursor += depth + (exploded ? 0 : 2)
             previousFaceRadius = faceRadius

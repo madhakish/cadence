@@ -255,16 +255,19 @@ struct ExerciseDetailView: View {
                         }
                         if let contextualSolution {
                             let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                            let theme = defaultGym?.plateTheme ?? .custom
                             BarbellStageView(
                                 solution: contextualSolution,
                                 unit: set.enteredUnit,
                                 plateStyle: style,
+                                plateTheme: theme,
                                 onExpand: { showExpandedContextBar = true }
                             )
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? sessionEntry?.targetWeightLb,
                                 loadout: contextualSolution.loadout,
-                                plateStyle: style
+                                plateStyle: style,
+                                plateTheme: theme
                             )
                         }
                     }
@@ -568,12 +571,14 @@ struct ExerciseDetailView: View {
                 NavigationStack {
                     ScrollView {
                         let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
+                        let theme = defaultGym?.plateTheme ?? .custom
                         VStack(alignment: .leading, spacing: 18) {
-                            BarbellInspectionView(solution: solution, plateStyle: style)
+                            BarbellInspectionView(solution: solution, plateStyle: style, plateTheme: theme)
                             LoadoutSummaryView(
                                 requestedLb: contextualSet?.targetWeightLb ?? sessionEntry?.targetWeightLb,
                                 loadout: solution.loadout,
-                                plateStyle: style
+                                plateStyle: style,
+                                plateTheme: theme
                             )
                             .padding(.horizontal)
                         }

@@ -30,6 +30,8 @@ public enum BarbellInspector {
         public let index: Int         // stack position from the shoulder
         public let family: String
         public let centerX, radius, thickness: Double
+        /// The plate theme the disc was laid out in.
+        public var theme: PlateThemeID = .custom
     }
 
     public struct Collar: Equatable, Sendable {
@@ -49,10 +51,10 @@ public enum BarbellInspector {
     }
 
     public static func layout(loadout: Loadout, style: PlateVisualStyle, explode: Double,
-                              geometry: [String: PlateGeometry] = [:]) -> Layout {
+                              geometry: [String: PlateGeometry] = [:], theme: PlateThemeID = .custom) -> Layout {
         let bar = isWomensBar(loadout.bar) ? BarDimensions.womens : BarDimensions.mens
         let plates = loadout.perSide.flatMap { count in Array(repeating: count.plate, count: max(0, count.count)) }
-        let shapes = plates.map { geometry[$0.id] ?? PlateGeometry.reference($0, style: style) }
+        let shapes = plates.map { geometry[$0.id] ?? PlateTheme.geometry($0, theme: theme, style: style) }
         let maxRadius = shapes.reduce(bar.collarRadius) { max($0, $1.diameter / 2) }
         // At 50° yaw, a face projects radius*sin(yaw) along the stack. The gap
         // exceeds diameter*tan(50°), with air between even the largest faces.
@@ -66,8 +68,8 @@ public enum BarbellInspector {
                 let shape = shapes[index]
                 let centerX = cursor + shape.thickness / 2 + gap * Double(index)
                 discs.append(Disc(plate: plate, side: side, index: index,
-                                  family: PlateGeometry.family(plate, style: style),
-                                  centerX: Double(side) * centerX, radius: shape.diameter / 2, thickness: shape.thickness))
+                                  family: PlateTheme.family(plate, theme: theme, style: style),
+                                  centerX: Double(side) * centerX, radius: shape.diameter / 2, thickness: shape.thickness, theme: theme))
                 cursor += shape.thickness
             }
             stackEnd = cursor
@@ -152,6 +154,23 @@ public enum BarbellInspector {
             let dish = min(2.4, 0.12 * thickness), bevel = min(1.2, 0.15 * thickness)
             half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - dish)),
                     (0.82 * r, -(ht - dish)), (0.89 * r, -ht), (r - bevel, -ht), (r, -(ht - bevel))]
+        case "ipf":
+            // Calibrated disc: thin painted face recessed inside a raised outer lip.
+            let hub = max(boreRadius + 8, 0.2 * r), proud = 0.8
+            let lip = min(2.2, 0.12 * thickness), lipW = 0.06 * r
+            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - lip)),
+                    (r - lipW - 4, -(ht - lip)), (r - lipW, -ht), (r - 1, -ht), (r, -(ht - 1))]
+        case "iron":
+            // Cast iron: raised centre boss and a raised rim lip around a sunken face.
+            let boss = max(boreRadius + 10, 0.24 * r), proud = 1.2
+            let lip = min(3, 0.14 * thickness), lipW = 0.09 * r
+            half = [(boreRadius, -(ht + proud)), (boss, -(ht + proud)), (boss + 3, -(ht - lip)),
+                    (r - lipW - 3, -(ht - lip)), (r - lipW, -ht), (r - 1.5, -ht), (r, -(ht - 1.5))]
+        case "machined":
+            // Turned steel: flat face with one shallow machined step.
+            let hub = max(boreRadius + 8, 0.22 * r), proud = 0.8, step = min(1.5, 0.08 * thickness)
+            half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -(ht - step)),
+                    (0.6 * r, -(ht - step)), (0.62 * r, -ht), (r - 1, -ht), (r, -(ht - 1))]
         default:
             let hub = max(boreRadius + 8, 0.25 * r), proud = 0.7, bevel = min(1.5, 0.15 * thickness)
             half = [(boreRadius, -(ht + proud)), (hub, -(ht + proud)), (hub, -ht), (r - bevel, -ht), (r, -(ht - bevel))]

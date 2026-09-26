@@ -9,6 +9,7 @@ import { PROGRAM_TEMPLATES, createProgramFromTemplate, bootstrapLiftFromHistory,
 import { exportProgramText, importProgramText, programFilename, validateProgramFile } from "../program-file.js";
 import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { historySetPresentationForTest } from "./history.js";
+import { PLATE_THEME_IDS, PLATE_THEME_LABELS } from "../plate-theme.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
 // Module cycle with session.js is safe: these are hoisted function exports
@@ -154,7 +155,7 @@ export async function render(host) {
   }
   gymAndEquipment.append(gymList);
   gymAndEquipment.append(ui.h("button", { class: "btn ghost wide", text: "+ Add gym", onClick: async () => {
-    const g = { name: `Gym ${gyms.length + 1}`, isDefault: gyms.length === 0, defaultBarId: C.barId(C.BARS.bar45lb), collarWeightLb: 0, loadingPolicy: "closest", plateToggles: C.ALL_STANDARD.map((p) => ({ value: p.value, unit: p.unit, enabled: true })), barcodeImage: null, barcodeLabel: "Membership tag" };
+    const g = { name: `Gym ${gyms.length + 1}`, isDefault: gyms.length === 0, defaultBarId: C.barId(C.BARS.bar45lb), collarWeightLb: 0, loadingPolicy: "closest", plateTheme: "custom", plateToggles: C.ALL_STANDARD.map((p) => ({ value: p.value, unit: p.unit, enabled: true })), barcodeImage: null, barcodeLabel: "Membership tag" };
     await Gyms.save(g); ui.nav.refresh();
   } }));
 
@@ -348,6 +349,12 @@ function gymEditor(g) {
         policySel.addEventListener("change", async () => { g.loadingPolicy = policySel.value; await Gyms.save(g); });
         body.append(ui.field("Loading policy", policySel));
         body.append(ui.h("div", { class: "sub", text: "Collars count toward achieved weight. The policy is applied whenever Cadence snaps a barbell target to this gym's plate inventory." }));
+        const themeSel = ui.h("select", {}, ...PLATE_THEME_IDS.map((id) => ui.h("option", {
+          value: id, text: PLATE_THEME_LABELS[id], selected: id === (g.plateTheme || "custom"),
+        })));
+        themeSel.addEventListener("change", async () => { g.plateTheme = themeSel.value; await Gyms.save(g); });
+        body.append(ui.field("Plate theme", themeSel));
+        body.append(ui.h("div", { class: "sub", text: "Changes how plates look on the bar for this gym; inventory and totals are unchanged." }));
 
         body.append(ui.h("div", { class: "section-title", text: "Plate inventory" }));
         const inv = ui.h("div", { class: "card" });
@@ -1393,21 +1400,22 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
             const solution = C.solveLoad(current.weightLb, selectedBar,
               stationPlates(enteredUnit, sessionGym, e.stationDenomination ?? null), 10,
               sessionGym?.collarWeightLb || 0, sessionGym?.loadingPolicy || "closest");
-            const rendered = barbellSVG(solution, "full", style);
+            const plateTheme = sessionGym?.plateTheme || "custom";
+            const rendered = barbellSVG(solution, "full", style, { plateTheme });
             const requestedLb = current.targetWeightLb ?? sessionEntry.targetWeightLb ?? current.weightLb;
             live.append(barbellStage(rendered, {
               caption: "Exact mirrored stack · counts are per side", emphasis: "session",
               onExpand: () => {
                 let inspectionStage;
                 return ui.pushScreen({ title: `${e.name} · loaded bar`, onClose: () => inspectionStage?.dispose?.(), build: (screen) => {
-                  inspectionStage = barbellStage(barbellSVG(solution, "full", style), {
+                  inspectionStage = barbellStage(barbellSVG(solution, "full", style, { plateTheme }), {
                     caption: "Exact mirrored stack · counts are per side", emphasis: "expanded",
                   });
-                  screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle: style }));
+                  screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle: style, plateTheme }));
                   const expandedMixed = mixedEquipmentNote(solution); if (expandedMixed) screen.append(expandedMixed);
                 } });
               },
-            }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle: style }));
+            }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle: style, plateTheme }));
             const mixed = mixedEquipmentNote(solution); if (mixed) live.append(mixed);
           }
           body.append(live);

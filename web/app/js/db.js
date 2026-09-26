@@ -6,10 +6,11 @@ import { clearClockRecord, clearAnyClockRecord } from "./workout-clock.js";
 import { clearGymTagDay } from "./gym-tag.js";
 import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
+import { PLATE_THEME_IDS, isPlateThemeID, inferredPlateTheme } from "./plate-theme.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 9;
-export const BACKUP_SCHEMA_VERSION = 14;
+const DB_VERSION = 10;
+export const BACKUP_SCHEMA_VERSION = 15;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -53,6 +54,8 @@ function open() {
       // Older upgraders already rewrite these stores. Do not race their
       // cursor writes with a second pass holding pre-normalized documents.
       if (event.oldVersion === 8) migrateToV9(req.transaction);
+      // No older upgrader rewrites gyms, so every pre-V10 store takes this pass.
+      if (event.oldVersion < 10) migrateToV10(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -87,6 +90,23 @@ function migrateToV9(transaction) {
       cursor.continue();
     };
   }
+}
+
+// V10 (#55): each gym records its plate theme. A gym that predates themes
+// takes the one its enabled inventory implies (single-unit → that unit's
+// plainest real set, mixed or empty → custom), exactly once, in the upgrade
+// transaction. Mirrors native Seeder.inferLegacyGymPlateThemes.
+function migrateToV10(transaction) {
+  transaction.objectStore("gyms").openCursor().onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (!cursor) return;
+    const gym = cursor.value;
+    if (!isPlateThemeID(gym.plateTheme)) {
+      const units = (gym.plateToggles || []).filter((t) => t.enabled).map((t) => t.unit);
+      cursor.update({ ...gym, plateTheme: inferredPlateTheme(units) });
+    }
+    cursor.continue();
+  };
 }
 
 function migrateToV4(transaction) {
@@ -298,6 +318,7 @@ const normalizeGym = (g) => ({
   id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`),
   collarWeightLb: Number.isFinite(g.collarWeightLb) ? Math.max(0, g.collarWeightLb) : 0,
   loadingPolicy: C.LOADING_POLICIES.includes(g.loadingPolicy) ? g.loadingPolicy : "closest",
+  plateTheme: isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom",
 });
 const hasPortableProgramSlots = (program) => (program.days || []).every((day) =>
   [...(day.lifts || []), ...(day.accessories || [])].every((slot) => isPortableUUID(slot.id)));
@@ -1040,6 +1061,7 @@ export const BACKUP_ENUMS = {
   coachingActions: ["accepted", "deferred", "dismissed", "overridden"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "repPR", "programNote"],
   loadBases: C.LOAD_BASES, loadingPolicies: C.LOADING_POLICIES,
+  plateThemes: PLATE_THEME_IDS,
 };
 
 // Validate the entire payload before the first read or write. IndexedDB will
@@ -1315,6 +1337,7 @@ export function validateBackup(bundle) {
     textValue(gym.name, `${path}.name`, true);
     numberValue(gym.collarWeightLb, `${path}.collarWeightLb`, { min: 0, max: 20 });
     enumValue(gym.loadingPolicy, BACKUP_ENUMS.loadingPolicies, `${path}.loadingPolicy`);
+    enumValue(gym.plateTheme, BACKUP_ENUMS.plateThemes, `${path}.plateTheme`, schemaVersion >= 15);
     each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
       numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
       enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`, schemaVersion >= 1);
@@ -1410,7 +1433,8 @@ const trackSignature = (t) => [
 
 const gymSignature = (g) => [
   boolFlag(g.isDefault), strOrEmpty(g.defaultBarId), numOrZero(g.collarWeightLb),
-  strOrEmpty(g.loadingPolicy), strOrEmpty(g.barcodeLabel),
+  // A missing/unknown theme restores as custom, so it compares as custom.
+  strOrEmpty(g.loadingPolicy), isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom", strOrEmpty(g.barcodeLabel),
 ].join("");
 
 // Sessions and programs have no shallow signature covering every field (a
@@ -1678,6 +1702,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (bundle.gyms) writes.set("gyms", bundle.gyms.map((g) => ({
     ...g,
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
+    // Pre-v15 bundles carry no theme: restore as custom, never re-infer.
+    plateTheme: isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom",
   })));
   if (bundle.exercises) writes.set("exercises", bundle.exercises.map((exercise) => normalizeExercise({
     ...exercise, watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite),

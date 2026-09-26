@@ -837,11 +837,12 @@ export async function openSession(id) {
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
+      const plateTheme = gymState.value?.plateTheme || "custom";
       const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
       // Presentation by surface (the current set's stage vs a set row);
       // emphasis by state. State never changes geometry.
       const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle,
-        { emphasis: isCurrent ? "current" : "muted" });
+        { emphasis: isCurrent ? "current" : "muted", plateTheme });
       const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
       const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
       if (isCurrent) {
@@ -853,13 +854,13 @@ export async function openSession(id) {
           onExpand: () => {
             let inspectionStage;
             ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, onClose: () => inspectionStage?.dispose?.(), build: (screen) => {
-              const expanded = barbellSVG(solution, "full", plateStyle);
+              const expanded = barbellSVG(solution, "full", plateStyle, { plateTheme });
               inspectionStage = barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" });
-              screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle }));
+              screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle, plateTheme }));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
           },
-        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle }));
+        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle, plateTheme }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
         wrap.append(rendered.svg);

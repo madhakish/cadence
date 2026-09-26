@@ -727,6 +727,7 @@ private struct ExpandedLoadout: Identifiable {
     let solution: PlateSolution
     let requestedLb: Double?
     let style: PlateVisualStyle
+    var theme: PlateThemeID = .custom
 }
 
 // MARK: - Exercise section
@@ -1136,16 +1137,19 @@ private struct ExerciseSection: View {
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
                         let exactSolution = solvedPlateSolution(for: set)
                         let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
+                        let theme = gym?.plateTheme ?? .custom
                         if emphasized && isCurrent {
                             BarbellStageView(
                                 solution: exactSolution,
                                 unit: set.enteredUnit,
                                 plateStyle: style,
+                                plateTheme: theme,
                                 onExpand: {
                                     expandedLoadout = ExpandedLoadout(
                                         solution: exactSolution,
                                         requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                        style: style
+                                        style: style,
+                                        theme: theme
                                     )
                                 }
                             )
@@ -1153,6 +1157,7 @@ private struct ExerciseSection: View {
                             BarbellView(
                                 solution: exactSolution,
                                 plateStyle: style,
+                                plateTheme: theme,
                                 presentation: .compactSide,
                                 emphasis: isCurrent ? .current : .muted
                             )
@@ -1161,7 +1166,8 @@ private struct ExerciseSection: View {
                             LoadoutSummaryView(
                                 requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
                                 loadout: exactSolution.loadout,
-                                plateStyle: style
+                                plateStyle: style,
+                                plateTheme: theme
                             )
                         }
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
@@ -1328,10 +1334,11 @@ private struct ExerciseSection: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        BarbellInspectionView(solution: detail.solution, plateStyle: detail.style)
+                        BarbellInspectionView(solution: detail.solution, plateStyle: detail.style, plateTheme: detail.theme)
                         LoadoutSummaryView(
                             requestedLb: detail.requestedLb,
                             loadout: detail.solution.loadout,
+                            plateTheme: detail.theme,
                             plateStyle: detail.style
                         )
                             .padding(.horizontal)
