@@ -3,7 +3,8 @@
 import * as C from "./core.js";
 import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
 import { PLATE_SPRITES } from "./plate-sprites.js";
-import { barbellGL, BACKDROPS } from "./barbell-gl.js";
+import { barbellGL } from "./barbell-gl.js";
+import { barbellLayout, inspectorWidth } from "./barbell-inspector.js";
 
 // Rendered loaded-bar sprites (web/tools/render-plate-sprites.py): one per
 // plate shape and scene angle, plus shaft, sleeves, and collars. Placement
@@ -41,7 +42,7 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // an honest edge-on load-order diagram, where a large horizontal number would
 // imply physically impossible plate thickness. Decorative: callers provide
 // the adjacent denomination label. Mirrors PlateFaceBadge.
-export function plateBadgeSVG(plate, style = "steel") {
+export function plateBadgeSVG(plate, style = "steel", { exact = false } = {}) {
   const colour = C.plateColour(C.plateColorToken(plate, style));
   const foreground = colour.ink;
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
@@ -54,7 +55,7 @@ export function plateBadgeSVG(plate, style = "steel") {
   );
   const value = el("text", { x: 26, y: 24, "text-anchor": "middle",
     "font-size": 15, "font-weight": 800, fill: foreground });
-  value.textContent = C.trim(plate.value, 2);
+  value.textContent = exact ? String(plate.value) : C.trim(plate.value, 2);
   const unit = el("text", { x: 26, y: 36, "text-anchor": "middle",
     "font-size": 9, "font-weight": 700, fill: foreground });
   unit.textContent = plate.unit;
@@ -215,21 +216,69 @@ export function barbellStage(rendered, {
   const inspection = emphasis === "expanded";
   // The inspection opens straight ahead, assembled; a tap explodes it.
   let exploded = false;
-  // The inspection shows the solid where WebGL2 exists; the sprite SVG then
-  // becomes the focusable, spoken layer over it (same plates, same order).
-  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
+  const surface = uiText("div", "barbell-inspection-surface", "");
+  const captions = uiText("div", "barbell-disc-captions", "");
+  const discs = rendered.solution.perSide.flatMap(({ plate, count }) => Array.from({ length: count }, () => plate));
+  const labels = discs.map((plate, index) => {
+    const label = uiText("span", "barbell-disc-caption", `${plate.value} ${plate.unit}`);
+    label.dataset.stackIndex = String(index);
+    label.tabIndex = 0;
+    label.setAttribute("role", "img");
+    label.setAttribute("aria-label", `${plate.value} ${plate.unit} plate, ${index + 1} from inside, one side shown`);
+    captions.append(label);
+    return label;
+  });
+  const positionCaption = (index, x, y) => {
+    const label = labels[index], bounds = label.getBoundingClientRect();
+    const half = bounds.width / 2 + 2;
+    label.style.left = `clamp(${half}px, ${x}%, calc(100% - ${half}px))`;
+    label.style.top = `clamp(4px, ${y}%, calc(100% - ${bounds.height + 4}px))`;
+  };
+  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", {
+    exploded,
+    onProject: (positions, settled) => {
+      captions.hidden = !exploded || !settled;
+      for (const { index, x, y } of positions) positionCaption(index, x, y);
+    },
+  }) : null;
   const live = solid?.supported ? solid : null;
   stage.classList.toggle("solid", Boolean(live));
   const paint = () => {
     const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
+    captions.hidden = !exploded || Boolean(live);
     if (live) {
-      drawing.svg.classList.add("barbell-a11y-layer");
-      track.replaceChildren(live.canvas, drawing.svg);
+      live.canvas.setAttribute("aria-hidden", "true");
+      surface.replaceChildren(live.canvas, captions);
+      const width = inspectorWidth(barbellLayout(rendered.solution, rendered.plateStyle || "steel", exploded ? 1 : 0), 0, exploded);
+      surface.style.minWidth = `${width}px`;
+      track.replaceChildren(surface);
       live.setExploded(exploded);
+    } else if (inspection) {
+      // The sprite fallback uses the same near-side composition. Its labels
+      // are screen text, so camera projection cannot shrink their type.
+      const scene = drawing.scene;
+      const near = scene.discs.filter(d => d.side < 0);
+      const left = Math.min(-scene.end * scene.axisX - 12, ...near.map(d => d.x - d.faceRadius - d.depth));
+      const right = -scene.shoulder * scene.axisX + (exploded ? 18 : 76);
+      const width = right - left;
+      drawing.svg.setAttribute("viewBox", `${scene.width / 2 + left} 0 ${width} ${scene.height}`);
+      for (const n of drawing.svg.querySelectorAll('[tabindex]')) n.removeAttribute('tabindex');
+      drawing.svg.setAttribute('aria-hidden', 'true');
+      for (const d of near) {
+        positionCaption(d.index, (d.x - left) / width * 100, 86);
+      }
+      for (const n of drawing.svg.querySelectorAll('.barbell-plate-label')) {
+        n.textContent = `${n.dataset.plateValue} ${n.dataset.plateDenomination.split(' ').at(-1)}`;
+      }
+      const minimum = inspectorWidth(barbellLayout(rendered.solution, rendered.plateStyle || "steel", exploded ? 1 : 0), 0, exploded);
+      const captionSpan = Math.max(112, ...labels.map(label => label.getBoundingClientRect().width + 32));
+      surface.style.minWidth = `${exploded ? Math.max(minimum, discs.length * captionSpan + 32) : 0}px`;
+      surface.replaceChildren(drawing.svg, captions);
+      track.replaceChildren(surface);
+      track.style.setProperty("--barbell-natural-width", `${exploded ? width : 0}px`);
     } else {
       track.replaceChildren(drawing.svg);
     }
-    track.style.setProperty("--barbell-natural-width", `${exploded ? drawing.scene.width : 0}px`);
     stage.classList.toggle("exploded", exploded);
   };
   paint();
@@ -237,14 +286,12 @@ export function barbellStage(rendered, {
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.
-    const wording = () => live
-      ? (exploded ? "Exploded · tap to assemble" : "Assembled · tap to explode")
-      : (exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect");
+    const wording = () => exploded ? "Assemble stack" : "Inspect plates";
     const toggle = uiText("button", "btn ghost sm barbell-explode", wording());
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "false");
     toggle.setAttribute("aria-label", `${toggle.textContent}. Explode plates`);
-    const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    const swipe = uiText("span", "sub", "Scroll for more plates");
     swipe.hidden = true;
     const focusNote = uiText("span", "sub barbell-focus-note", "");
     focusNote.setAttribute("aria-hidden", "true");
@@ -254,44 +301,24 @@ export function barbellStage(rendered, {
       toggle.textContent = wording();
       toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
-      swipe.hidden = !exploded || Boolean(live);
+      swipe.hidden = !exploded || track.scrollWidth <= track.clientWidth + 1;
     };
     toggle.addEventListener("click", flip);
     // A plate is focusable so its name can be read; activating it must not
     // flip the view under a screen-reader user.
-    track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
-    // Keyboard users see which hidden plate holds focus over the solid.
+    let down = null;
+    track.addEventListener("pointerdown", event => { down = { x: event.clientX, y: event.clientY }; });
+    track.addEventListener("click", (event) => {
+      if (event.target.closest(".barbell-disc-caption")) return;
+      if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 8) { down = null; return; }
+      down = null;
+      flip();
+    });
+    // Keep the focused plate's description visible alongside the diagram.
     track.addEventListener("focusin", (event) => { focusNote.textContent = event.target.getAttribute?.("aria-label") || ""; });
     track.addEventListener("focusout", () => { focusNote.textContent = ""; });
     footer.append(toggle, swipe, focusNote);
-    if (live) {
-      // Backdrop and reset are the keyboard path for what drag, wheel, and
-      // pinch do by hand; the solid itself is not a control.
-      live.canvas.setAttribute("aria-hidden", "true");
-      const controls = uiText("div", "barbell-scene-controls", "");
-      const group = uiText("div", "barbell-backdrop", "");
-      group.setAttribute("role", "group");
-      group.setAttribute("aria-label", "Backdrop");
-      let current = "studio";
-      for (const [name, preset] of Object.entries(BACKDROPS)) {
-        const button = uiText("button", "btn ghost sm", preset.label);
-        button.type = "button";
-        button.dataset.backdrop = name;
-        button.setAttribute("aria-pressed", String(name === current));
-        button.addEventListener("click", () => {
-          current = name;
-          live.setBackdrop(name);
-          for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other.dataset.backdrop === name));
-        });
-        group.append(button);
-      }
-      const reset = uiText("button", "btn ghost sm barbell-reset-view", "Reset view");
-      reset.type = "button";
-      reset.setAttribute("aria-label", "Reset view. Returns the camera to the front view");
-      reset.addEventListener("click", () => live.reset());
-      controls.append(group, reset);
-      stage.append(controls);
-    }
+
   } else if (onExpand) {
     const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";
@@ -311,13 +338,14 @@ export function barbellStage(rendered, {
     list.setAttribute("aria-label", "Plates per side, inside to outside");
     for (const count of rendered.solution.perSide) {
       const row = uiText("li", "", "");
-      row.append(plateBadgeSVG(count.plate, rendered.plateStyle || "steel"),
-        uiText("span", "mono", `${C.plateLabel(count.plate)} × ${count.count} per side`));
+      row.append(plateBadgeSVG(count.plate, rendered.plateStyle || "steel", { exact: true }),
+        uiText("span", "mono", `${count.plate.value} ${count.plate.unit} × ${count.count} per side`));
       list.append(row);
     }
     if (!rendered.solution.perSide.length) list.append(uiText("li", "", rendered.solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
     stage.append(list);
   }
+  stage.dispose = () => live?.dispose();
   return stage;
 }
 

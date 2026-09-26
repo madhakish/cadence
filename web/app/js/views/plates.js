@@ -10,10 +10,11 @@ const plateKey = (plate, style) => ui.h("span", { class: "plate-key" },
   ui.h("span", { class: `title${plate.unit === "kg" ? " accent" : ""}`, text: C.plateLabel(plate) }));
 
 function expandedBar(solution, plateStyle, requestedLb = null) {
-  ui.pushScreen({ title: "Loaded bar", build: (body) => {
+  let inspectionStage;
+  ui.pushScreen({ title: "Loaded bar", onClose: () => inspectionStage?.dispose?.(), build: (body) => {
     const rendered = barbellSVG(solution, "full", plateStyle);
-    body.append(barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "expanded" }),
-      loadoutSummary(requestedLb, solution, { plateStyle }));
+    inspectionStage = barbellStage(rendered, { caption: "Mirrored stack · counts are per side", emphasis: "expanded" });
+    body.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle }));
   } });
 }
 

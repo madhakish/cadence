@@ -88,7 +88,8 @@ assert.match(toggle.getAttribute('aria-label'), /Explode plates/);
 toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(toggle.getAttribute('aria-pressed'),'true');
-assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), `${open.width}px`);
+const inspectionWidth = parseFloat(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'));
+assert.ok(inspectionWidth > 0 && inspectionWidth < open.width, 'inspection crops the mirrored bar to one sleeve');
 for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
   assert.equal(label.getAttribute('font-size'), '14');
   assert.equal(label.hasAttribute('textLength'), false);
@@ -98,7 +99,7 @@ assert.equal(JSON.stringify(solution), before);
 // A focusable plate can be activated to hear its name without flipping the
 // view, and the toggle's accessible name carries its visible text.
 {
-  const plate = inspector.querySelector('[tabindex="0"][data-plate-denomination]');
+  const plate = inspector.querySelector('.barbell-disc-caption[tabindex="0"]');
   plate.dispatchEvent(new plate.ownerDocument.defaultView.Event('click', { bubbles: true }));
 }
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true', 'activating a plate does not flip the inspection');
@@ -110,6 +111,30 @@ const firstIDs=[...inspector.querySelectorAll('[id]')].map(x=>x.id);
 const secondIDs=[...B.barbellSVG(solution,'full').svg.querySelectorAll('[id]')].map(x=>x.id);
 assert.ok(!secondIDs.some(id=>firstIDs.includes(id)), 'multiple views never collide in SVG paint-server IDs');
 assert.equal(inspector.querySelectorAll('image.barbell-collar, image.barbell-collar-near').length,2);
+// Inspection captions represent individual discs, with exact custom values
+// and units, independently of the projected/foreshortened artwork text.
+const customSolution = C.enteredPlateSolution(C.BARS.bar45lb, [
+  { plate: { value: 20, unit: 'kg' }, count: 2 },
+  { plate: { value: 0.625, unit: 'kg' }, count: 1 },
+]);
+const customBefore = JSON.stringify(customSolution);
+const customInspector = B.barbellStage(B.barbellSVG(customSolution, 'full', 'bumper'), { emphasis: 'expanded' });
+customInspector.querySelector('.barbell-explode').click();
+assert.deepEqual([...customInspector.querySelectorAll('.barbell-disc-caption')].map(n => n.textContent),
+  ['20 kg', '20 kg', '0.625 kg'], 'each disc has its own exact, unscaled caption');
+assert.equal(customInspector.querySelector('.barbell-inspection-surface').style.minWidth, '368px', 'fallback uses the same compact three-disc width as the solid');
+assert.match(customInspector.querySelector('.barbell-stack-list').textContent, /0\.625 kg × 1 per side/, 'inspection list retains exact custom precision');
+assert.equal(customInspector.querySelectorAll('.barbell-backdrop, .barbell-reset-view').length, 0);
+customInspector.querySelector('.barbell-explode').click();
+assert.ok(customInspector.querySelector('.barbell-disc-captions').hidden, 'assembled view keeps captions quiet');
+const dialog = document.createElement('div');
+dialog.tabIndex = -1;
+dialog.append(customInspector);
+document.body.append(dialog);
+customInspector.querySelector('.barbell-stage-track').click();
+assert.equal(customInspector.querySelector('.barbell-explode').getAttribute('aria-pressed'), 'true',
+  'tapping artwork inside the focusable app dialog still opens inspection');
+assert.equal(JSON.stringify(customSolution), customBefore, 'inspection never edits the loadout');
 const worker=readFileSync(new URL('../app/sw.js',import.meta.url),'utf8');
 for (const asset of ['js/barbell-scene.js','js/plate-sprites.js']) assert.ok(worker.includes(`"${asset}"`));
 {
