@@ -33,7 +33,7 @@ test('[WEB-PLATE-LABELS] exact denominations survive final layout and inspection
       };
     });
     for (const width of [390, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
       for (const id of ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8']) {
         const expected = await page.evaluate(id => window.renderFixture(id), id);
         const labels = page.locator('.barbell-plate-denomination');

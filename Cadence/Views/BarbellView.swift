@@ -539,8 +539,7 @@ struct LoadoutSummaryView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cell.count)
                         .font(.callout.bold().monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(cell.kind)
                         .font(.caption)
                         .foregroundStyle(.secondary)
