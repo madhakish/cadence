@@ -7,7 +7,7 @@ import { assertProgramEquipmentAllowed } from "../program-equipment.js";
 import { tfhCurrentPosition, tfhPrescription, tfhSynchronize, tfhPractice } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
-import { barbellSVG, barbellStage, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
+import { barbellSVG, barbellStage, barbellReadout, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
 import { exerciseDetail, exercisePickerList } from "./settings.js";
@@ -861,7 +861,7 @@ export async function openSession(id) {
         }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
-        wrap.append(rendered.svg);
+        wrap.append(rendered.svg, barbellReadout(solution));
       }
       if (solution.isOffTarget) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;

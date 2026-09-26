@@ -207,7 +207,7 @@ function labelTexture(text) {
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '900 96px system-ui, -apple-system, "Segoe UI", sans-serif';
-  ctx.fillText(text, cv.width / 2, cv.height / 2 + 4);
+  ctx.fillText(text, cv.width / 2, cv.height / 2 + 4, cv.width - 12);
   return cv;
 }
 
@@ -293,7 +293,8 @@ export function barbellGL(solution, style = 'steel', { exploded = true, backdrop
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
     const quad = { positions: new Float32Array(positions), normals: new Float32Array(normals), uvs: new Float32Array(uvs), indices: new Uint32Array(indices) };
-    const label = add(quad, disc.centerX, { colour: hexToRGB(colour.ink), unlit: labelTexture(C.trim(disc.plate.value, 2)) });
+    const stamp = disc.plate.unit === solution.bar.unit ? String(disc.plate.value) : C.plateLabel(disc.plate);
+    const label = add(quad, disc.centerX, { colour: hexToRGB(colour.ink), unlit: labelTexture(stamp) });
     labelEntries.push({ disc, entry: label });
   }
   const collarEntries = [];

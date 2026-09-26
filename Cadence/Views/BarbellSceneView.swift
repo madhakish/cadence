@@ -270,15 +270,15 @@ final class BarbellSolid {
         scene.rootNode.addChildNode(node)
     }
 
-    /// The plate value as flat printed text on one face (`face` −1 or +1),
-    /// sized to the annulus between hub and rim; unit and count stay in the
-    /// list below.
+    /// Exact denomination on one face (`face` −1 or +1). Mixed plates also
+    /// carry their unit; the list below stays readable when the solid is small.
     private func denomination(for disc: BarbellInspector.Disc, face: Int, ink: UInt32) -> SCNNode {
         let radius = disc.radius
         let hub = disc.family == "bumper" ? 0.235 * radius : disc.family == "steel" ? 0.2 * radius : max(BarbellInspector.boreRadius + 8, 0.25 * radius)
         let rim = disc.family == "bumper" ? 0.9 * radius : disc.family == "steel" ? 0.86 * radius : radius
         let size = (rim - hub) * 0.5 / 0.7
-        let text = SCNText(string: Weight.trim(disc.plate.value, decimals: 2), extrusionDepth: 0)
+        let stamp = disc.plate.unit == loadout.bar.unit ? disc.plate.denomination : disc.plate.label
+        let text = SCNText(string: stamp, extrusionDepth: 0)
         text.font = UIFont.systemFont(ofSize: CGFloat(size), weight: .heavy)
         text.flatness = 0.15
         let material = SCNMaterial()

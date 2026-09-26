@@ -52,7 +52,8 @@ for (const [name, solution] of Object.entries(fixtures)) {
   `${name}: every plate is focusable and named with its exact denomination`);
   const bodyFor = (label) => rendered.svg.querySelector(
     `.barbell-plate-body[data-side="${label.dataset.side}"][data-stack-index="${label.dataset.stackIndex}"]`);
-  ok(labels.every((label) => label.textContent === C.trim(Number(bodyFor(label).dataset.plateValue), 2)
+  ok(labels.every((label) => label.textContent === (solution.bar.unit === bodyFor(label).dataset.plateDenomination.split(" ").at(-1)
+        ? String(Number(bodyFor(label).dataset.plateValue)) : bodyFor(label).dataset.plateDenomination)
       && label.dataset.plateDenomination === bodyFor(label).dataset.plateDenomination),
     `${name}: printed value and accessible unit come from authoritative plate metadata`);
   // Keyboard and assistive order is the order both clients speak: the left
@@ -81,10 +82,13 @@ ok(flattened(fixtures.F4).some((plate) => C.plateLabel(plate) === "1.25 kg"),
 // Sprites paint far to near, so read the stack by its index, not DOM order.
 const byStack = (svg, side) => [...svg.querySelectorAll(`.barbell-plate-body[data-side="${side}"]`)]
   .sort((a, b) => Number(a.dataset.stackIndex) - Number(b.dataset.stackIndex));
+// [INV-PLATE-LABELS-PRESERVE-INPUT]
 const f5Right = byStack(B.barbellSVG(fixtures.F5, "full").svg, "right")
   .map((plate) => Number(plate.dataset.plateValue));
 ok(JSON.stringify(f5Right) === JSON.stringify([45, 10, 25, 2.5]),
   "F5: reverse mode preserves entered collar-to-sleeve order");
+ok(C.perSideLabel(fixtures.F5.perSide) === '45 lb + 10 lb + 25 lb + 2.5 lb',
+  'F5: the shared summary preserves the same entered order as the artwork');
 ok(fixtures.F6.satisfiesPolicy === false && fixtures.F6.policy === "exact",
   "F6: unreachable exact load keeps its policy warning evidence");
 const f7Steel = B.barbellSVG(fixtures.F7, "full", "steel").svg;
@@ -143,9 +147,12 @@ ok(S.plateFamily({ value: 5, unit: "kg" }, "bumper") === "bumper" && S.plateFami
     "an off-target result shows its difference from the request");
 }
 
-for (const value of [1.25, 2.5, 45]) {
+// [INV-PLATE-LABELS-PRESERVE-INPUT]
+for (const value of [1.125, 1.25, 2.5, 45]) {
   ok(C.plateLabel({ value, unit: "kg" }) === `${value} kg`,
     `formatter preserves exact denomination ${value}`);
+  ok(B.plateBadgeSVG({ value, unit: "kg" }).querySelector('text').textContent === String(value),
+    `face badge preserves stored denomination ${value}`);
 }
 
 const summary = B.loadoutSummary(fixtures.F3.targetLb, fixtures.F3);
@@ -165,6 +172,15 @@ const typicalStage = B.barbellStage(typical, {
 });
 ok(!typicalStage.querySelector(".barbell-expand").hidden,
   "typical two-plate stack exposes inspection without waiting for overflow");
+for (const [name, solution] of Object.entries(fixtures)) {
+  const stage = B.barbellStage(B.barbellSVG(solution, "full"), { onExpand: () => {} });
+  const readout = [...stage.querySelectorAll(".barbell-plate-denomination")].map((item) => item.textContent);
+  ok(JSON.stringify(readout) === JSON.stringify(flattened(solution).map(C.plateLabel)),
+    `${name}: readable plate labels preserve every collar-outward position at phone width`);
+}
+ok([...B.barbellStage(B.barbellSVG(fixtures.F3, "full"), {onExpand:()=>{}})
+    .querySelectorAll('.barbell-plate-label')].every((label) => label.textContent.endsWith(' kg')),
+  'F3: visible stamps show kg on the lb bar');
 
 const heavy = C.enteredPlateSolution(C.BARS.bar20kg, C.STANDARD_KG.map((plate) => ({ plate, count: 8 })));
 const heavyRendered = B.barbellSVG(heavy, "full", "bumper");
@@ -174,11 +190,12 @@ const heavyStage = B.barbellStage(heavyRendered, {
 const expandButton = heavyStage.querySelector(".barbell-expand");
 ok(heavyRendered.minimumLegibleWidth > 390 && !expandButton.hidden,
 "dense stack retains its computed geometry and inspection action");
+ok([...heavyStage.querySelectorAll(".barbell-plate-denomination")].every((label) => label.textContent.endsWith(" kg")),
+"phone preview keeps exact plate labels outside the scaled artwork");
 expandButton.click();
 ok(expanded, "expanded-view affordance is immediate and wired to its caller");
-ok([...heavyStage.querySelectorAll(".barbell-plate-label")]
-  .every((label) => Number(label.getAttribute("font-size")) >= 9),
-"constrained preview compensates denomination text instead of shrinking it below the floor");
+ok(Math.abs(heavyRendered.minimumLegibleWidth - Math.max(320, heavyRendered.scene.width * 1.2)) < 1e-6,
+"the legibility floor uses final transformed size, not the SVG font attribute alone");
 
 let rejected = false;
 try { B.barbellSVG({ perSide: [] }, "full"); } catch { rejected = true; }

@@ -98,6 +98,17 @@ This deliberately replaces the former denomination-twin rule, which invented
 performed pounds and inflated progression. Existing historical records cannot
 be reconstructed from today's inventory; do not silently rewrite them.
 
+### INV-PLATE-LABELS-PRESERVE-INPUT
+*platforms: core*
+
+Plate labels retain the stored denomination's precision and unit. A loadout
+summary preserves the supplied collar-outward order, including reverse-mode
+input; formatting never sorts an already resolved stack.
+
+> A reverse-mode bar drawn as 45, 10, 25, 2.5 lb was described as 45, 25, 10,
+> 2.5 lb on web. A custom 1.125 kg plate was printed as 1.13 kg. Both made the
+> loading instructions disagree with the authoritative plate data.
+
 ### INV-COMP-IS-VOLUME
 *platforms: core*
 
