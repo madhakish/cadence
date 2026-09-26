@@ -1,0 +1,10 @@
+{
+  "projects": ["chromium", "webkit"],
+  "requirements": {
+    "WEB-WORKOUT-REOPEN": "Completed and planned work, edited reps and session identity survive reopening",
+    "WEB-OFFLINE-RESUME": "Cached app resumes and banks an existing workout without a network",
+    "WEB-UPDATE-RESUME": "A real worker update preserves active work and other projects' caches",
+    "WEB-BACKUP-ROUNDTRIP": "A synthetic blank-workout export restores its portable content in a fresh browser context",
+    "WEB-RESTORE-CONTENT": "Same-count changed values prompt for restore; cancel preserves current work"
+  }
+}

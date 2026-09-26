@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Requirements traceability for docs/reference/invariants.md.
 //
-// The registry is the readable specification; this makes it enforceable. It
-// checks that every rule is asserted by at least one test on every platform it
-// claims, and that no test cites a rule that does not exist. A rule losing its
-// coverage is how a fixed bug quietly comes back.
+// The registry is the readable specification. This checks source citations,
+// not assertion execution: every rule must be cited by at least one test on
+// every platform it claims, and unknown citations fail. Execution evidence
+// belongs to the test runners and feature-acceptance results.
 //
 // Deliberately dependency-free and harness-agnostic: it greps for [INV-*]
 // tokens, so Swift XCTest and the plain-node web assertions are treated alike
@@ -117,10 +117,10 @@ for (const [id, files] of citations) {
 
 const verified = rules.length - skipped;
 console.log(
-  `invariants: ${verified} enforced (${covered} platform assertions), ` +
+  `invariants: ${verified} registered (${covered} platform citations), ` +
   `${skipped} documented but unverifiable here, ${failures} failing`,
 );
 if (failures) {
-  console.error("\nEvery rule in the registry must be asserted by a test, and every cited rule must be registered.");
+  console.error("\nEvery rule in the registry must be cited by a test, and every cited rule must be registered.");
   process.exit(1);
 }
