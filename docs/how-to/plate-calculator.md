@@ -56,10 +56,38 @@ The same inspection is available from the current barbell set during a workout
 and from its exercise information pane. Opening it never changes your load,
 sets, selected equipment, or recorded workout.
 
-The visual reference profiles distinguish full-diameter training bumpers
-(including 5 kg and 10 lb) from smaller steel and change plates. A plate keeps
-its diameter in both camera views. These are illustrative equipment profiles,
-not manufacturer measurements or a sleeve-capacity calculation. Unknown custom
-denominations use a neutral reference shape while retaining their exact weight
-label. Editing gym inventory and solving loads continue to use the existing
-weight model.
+## Choose a plate theme for a gym
+
+Every gym has a **Plate theme** in its settings, next to the default bar and
+loading policy. It decides how plates look everywhere that gym's bar is drawn:
+the workout, the calculator, previews and the inspection view.
+
+- **IWF Competition** and **IWF Training** — competition-diameter rubber
+  bumpers in the IWF colours (25 red, 20 blue, 15 yellow, 10 green, 5 white),
+  with colour-matched change plates.
+- **IPF Calibrated** and **IPF Calibrated · gloss** — thin painted calibrated
+  discs with a raised lip, calibration plugs and a chrome hub. The IPF fixes
+  the colours of 25, 20 and 15 kg only; the green, white, black and chrome
+  smaller discs follow manufacturer convention.
+- **lb Colour Bumpers** — 55 red, 45 blue, 35 yellow, 25 green, 10 white, with
+  black rubber change plates.
+- **lb Black Iron**, **lb Grey Hammertone**, **lb Machined Steel** — cast or
+  turned iron in one finish for every denomination.
+- **Black Bumpers · colour band** — black rubber with a colour-coded rim band.
+- **Cadence House** — the app's own charcoal rubber with red numerals.
+- **Custom** — the earlier behaviour: colour by value, bumper or steel by the
+  plate type picker above.
+
+Switching the unit of an exercise switches to the theme's set for that unit
+(a kilogram lift on an lb gym shows the theme's kg discs). The theme never
+changes your inventory toggles, the solver, the achieved total or a recorded
+load; it is presentation only. Gyms that existed before themes were added
+start on **lb Black Iron** (all-pound inventory), **IWF Competition** (all
+kilogram) or **Custom** (mixed), and can be changed at any time.
+
+Themed dimensions follow published equipment: the IWF and IPF technical rules
+and manufacturer product pages, as listed in the design reference. Colours are
+chosen to read like the real matte rubber and painted steel rather than the
+pure federation values. A plate keeps its diameter in both camera views, and a
+denomination the theme does not list keeps the Custom profile while retaining
+its exact weight label. None of this is a sleeve-capacity calculation.

@@ -242,7 +242,13 @@ enum ProgramSession {
             // The target clamped into the window this slot actually runs on —
             // a bodyweight identity has no load step, so its window top is
             // advisory and the prescription must follow the reps it earned.
-            let accessoryReps = acc.prescribedReps(loadable: exercise.supportsLoadableIncrement)
+            // [INV-CARRY-LOGS-DISTANCE] A carry slot keeps its per-hand load and
+            // is built as sets of the default distance: slots hold no distance
+            // target yet, and a rep target means nothing for a walk.
+            let carryMiles = !isTimed && CardioFormat.logsCarryDistance(exerciseName: exercise.name)
+                ? CardioFormat.miles(fromYards: CardioFormat.carryDefaultYards) : nil
+            let accessoryReps = carryMiles != nil
+                ? 1 : acc.prescribedReps(loadable: exercise.supportsLoadableIncrement)
             entry.plannedSets = effectiveSets
             entry.plannedReps = isTimed ? 1 : accessoryReps
             entry.plannedDurationSeconds = isTimed ? acc.targetSeconds : nil
@@ -251,7 +257,7 @@ enum ProgramSession {
             for i in 0..<effectiveSets {
                 insertSet(entry, order: i, weight: isTimed ? carryLb : weightLb, reps: isTimed ? 1 : accessoryReps,
                           warmup: false, perSide: exercise.isUnilateral, enteredUnit: entryUnit,
-                          durationSeconds: isTimed ? acc.targetSeconds : nil,
+                          durationSeconds: isTimed ? acc.targetSeconds : nil, distanceMiles: carryMiles,
                           targetWeight: isTimed ? 0 : acc.weightLb, plannedWeight: isTimed ? 0 : weightLb,
                           plannedReps: isTimed ? 1 : accessoryReps,
                           plannedDurationSeconds: isTimed ? acc.targetSeconds : nil,
@@ -627,12 +633,14 @@ enum ProgramSession {
 
     private static func insertSet(_ entry: SessionExercise, order: Int, weight: Double, reps: Int, warmup: Bool,
                                   perSide: Bool, enteredUnit: WeightUnit, durationSeconds: Int? = nil,
+                                  distanceMiles: Double? = nil,
                                   targetWeight: Double? = nil, plannedWeight: Double? = nil,
                                   plannedReps: Int? = nil, plannedDurationSeconds: Int? = nil,
                                   block: PrescriptionBlockKind = .work,
                                   context: ModelContext) {
         let set = SetEntry(order: order, weightLb: weight, reps: reps, isWarmup: warmup, isPerSide: perSide,
                            enteredUnit: enteredUnit, durationSeconds: durationSeconds,
+                           distanceMiles: distanceMiles,
                            loadBasis: entry.exercise?.loadBasis,
                            implementCount: entry.exercise?.resolvedImplementCount ?? 1,
                            targetWeightLb: targetWeight, plannedWeightLb: plannedWeight,

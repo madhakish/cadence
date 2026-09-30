@@ -203,7 +203,7 @@ const exercises = [
 
 const gyms = [{
   name: "Main Gym", isDefault: true, defaultBarId: C.barId(C.BARS.bar45lb),
-  collarWeightLb: 0, loadingPolicy: "closest",
+  collarWeightLb: 0, loadingPolicy: "closest", plateTheme: "custom",
   plateToggles: C.ALL_STANDARD.map((plate) => ({ value: plate.value, unit: plate.unit, enabled: true })),
   barcodeImage: null, barcodeLabel: "Membership tag",
 }];

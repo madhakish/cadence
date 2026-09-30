@@ -6,7 +6,7 @@ import CadenceCore
 @MainActor
 final class TFHIntegrationTests: XCTestCase {
     private func container() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
     }
 
@@ -113,7 +113,7 @@ final class TFHIntegrationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Cadence.store")
         try writeV12Store(url)
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         var storedPolicy: TFHProgramPolicy?
         do {
             let c = try ModelContainer(for: schema, migrationPlan: CadenceV12MigrationPlan.self,

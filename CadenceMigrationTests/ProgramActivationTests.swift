@@ -13,7 +13,7 @@ final class ProgramActivationTests: XCTestCase {
         // suite. V11 is a frozen snapshot of nested classes on this branch;
         // inserting a live `Program` into a V11 container is the SwiftData
         // "Failed to cast model" crash.
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

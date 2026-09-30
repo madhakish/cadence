@@ -15,7 +15,8 @@ enum MilestoneProjection {
 
     static func sample(_ set: SetEntry) -> SetSample {
         SetSample(weightLb: set.weightLb, reps: set.reps, isPerSide: set.isPerSide,
-                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount)
+                  loadBasis: set.loadBasis, implementCount: set.resolvedImplementCount,
+                  distanceYards: set.carryYards)
     }
 
     /// All working sets / volumes / top schemes for an exercise across prior
@@ -27,6 +28,7 @@ enum MilestoneProjection {
         basis: LoadBasis,
         before date: Date,
         context: ModelContext,
+        distanceCarries: Bool = false,
         excludingOffProgram intervals: [TrainingIntervalSnapshot] = []
     ) throws -> (sets: [SetSample], volumes: [Double], schemes: Set<String>) {
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -42,7 +44,9 @@ enum MilestoneProjection {
         var schemes: Set<String> = []
         for session in sessions {
             for entry in session.exercises where entry.exercise?.name == exerciseName {
-                let working = entry.workingSets.map(sample).filter { $0.loadBasis == basis }
+                let working = entry.workingSets.map(sample).filter {
+                    $0.loadBasis == basis && (($0.distanceYards ?? 0) > 0) == distanceCarries
+                }
                 guard !working.isEmpty else { continue }
                 sets.append(contentsOf: working)
                 volumes.append(PRDetection.volume(working))
@@ -83,7 +87,9 @@ enum MilestoneProjection {
                 guard let basis = working.first?.loadBasis else { continue }
                 let scoped = working.filter { $0.loadBasis == basis }
                 let history = try priorHistory(for: name, basis: basis, before: session.date,
-                                               context: context, excludingOffProgram: intervals)
+                                               context: context,
+                                               distanceCarries: scoped.contains { ($0.distanceYards ?? 0) > 0 },
+                                               excludingOffProgram: intervals)
                 let events = PRDetection.evaluate(
                     exercise: name, sessionSets: scoped, historySets: history.sets,
                     historyVolumes: history.volumes, historySchemes: history.schemes,

@@ -196,8 +196,8 @@ final class Exercise {
     }
 
     var resolvedImplementCount: Int {
-        let inferred = LoadSemantics.inferredImplementCount(exerciseType: typeRaw)
-        return LoadSemantics.normalizedImplementCount(implementCount > 0 ? implementCount : inferred, basis: loadBasis)
+        LoadSemantics.resolvedImplementCount(stored: implementCount, exerciseType: typeRaw,
+                                             exerciseName: name, basis: loadBasis)
     }
 
     var movementPattern: MovementPattern {

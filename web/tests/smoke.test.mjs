@@ -332,8 +332,8 @@ for (const track of [
     && fullBar.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
     "the calculator bar is the rendered chrome shaft and sleeves rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
-    && fullRendered.minimumLegibleWidth <= 390,
-  "a normal complete bar derives a legible width that fits the primary phone viewport");
+    && fullRendered.minimumLegibleWidth >= fullRendered.scene.width * 1.2 - 1e-6,
+  "a complete bar's face stamps require 12 CSS pixels after scaling");
   ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
     plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
   "every visible plate exposes its exact denomination to keyboard and assistive technology");
@@ -1695,7 +1695,7 @@ ok(parsed.schemaVersion === db.BACKUP_SCHEMA_VERSION, "export declares the curre
 // Every other assertion here compares against the constant, so a JS-only bump
 // would drift from BackupContract.currentSchemaVersion in CadenceCore without
 // anything noticing. This is the lockstep the backup docs claim exists.
-ok(db.BACKUP_SCHEMA_VERSION === 14, `backup schema is pinned at 14 (got ${db.BACKUP_SCHEMA_VERSION})`);
+ok(db.BACKUP_SCHEMA_VERSION === 15, `backup schema is pinned at 15 (got ${db.BACKUP_SCHEMA_VERSION})`);
 
 // An app must never write a backup it cannot itself restore. A corrupted or
 // out-of-range birthYear is clamped to the not-set sentinel on the way through
@@ -1859,7 +1859,7 @@ await withCleanup(async (keep) => {
   const original = await db.Settings.get();
   await db.Settings.save({ ...original, theme: "titanium" });
   const titanium = JSON.parse(await db.exportJSON());
-  ok(titanium.schemaVersion === 14 && titanium.settings.theme === "titanium", "titanium exports at current version");
+  ok(titanium.schemaVersion === 15 && titanium.settings.theme === "titanium", "titanium exports at current version");
   await db.importBundle(titanium);
   ok((await db.Settings.get()).theme === "titanium", "titanium survives the round trip");
   await db.importBundle({ ...titanium, schemaVersion: 12, settings: { ...titanium.settings, theme: "slate" } });
@@ -2390,7 +2390,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     climbState.isCompleted = true;
     await db.Sessions.save(climbState);
     const climbBundle = JSON.parse(await db.exportJSON());
-    ok(climbBundle.schemaVersion === 14, "climbed flights ship inside the current backup schema");
+    ok(climbBundle.schemaVersion === 15, "climbed flights ship inside the current backup schema");
     const climbExport = climbBundle.sessions.flatMap((x) => x.exercises)
       .find((e) => e.name === "Stair Climber");
     ok(climbExport && climbExport.sets[0].flights === 120, "export carries the flight count");
@@ -4604,6 +4604,8 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
     bundle = structuredClone(bundle);
     bundle.schemaVersion = db.BACKUP_SCHEMA_VERSION;
     if (bundle.settings) bundle.settings.gymTagFirstLaunchOfDay ??= false;
+    // Pre-v15 gyms restore as custom (never re-inferred).
+    for (const gym of bundle.gyms || []) gym.plateTheme ??= "custom";
     for (const program of bundle.programs || []) for (const day of program.days || []) {
       (day.lifts || []).forEach((lift, index) => {
         lift.order ??= index;
@@ -4647,7 +4649,7 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(sessions.every((s) => (s.exercises || []).every((e) => e.exerciseId === C.exerciseLegacyID(e.exerciseName))),
     "v10 session entries derive their exercise ids");
   const reexport = await db.exportBundle();
-  ok(reexport.schemaVersion === 14, "importing v10 re-exports as the current version");
+  ok(reexport.schemaVersion === 15, "importing v10 re-exports as the current version");
 }
 
 
@@ -4715,6 +4717,112 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(barbell.exercises[0].sets[0].weightLb === 45,
     `a barbell add is floored at the active bar, never below it (got ${barbell.exercises[0].sets[0].weightLb})`);
   await db.Sessions.del(gid); await db.Sessions.del(bid);
+}
+
+// [INV-CARRY-LOGS-DISTANCE] A loaded carry added mid-session is born at its
+// named per-hand default and a distance in yards — not the 5 lb dumbbell
+// fallback × 5 reps — keeps its per-hand basis and implement count, counts
+// load × yards as tonnage, and earns only heaviest/volume records.
+{
+  for (const stale of (await db.Sessions.completed())
+    .filter((s) => (s.exercises || []).some((e) => C.logsCarryDistance(e.exerciseName)))) {
+    await db.Sessions.del(stale.id);
+  }
+  // The imported synthetic library predates two of the seeded carries; put
+  // the seed definitions back so every carry is exercised.
+  const { SEED } = await import("../app/js/seed.js");
+  for (const definition of SEED.exercises.filter((e) => C.logsCarryDistance(e.name))) {
+    if (!(await db.Exercises.byName(definition.name))) await db.Exercises.save(structuredClone(definition));
+  }
+  const lastOverlay = () => [...document.querySelectorAll("#overlays .overlay")].pop();
+  const addSetButton = () => [...lastOverlay().querySelectorAll("button")].find((b) => b.textContent === "+ Set");
+  const openCarry = async (name) => {
+    const id = await session.createBlankSession();
+    const draft = await db.Sessions.get(id);
+    draft.exercises.push({ order: 0, exerciseName: name, notes: "", phase: null,
+      plannedWeightLb: null, plannedSets: null, plannedReps: null, sets: [] });
+    await db.Sessions.save(draft);
+    await session.openSession(id); await tick();
+    addSetButton().click(); await tick();
+    return id;
+  };
+  const want = { "Farmer Carry": [50, 2, false], "Suitcase Carry": [50, 1, true],
+    "Front-rack Carry": [35, 2, false], "Overhead Carry": [25, 1, true] };
+  for (const [name, [lb, count, perSide]] of Object.entries(want)) {
+    const id = await openCarry(name);
+    const set = (await db.Sessions.get(id)).exercises[0].sets[0];
+    ok(set.weightLb === lb && set.loadBasis === "perImplement" && set.implementCount === count
+      && set.reps === 1 && set.isPerSide === perSide && set.durationSeconds == null
+      && C.carryYards(name, set.distanceMiles) === 40,
+    `[INV-CARRY-LOGS-DISTANCE] a new ${name} set is ${lb} lb per hand × ${count} over 40 yd (got ${JSON.stringify(set)})`);
+    lastOverlay().querySelector(".overlay-head button").click(); await db.Sessions.del(id);
+  }
+
+  const fid = await openCarry("Farmer Carry");
+  addSetButton().click(); await tick();
+  let farmer = await db.Sessions.get(fid);
+  const [first, second] = farmer.exercises[0].sets;
+  ok(second.weightLb === 50 && second.distanceMiles === first.distanceMiles && second.reps === 1,
+    "a second carry set inherits the load and the distance");
+  const screen = lastOverlay();
+  ok(screen.querySelector(".current-set-load").textContent.replace(/\s+/g, " ").trim() === "50 lb 22.7 kg each",
+    `[INV-CARRY-LOGS-DISTANCE] the hero load says each (got "${screen.querySelector(".current-set-load").textContent}")`);
+  ok(screen.querySelector(".current-set-load").getAttribute("aria-label") === "Set load 50 lb · 22.7 kg each",
+    "the hero's spoken load states the basis");
+  ok(screen.querySelector(".current-set-reps").textContent.replace(/\s+/g, " ").trim() === "40 yd",
+    "the hero states the distance, not a placeholder rep");
+  ok([...screen.querySelectorAll(".setrow .sub.mono")].some((node) => node.textContent.trim() === "× 40 yd"),
+    "the set row reads × 40 yd");
+  screen.querySelector(".overlay-head button").click();
+
+  // Tonnage and PRs from the banked distance sets.
+  farmer = await db.Sessions.get(fid);
+  farmer.exercises[0].sets.forEach((set) => { set.status = "completed"; });
+  farmer.isCompleted = true;
+  await db.Sessions.save(farmer);
+  ok(db.workingVolume(farmer.exercises[0], await db.Exercises.byName("Farmer Carry")) === 0,
+    "[INV-CARRY-LOGS-DISTANCE] a distance carry adds nothing to session tonnage");
+  const heavierId = await session.createBlankSession();
+  const heavier = await db.Sessions.get(heavierId);
+  heavier.date = new Date(new Date(farmer.date).getTime() + 86_400_000).toISOString();
+  heavier.isCompleted = true;
+  heavier.exercises.push({ order: 0, exerciseName: "Farmer Carry", notes: "", phase: null,
+    sets: farmer.exercises[0].sets.map((set) => ({ ...set, weightLb: 60 })) });
+  await db.Sessions.save(heavier);
+  await session.rebuildMilestones(["Farmer Carry"]);
+  const carryMilestones = (await db.Milestones.all()).filter((m) => m.exerciseName === "Farmer Carry");
+  ok(carryMilestones.some((m) => m.kind === "heaviestSet" && m.label.includes("60 lb × 40 yd"))
+    && carryMilestones.some((m) => m.kind === "volumePR")
+    && carryMilestones.every((m) => m.kind !== "firstScheme" && m.kind !== "repPR"),
+  `[INV-CARRY-LOGS-DISTANCE] a distance carry earns heaviest/volume records only (got ${carryMilestones.map((m) => `${m.kind}:${m.label}`).join(" | ")})`);
+
+  // A carry set logged as reps before this existed stays a rep set.
+  const legacyId = await session.createBlankSession();
+  const legacy = await db.Sessions.get(legacyId);
+  legacy.exercises.push({ order: 0, exerciseName: "Farmer Carry", notes: "", phase: null,
+    sets: [{ ...farmer.exercises[0].sets[0], status: "planned", reps: 5, distanceMiles: null, plannedReps: 5 }] });
+  await db.Sessions.save(legacy);
+  await session.openSession(legacyId); await tick();
+  addSetButton().click(); await tick();
+  const legacySets = (await db.Sessions.get(legacyId)).exercises[0].sets;
+  ok(legacySets[1].reps === 5 && legacySets[1].distanceMiles == null,
+    "[INV-CARRY-LOGS-DISTANCE] a carry logged as reps keeps adding rep sets");
+  ok([...lastOverlay().querySelectorAll(".setrow .sub.mono")].some((node) => node.textContent.trim() === "× 5"),
+    "the legacy rep carry still displays its reps");
+  lastOverlay().querySelector(".overlay-head button").click();
+
+  // A programmed carry keeps its load and is built as distance sets.
+  const prog = await db.Programs.active();
+  const carryDay = { ...prog.days[0], lifts: [], accessories: [{ id: "carry-slot", order: 0,
+    exerciseName: "Farmer Carry", sets: 3, minReps: 8, maxReps: 12, currentReps: 10, weightLb: 50,
+    incrementLb: 5, capacityManaged: false, stallCount: 0, targetSeconds: 30, durationStepSeconds: 5 }] };
+  const programmedId = await session.createSessionFromProgramDay(prog, carryDay);
+  const programmed = (await db.Sessions.get(programmedId)).exercises.find((e) => e.exerciseName === "Farmer Carry");
+  ok(programmed.sets.length === 3 && programmed.sets.every((set) => set.weightLb === 50 && set.reps === 1
+    && C.carryYards("Farmer Carry", set.distanceMiles) === 40 && set.implementCount === 2),
+  "[INV-CARRY-LOGS-DISTANCE] a programmed carry keeps its per-hand load over 40 yd sets");
+  for (const id of [fid, heavierId, legacyId, programmedId]) await db.Sessions.del(id);
+  await session.rebuildMilestones(["Farmer Carry"]);
 }
 
 // The history-based first-set suggestion above is silent about where its

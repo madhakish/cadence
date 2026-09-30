@@ -103,7 +103,7 @@ function renderRotations(panel, sessions, exercises, program, checkins, interval
     ui.h("div", { class: "card rotation-matrix-wrap" }, matrix));
 }
 
-function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb); }
+function setLabel(s) { return s.weightLb === 0 ? "BW" : ui.fmtWeight(s.weightLb) + C.loadBasisSuffix(s.loadBasis); }
 // A set that logged distance/time is cardio — render the shared conditioning
 // label and skip ×reps (keyed on the DATA so restored history renders right
 // even if the library entry is gone).
@@ -129,13 +129,17 @@ const historySetKind = (set) => {
 /// The completed row keeps actual work first and shows the original plan only
 /// when the lifter changed it. Historical rows without plan snapshots remain
 /// exactly as terse as they were before snapshots existed.
-export const historySetPresentationForTest = (set, exerciseType = null) => {
-  const cardio = exerciseType === "conditioning" || (exerciseType == null && isCardioSet(set));
+export const historySetPresentationForTest = (set, exerciseType = null, exerciseName = "") => {
+  // [INV-CARRY-LOGS-DISTANCE] A distance carry reads "50 lb × 40 yd".
+  const carryYards = C.carryYards(exerciseName, set.distanceMiles);
+  const cardio = exerciseType === "conditioning"
+    || (exerciseType == null && carryYards === null && isCardioSet(set));
   const timed = exerciseType === "timed";
   const performed = cardio
     ? C.cardioSetLabel(set.distanceMiles, set.durationSeconds, set.inclinePercent, set.weightLb, set.flights)
     : timed ? C.cardioDurationLabel(set.durationSeconds || 0)
-      : `${setLabel(set)} × ${set.reps}${set.isPerSide ? "/side" : ""}`;
+      : `${setLabel(set)} × ${carryYards !== null ? C.carryDistanceLabel(carryYards, set.isPerSide)
+        : `${set.reps}${set.isPerSide ? "/side" : ""}`}`;
   const state = set.status || "completed";
   const actual = state === "completed" ? performed
     : `${state === "skipped" ? "Skipped" : "Not performed"} · ${performed}`;
@@ -143,7 +147,7 @@ export const historySetPresentationForTest = (set, exerciseType = null) => {
   if (timed && Number.isFinite(set.plannedDurationSeconds)
       && set.plannedDurationSeconds !== set.durationSeconds) {
     planned = `Planned ${C.cardioDurationLabel(set.plannedDurationSeconds)}`;
-  } else if (!cardio && !timed) {
+  } else if (!cardio && !timed && carryYards === null) {
     const plannedWeight = Number.isFinite(set.plannedWeightLb) ? set.plannedWeightLb : set.weightLb;
     const plannedReps = Number.isFinite(set.plannedReps) ? set.plannedReps : set.reps;
     if (Math.abs(plannedWeight - set.weightLb) > 0.001 || plannedReps !== set.reps) {
@@ -325,7 +329,7 @@ const statusGlyph = (status) => (status === "completed" ? "✓" : status === "sk
 // empty or garbage field keeps the stored value, and nothing beyond the four
 // performed fields is reachable. The weight edits in the display's primary
 // unit and stores canonical pounds, like every other entry surface.
-function editableHistorySetRow(set, exerciseType, draft) {
+function editableHistorySetRow(set, exerciseType, draft, exerciseName) {
   const unit = C.primaryUnit(ui.prefs.unitDisplay);
   const effectiveStatus = () => draft.status || set.status;
   const statusBtn = ui.h("button", { class: "btn ghost sm mono", text: statusGlyph(effectiveStatus()),
@@ -349,8 +353,12 @@ function editableHistorySetRow(set, exerciseType, draft) {
     : [numberInput(`Weight (${unit})`, draft.weightText ?? displayWeightText(set, unit), false,
       (event) => { draft.weightText = event.target.value; }),
       ui.h("span", { class: "sub", text: "×" }),
-      numberInput("Reps", draft.repsText ?? String(set.reps ?? 0), true,
-        (event) => { draft.repsText = event.target.value; })];
+      C.carryYards(exerciseName, set.distanceMiles) !== null
+        ? numberInput(set.isPerSide ? "Yards per side" : "Yards",
+          draft.yardsText ?? C.trim(C.yardsFromMiles(set.distanceMiles), 2), false,
+          (event) => { draft.yardsText = event.target.value; })
+        : numberInput("Reps", draft.repsText ?? String(set.reps ?? 0), true,
+          (event) => { draft.repsText = event.target.value; })];
   return ui.h("div", { class: `history-set${set.isWarmup ? " warm" : ""}` },
     statusBtn,
     ui.h("div", { class: "history-set-main", style: { display: "flex", gap: "8px", alignItems: "center" } }, ...fields),
@@ -396,6 +404,9 @@ function openDetail(s, exerciseByName) {
         correction.durationSeconds = parseFloat(draft.secondsText);
       }
       if (draft.status && draft.status !== set.status) correction.status = draft.status;
+      if (draft.yardsText?.trim() && draft.yardsText !== C.trim(C.yardsFromMiles(set.distanceMiles), 2)) {
+        correction.distanceMiles = C.milesFromYards(Number(draft.yardsText.replace(",", ".")));
+      }
       entries.push({ set, correction });
     }
     return entries;
@@ -492,7 +503,8 @@ function openDetail(s, exerciseByName) {
         const setName = isStrengthEntry(e, exercise) ? "work set" : "completed set";
         const summaryBits = [`${working.length} ${setName}${working.length === 1 ? "" : "s"}`];
         if (top && exercise?.type !== "conditioning" && exercise?.type !== "timed") {
-          summaryBits.push(`top ${top.weightLb === 0 ? "BW" : ui.fmtWeight(top.weightLb)}×${top.reps}`);
+          const topYards = C.carryYards(e.exerciseName, top.distanceMiles);
+          summaryBits.push(`top ${setLabel(top)}×${topYards !== null ? C.carryDistanceLabel(topYards, top.isPerSide) : `${top.reps}${top.isPerSide ? "/side" : ""}`}`);
         }
         if (volume > 0) summaryBits.push(`${ui.fmtWeight(volume)} volume`);
         const card = ui.h("div", { class: "card" },
@@ -508,10 +520,10 @@ function openDetail(s, exerciseByName) {
           // belong to the Health comparison flow, which reconciles against a
           // measurement instead of a memory.
           if (editing && (isStrengthEntry(e, exercise) || exercise?.type === "timed")) {
-            card.append(editableHistorySetRow(x, exercise?.type, draftFor(x)));
+            card.append(editableHistorySetRow(x, exercise?.type, draftFor(x), e.exerciseName));
             continue;
           }
-          const shown = historySetPresentationForTest(x, exercise?.type);
+          const shown = historySetPresentationForTest(x, exercise?.type, e.exerciseName);
           const tags = ui.h("div", { class: "history-set-tags" },
             (x.flags || []).length ? ui.h("span", { class: "pill warn", text: x.flags.join(", ") }) : null,
             x.bodyFlagSite ? ui.h("span", { class: "pill hard", text: x.bodyFlagSite + (x.bodyFlagNote ? ` — ${x.bodyFlagNote}` : "") }) : null);

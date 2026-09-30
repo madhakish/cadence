@@ -26,11 +26,12 @@ enum SessionCorrectionService {
             let corrected = SetLifecycle.correctedSetValues(
                 weightLb: set.weightLb, reps: set.reps,
                 durationSeconds: set.durationSeconds, status: set.status,
-                correction: correction
+                correction: correction, distanceMiles: set.distanceMiles
             )
             if set.weightLb != corrected.weightLb { set.weightLb = corrected.weightLb }
             if set.reps != corrected.reps { set.reps = corrected.reps }
             if set.durationSeconds != corrected.durationSeconds { set.durationSeconds = corrected.durationSeconds }
+            if set.distanceMiles != corrected.distanceMiles { set.distanceMiles = corrected.distanceMiles }
             if set.status != corrected.status { set.status = corrected.status }
         }
     }

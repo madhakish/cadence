@@ -7,15 +7,22 @@ public struct SetSample: Hashable, Codable, Sendable {
     public let isPerSide: Bool
     public let loadBasis: LoadBasis
     public let implementCount: Int
+    /// Yards carried, for a distance-carry set only (`CardioFormat.carryYards`).
+    /// nil for every rep-based set, including a carry logged as reps.
+    public let distanceYards: Double?
 
     public init(weightLb: Double, reps: Int, isPerSide: Bool = false,
-                loadBasis: LoadBasis = .totalBar, implementCount: Int = 1) {
+                loadBasis: LoadBasis = .totalBar, implementCount: Int = 1,
+                distanceYards: Double? = nil) {
         self.weightLb = weightLb
         self.reps = reps
         self.isPerSide = isPerSide
         self.loadBasis = loadBasis
         self.implementCount = implementCount
+        self.distanceYards = distanceYards
     }
+
+    var isCarryDistance: Bool { (distanceYards ?? 0) > 0 }
 }
 
 /// An auto-detected milestone. Tone: terse, coach-like. No confetti.
@@ -46,11 +53,16 @@ public enum PRDetection {
     /// strength claim, so rep PRs are only tracked inside that range.
     public static let repPRRepCeiling = 10
 
-    /// Total working volume (Σ weight × reps) of a set list.
+    /// Total working volume (Σ weight × reps) of a set list. A distance-carry
+    /// set counts weight × yards instead (`LoadSemantics.carryVolume`).
     public static func volume(_ sets: [SetSample]) -> Double {
         sets.compactMap {
-            LoadSemantics.volume(weightLb: $0.weightLb, reps: $0.reps, isPerSide: $0.isPerSide,
-                                 basis: $0.loadBasis, implementCount: $0.implementCount)
+            if let yards = $0.distanceYards, yards > 0 {
+                return LoadSemantics.carryVolume(weightLb: $0.weightLb, yards: yards, isPerSide: $0.isPerSide,
+                                                 basis: $0.loadBasis, implementCount: $0.implementCount)
+            }
+            return LoadSemantics.volume(weightLb: $0.weightLb, reps: $0.reps, isPerSide: $0.isPerSide,
+                                        basis: $0.loadBasis, implementCount: $0.implementCount)
         }.reduce(0, +)
     }
 
@@ -95,8 +107,22 @@ public enum PRDetection {
         var events: [PREvent] = []
         let weightLabel = formatWeight ?? { Weight.trim($0) }
         let basis = sessionSets[0].loadBasis
-        let comparableSession = sessionSets.filter { LoadSemantics.compatible($0.loadBasis, basis) }
-        let comparableHistory = historySets.filter { LoadSemantics.compatible($0.loadBasis, basis) }
+        // [INV-CARRY-LOGS-DISTANCE] A distance carry is compared only with
+        // distance carries: its "reps" are a placeholder, so it earns the
+        // heaviest-load and volume (load × yards) records and never a scheme
+        // or rep PR. A carry logged as reps before stays in the rep lane.
+        let carries = sessionSets.contains(where: \.isCarryDistance)
+        let comparableSession = sessionSets.filter {
+            LoadSemantics.compatible($0.loadBasis, basis) && $0.isCarryDistance == carries
+        }
+        let comparableHistory = historySets.filter {
+            LoadSemantics.compatible($0.loadBasis, basis) && $0.isCarryDistance == carries
+        }
+        if carries {
+            return carryEvents(exercise: exercise, basis: basis, session: comparableSession,
+                               history: comparableHistory, historyVolumes: historyVolumes,
+                               weightLabel: weightLabel, formatWeight: formatWeight)
+        }
 
         let priorMax = comparableHistory.map(\.weightLb).max() ?? 0
 
@@ -166,6 +192,34 @@ public enum PRDetection {
             events.append(PREvent(kind: .repPR, exercise: exercise, label: label))
         }
 
+        return events
+    }
+
+    private static func carryEvents(
+        exercise: String, basis: LoadBasis, session: [SetSample], history: [SetSample],
+        historyVolumes: [Double], weightLabel: (Double) -> String, formatWeight: ((Double) -> String)?
+    ) -> [PREvent] {
+        var events: [PREvent] = []
+        let priorMax = history.map(\.weightLb).max() ?? 0
+        if basis.supportsLoadPR, let top = session.map(\.weightLb).max(), top > priorMax + 1e-9 {
+            let yards = session.filter { abs($0.weightLb - top) < 1e-9 }.compactMap(\.distanceYards).max() ?? 0
+            events.append(PREvent(
+                kind: .heaviestSet,
+                exercise: exercise,
+                label: "\(weightLabel(top)) × \(CardioFormat.carryDistanceLabel(yards: yards)) — heaviest \(exercise.lowercased()) logged"
+            ))
+        }
+        // A first distance session has no distance baseline: the prior volumes
+        // are rep tonnage, a different quantity, so beating them is no record.
+        let vol = volume(session)
+        if basis.supportsVolume, !history.isEmpty, vol > (historyVolumes.max() ?? 0) + 1e-9 {
+            let volumeLabel = formatWeight?(vol) ?? "\(Weight.trim(vol)) lb"
+            events.append(PREvent(
+                kind: .volumePR,
+                exercise: exercise,
+                label: "Volume PR — \(volumeLabel)·yd total \(exercise.lowercased())"
+            ))
+        }
         return events
     }
 }

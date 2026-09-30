@@ -10,6 +10,7 @@ import UIKit
 struct BarbellSceneView: UIViewRepresentable {
     let loadout: Loadout
     let plateStyle: PlateVisualStyle
+    var plateTheme: PlateThemeID = .custom
     let exploded: Bool
     let reduceMotion: Bool
 
@@ -33,7 +34,7 @@ struct BarbellSceneView: UIViewRepresentable {
         context.coordinator.apply(exploded: exploded, animated: true, reduceMotion: reduceMotion)
     }
 
-    func makeCoordinator() -> BarbellSolid { BarbellSolid(loadout: loadout, style: plateStyle) }
+    func makeCoordinator() -> BarbellSolid { BarbellSolid(loadout: loadout, style: plateStyle, theme: plateTheme) }
 
     final class FittingSceneView: SCNView {
         var onLayout: ((CGSize) -> Void)?
@@ -60,6 +61,7 @@ final class BarbellSolid {
     let scene = SCNScene()
     private let loadout: Loadout
     private let style: PlateVisualStyle
+    private let theme: PlateThemeID
     private let cameraNode = SCNNode()
     private var discNodes: [(disc: BarbellInspector.Disc, node: SCNNode, caption: UILabel)] = []
     private var collarNode: SCNNode?
@@ -70,9 +72,10 @@ final class BarbellSolid {
     private var viewSize = CGSize(width: 390, height: 300)
     private weak var view: SCNView?
 
-    init(loadout: Loadout, style: PlateVisualStyle) {
+    init(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID = .custom) {
         self.loadout = loadout
         self.style = style
+        self.theme = theme
         build()
     }
 
@@ -109,7 +112,7 @@ final class BarbellSolid {
                 self.updateCaptions()
             }
         }
-        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: exploded ? 1 : 0)
+        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: exploded ? 1 : 0, theme: theme)
         for (entry, target) in zip(discNodes, layout.discs.filter { $0.side < 0 }) {
             entry.node.position = SCNVector3(Float(target.centerX), 0, 0)
         }
@@ -127,7 +130,7 @@ final class BarbellSolid {
     private func place() {
         let exploded = explodedNow == true
         let camera = BarbellInspector.Camera.initial(exploded: exploded)
-        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: exploded ? 1 : 0)
+        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: exploded ? 1 : 0, theme: theme)
         let frame = BarbellInspector.frame(layout: layout, explode: exploded ? 1 : 0)
         let aspect = max(0.5, viewSize.width / max(1, viewSize.height))
         let vertical = Self.fieldOfView * Double.pi / 180
@@ -163,12 +166,17 @@ final class BarbellSolid {
     }
 
     private func build() {
-        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: 0)
+        let layout = BarbellInspector.layout(loadout: loadout, style: style, explode: 0, theme: theme)
         let bar = layout.bar
+        let look = PlateTheme.description(theme)
+        // Black oxide darkens the shaft and knurl; sleeves stay chrome.
+        let oxide = look.barFinish == .blackOxide
         // One near sleeve with enough shaft to identify the bar. Real sleeve
         // lengths remain unchanged even when the inspection separates plates.
-        addCylinder(radius: bar.shaftRadius, length: bar.shaftHalfLength, at: -bar.shaftHalfLength / 2, material: Materials.shaft)
-        addCylinder(radius: bar.shaftRadius + 0.12, length: 310, at: -(bar.shaftHalfLength - 205), material: Materials.knurl)
+        addCylinder(radius: bar.shaftRadius, length: bar.shaftHalfLength, at: -bar.shaftHalfLength / 2,
+                    material: oxide ? Materials.oxideShaft : Materials.shaft)
+        addCylinder(radius: bar.shaftRadius + 0.12, length: 310, at: -(bar.shaftHalfLength - 205),
+                    material: oxide ? Materials.oxideKnurl : Materials.knurl)
         addCylinder(radius: bar.sleeveRadius, length: bar.sleeveLength, at: -(bar.shaftHalfLength + bar.sleeveLength / 2), material: Materials.chrome)
         addCylinder(radius: bar.shoulderRadius, length: bar.shoulderLength, at: -(bar.shaftHalfLength + bar.shoulderLength / 2), material: Materials.chrome)
         addCylinder(radius: bar.shoulderRadius + 0.15, length: 1.5, at: -bar.shoulderEnd + 3, material: Materials.darkSteel)
@@ -184,20 +192,27 @@ final class BarbellSolid {
         for disc in layout.discs where disc.side < 0 {
             let profile = BarbellInspector.plateProfile(family: disc.family, diameter: disc.radius * 2, thickness: disc.thickness)
             let geometry = Lathe.geometry(profile: profile, segments: 128, hubEdges: 2)
-            let colour = PlatePalette.colour(for: disc.plate.colorToken(for: style))
-            geometry.materials = [Materials.chrome, Materials.plate(family: disc.family, fill: colour.fill)]
+            let colour = PlateTheme.colour(disc.plate, theme: theme, style: style)
+            let material = PlateTheme.material(disc.plate, theme: theme, style: style)
+            let ratios = PlateTheme.ratios(disc.plate, theme: theme, style: style)
+            geometry.materials = [Materials.hub(look.hubFinish), Materials.plate(material, fill: colour.fill)]
             let node = SCNNode(geometry: geometry)
             node.position = SCNVector3(Float(disc.centerX), 0, 0)
-            let textureKey = "\(disc.family):\(colour.fill):\(disc.radius)"
-            if faceTextures[textureKey] == nil {
-                faceTextures[textureKey] = PhotographicPlateFace.image(family: disc.family, fill: colour.fill, radius: disc.radius)
+            // Procedural themes (gloss, iron, machined) show the lathe surface.
+            if material.photoFamily != nil {
+                let textureKey = "\(disc.family):\(colour.fill):\(disc.radius):\(ratios.photoHub)"
+                if faceTextures[textureKey] == nil {
+                    faceTextures[textureKey] = PhotographicPlateFace.image(family: disc.family, fill: colour.fill,
+                                                                           radius: disc.radius, hubRatio: ratios.photoHub)
+                }
+                if let image = faceTextures[textureKey] {
+                    for face in [-1, 1] { node.addChildNode(photographicFace(image: image, disc: disc, face: face)) }
+                }
             }
             for face in [-1, 1] {
-                if let image = faceTextures[textureKey] {
-                    node.addChildNode(photographicFace(image: image, disc: disc, face: face))
-                }
-                node.addChildNode(denomination(for: disc, face: face, ink: colour.ink))
+                node.addChildNode(denomination(for: disc, face: face, ink: colour.ink, ratios: ratios, brand: look.brand))
             }
+            addDetails(look.details, to: node, disc: disc, ratios: ratios, ink: colour.ink)
             scene.rootNode.addChildNode(node)
             let caption = UILabel()
             caption.text = inspectionPlateLabel(disc.plate)
@@ -309,12 +324,13 @@ final class BarbellSolid {
     /// Original Cadence stamps, without manufacturer or certification marks.
     /// The screen-space caption below each disc is the authoritative readable
     /// denomination; the face print is part of the realistic construction.
-    private func denomination(for disc: BarbellInspector.Disc, face: Int, ink: UInt32) -> SCNNode {
-        let hub = max(BarbellInspector.boreRadius + 8, disc.radius * (disc.family == "bumper" ? 0.57 : 0.245))
-        let rim = disc.radius * 0.86
+    private func denomination(for disc: BarbellInspector.Disc, face: Int, ink: UInt32, ratios: PlateRatios, brand: String) -> SCNNode {
+        let hub = max(BarbellInspector.boreRadius + 8, disc.radius * ratios.hub)
+        // Custom keeps its original band edge for every family.
+        let rim = disc.radius * (theme == .custom ? 0.86 : ratios.rim)
         let root = SCNNode()
         for (string, y, size) in [(inspectionPlateLabel(disc.plate), -(hub + rim) / 2, (rim - hub) * 0.48),
-                                  ("CADENCE", (hub + rim) / 2, (rim - hub) * 0.22)] {
+                                  (brand, (hub + rim) / 2, (rim - hub) * 0.22)] {
             let text = SCNText(string: string, extrusionDepth: 0)
             text.font = UIFont.systemFont(ofSize: CGFloat(size), weight: .heavy)
             text.flatness = 0.15
@@ -332,6 +348,52 @@ final class BarbellSolid {
             root.addChildNode(node)
         }
         return root
+    }
+
+    /// Construction details from the theme, parented to the disc so they
+    /// explode with it. Face-mounted parts stand 1.4 mm proud, just above the
+    /// photographed face at 1.2 mm, so they are never hidden by it.
+    private func addDetails(_ details: [String], to node: SCNNode, disc: BarbellInspector.Disc, ratios: PlateRatios, ink: UInt32) {
+        let r = disc.radius, t = disc.thickness, bore = BarbellInspector.boreRadius
+        func ring(inner: Double, outer: Double, width: Double, material: SCNMaterial) {
+            let half = width / 2
+            let outline: [(Double, Double)] = [(inner, -half), (outer, -half), (outer, half), (inner, half), (inner, -half)]
+            let geometry = Lathe.geometry(profile: outline.map { .init(radius: $0.0, axial: $0.1) }, segments: 128)
+            geometry.materials = [material]
+            node.addChildNode(SCNNode(geometry: geometry))
+        }
+        func studs(count: Int, orbit: Double, radius: Double, length: Double, faces: [Int], material: SCNMaterial) {
+            for i in 0..<count {
+                let angle = Double(i) / Double(count) * 2 * Double.pi + Double.pi / Double(count)
+                for face in faces {
+                    let stud = cylinder(radius: radius, length: length, material: material)
+                    stud.position = SCNVector3(Float(Double(face) * (t / 2 + 0.2)), Float(cos(angle) * orbit), Float(sin(angle) * orbit))
+                    node.addChildNode(stud)
+                }
+            }
+        }
+        for detail in details {
+            switch detail {
+            case "boltedHub" where disc.family == "bumper":
+                studs(count: 6, orbit: max(bore + 8, 0.47 * r) * 0.72, radius: 5, length: 2.8, faces: [-1, 1], material: Materials.bolt)
+            case "chromeBoreRing":
+                ring(inner: bore, outer: bore + 6, width: t + 2.8, material: Materials.chrome)
+            case "calibrationPlugs" where disc.family == "ipf":
+                // The near sleeve's outward face is −x.
+                studs(count: 2, orbit: 0.62 * r, radius: 7, length: 2.4, faces: [-1], material: Materials.plug)
+            case "machinedRimRing":
+                ring(inner: r - 2, outer: r + 0.3, width: max(2, 0.35 * t), material: Materials.machinedRim)
+            case "colourBand":
+                if let band = PlateTheme.band(disc.plate, theme: theme) {
+                    ring(inner: r - 2, outer: r + 0.6, width: max(6, 0.34 * t), material: Materials.band(band))
+                }
+            case "hubRing":
+                let hub = max(bore + 8, ratios.hub * r)
+                ring(inner: hub, outer: hub + 4, width: t + 2.8, material: Materials.band(ink, roughness: 0.5))
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -390,7 +452,7 @@ enum Lathe {
 private enum PhotographicPlateFace {
     private static let context = CIContext(options: [.workingColorSpace: NSNull()])
 
-    static func image(family: String, fill: UInt32, radius: Double) -> UIImage? {
+    static func image(family: String, fill: UInt32, radius: Double, hubRatio: Double) -> UIImage? {
         let bumper = family == "bumper"
         guard let source = UIImage(named: bumper ? "PlateBumperFaceDetail" : "PlateSteelFaceDetail")?.cgImage,
               let filter = CIFilter(name: "CIColorMatrix") else { return nil }
@@ -406,7 +468,7 @@ private enum PhotographicPlateFace {
         let size = CGSize(width: CGFloat(source.width), height: CGFloat(source.height))
         let rect = CGRect(origin: .zero, size: size)
         let sourceRadius = size.width * 0.485
-        let hubRadius = sourceRadius * (bumper ? 0.57 : 0.245)
+        let hubRadius = sourceRadius * CGFloat(hubRatio)
         let boreRadius = sourceRadius * CGFloat(max(0.13, BarbellInspector.boreRadius / radius))
         func circle(_ r: CGFloat) -> CGRect {
             CGRect(x: size.width / 2 - r, y: size.height / 2 - r, width: 2 * r, height: 2 * r)
@@ -462,16 +524,63 @@ enum Materials {
         return material
     }
 
-    static func plate(family: String, fill: UInt32) -> SCNMaterial {
-        // Colored steel is a painted surface; its exposed insert is the metal.
-        let material = pbr(UIColor(rgb: fill), metalness: family == "bumper" ? 0 : 0.08,
-                           roughness: family == "bumper" ? 0.68 : 0.36)
+    /// Colours given as linear RGB in the approved WebGL renders.
+    private static func linear(_ r: Double, _ g: Double, _ b: Double) -> UIColor {
+        UIColor(red: pow(r, 1 / 2.2), green: pow(g, 1 / 2.2), blue: pow(b, 1 / 2.2), alpha: 1)
+    }
+
+    private static func grained(_ material: SCNMaterial, intensity: CGFloat, tile: Float) -> SCNMaterial {
         material.normal.contents = StudioEnvironment.grainNormal
-        material.normal.intensity = family == "bumper" ? 0.7 : 0.3
+        material.normal.intensity = intensity
         material.normal.wrapS = .repeat
         material.normal.wrapT = .repeat
-        material.normal.contentsTransform = SCNMatrix4MakeScale(5, 5, 1)
+        material.normal.contentsTransform = SCNMatrix4MakeScale(tile, tile, 1)
         return material
+    }
+
+    /// A plate body from its theme material. Custom resolves to rubber
+    /// (0 / 0.68) for bumpers and powder (0.08 / 0.36) otherwise, exactly the
+    /// values this renderer used before themes.
+    static func plate(_ plate: PlateMaterial, fill: UInt32) -> SCNMaterial {
+        let material = pbr(UIColor(rgb: fill), metalness: plate.metal, roughness: plate.roughness)
+        switch plate.finish {
+        case .rubber: return grained(material, intensity: 0.7, tile: 5)
+        case .powder: return grained(material, intensity: 0.3, tile: 5)
+        case .gloss: return material
+        case .castIron: return grained(material, intensity: 1, tile: 5)
+        case .hammertone: return grained(material, intensity: 0.9, tile: 2)
+        case .machined:
+            // Along the profile, the brushed stripes become concentric turning marks.
+            material.normal.contents = StudioEnvironment.brushedNormal
+            material.normal.wrapS = .repeat
+            material.normal.wrapT = .repeat
+            material.normal.contentsTransform = SCNMatrix4MakeScale(1, 24, 1)
+            return material
+        }
+    }
+
+    /// The lathe hub insert.
+    static func hub(_ finish: PlateHubFinish) -> SCNMaterial {
+        switch finish {
+        case .chrome: return chrome
+        case .blackSteel: return grained(pbr(linear(0.11, 0.11, 0.12), metalness: 0.6, roughness: 0.5), intensity: 0.3, tile: 5)
+        case .castIron: return grained(pbr(linear(0.13, 0.13, 0.14), metalness: 0.18, roughness: 0.58), intensity: 1, tile: 5)
+        case .hammertone: return grained(pbr(linear(0.36, 0.37, 0.39), metalness: 0.25, roughness: 0.52), intensity: 0.9, tile: 2)
+        }
+    }
+
+    static var oxideShaft: SCNMaterial { pbr(linear(0.2, 0.21, 0.23), metalness: 1, roughness: 0.42) }
+    static var oxideKnurl: SCNMaterial {
+        let material = knurl
+        material.diffuse.contents = linear(0.19, 0.2, 0.22)
+        return material
+    }
+    static var bolt: SCNMaterial { pbr(UIColor(red: 0.55, green: 0.57, blue: 0.6, alpha: 1), metalness: 1, roughness: 0.45) }
+    static var plug: SCNMaterial { pbr(UIColor(red: 0.7, green: 0.72, blue: 0.75, alpha: 1), metalness: 1, roughness: 0.3) }
+    static var machinedRim: SCNMaterial { pbr(UIColor(red: 0.78, green: 0.8, blue: 0.83, alpha: 1), metalness: 1, roughness: 0.2) }
+    /// A matte rubber or painted band in a theme colour.
+    static func band(_ fill: UInt32, roughness: Double = 0.7) -> SCNMaterial {
+        pbr(UIColor(rgb: fill), metalness: 0, roughness: roughness)
     }
 
 }
