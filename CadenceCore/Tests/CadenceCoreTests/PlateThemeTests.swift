@@ -160,9 +160,17 @@ final class PlateThemeTests: XCTestCase {
         for (family, label) in fixture.familyLabels {
             XCTAssertEqual(PlateGeometry.familyLabel(family), label, family)
         }
-        // Token tints are the fill tints at the pigment's own target.
+        // Legacy black photographs keep their source pixels. Named-theme
+        // black fills intentionally tint; every other token uses its pigment.
         for (token, colour) in PlatePalette.colours {
             for style in [PlateVisualStyle.bumper, .steel] {
+                if token == "black" {
+                    XCTAssertEqual(PlateFaceTint(token: token, style: style).matrix,
+                                   [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0])
+                    XCTAssertNotEqual(PlateFaceTint(fill: colour.fill, style: style).matrix,
+                                      PlateFaceTint(token: token, style: style).matrix)
+                    continue
+                }
                 XCTAssertEqual(PlateFaceTint(token: token, style: style).matrix,
                                PlateFaceTint(fill: colour.fill, style: style, target: PlateFaceTint.target(for: token)).matrix)
             }
