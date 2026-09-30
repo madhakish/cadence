@@ -1,7 +1,7 @@
 import SwiftData
 
-/// Current V14 adds the gym's plate theme (`Gym.plateThemeRaw`, literal
-/// default "custom"). V13 is frozen in PersistenceSchemaV13.swift; the
+/// Current V14 adds the gym's plate theme (`Gym.plateThemeRaw`, empty migration
+/// sentinel). V13 is frozen in PersistenceSchemaV13.swift; the
 /// Seeder infers a theme once for single-unit gyms after open.
 enum CadenceSchemaV14: VersionedSchema {
     static var versionIdentifier = Schema.Version(14, 0, 0)
@@ -381,7 +381,7 @@ enum CadenceV12MigrationPlan: SchemaMigrationPlan {
     }
 }
 
-/// V13 -> V14: one String column with a literal "custom" default, so
+/// V13 -> V14: one String column with a literal empty sentinel, so
 /// SwiftData can add it without touching a row. The theme inference for
 /// single-unit gyms runs as an idempotent post-open backfill.
 enum CadenceV13MigrationPlan: SchemaMigrationPlan {

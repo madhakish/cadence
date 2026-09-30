@@ -471,7 +471,9 @@ final class VisualProofUITests: XCTestCase {
     /// so every relaunch shows the same 139 lb target in a different theme:
     /// both authored views, captured for the owner's visual judgement.
     func test15PlateThemesLoadedBar() {
-        for theme in ["iwfCompetition", "ipfCalibrated", "lbColourBumpers", "lbBlackIron", "blackBumpersBand", "cadenceHouse"] {
+        for theme in ["iwfCompetition", "iwfTraining", "ipfCalibrated", "ipfCalibratedGloss",
+                      "lbColourBumpers", "lbBlackIron", "lbGreyHammertone", "lbMachinedSteel",
+                      "blackBumpersBand", "cadenceHouse"] {
             app.terminate()
             app.launchArguments.removeAll { $0.hasPrefix("--plate-theme=") }
             app.launchArguments.append("--plate-theme=\(theme)")

@@ -321,13 +321,17 @@ export const normalizedSetFlags = (quality, stoppedEarly = false, rir = null) =>
 // SetLifecycle.correctedSetValues.
 export function correctedSetValues(set, correction = {}) {
   const corrected = { weightLb: set.weightLb, reps: set.reps,
-    durationSeconds: set.durationSeconds ?? null, status: set.status };
+    durationSeconds: set.durationSeconds ?? null, status: set.status,
+    distanceMiles: set.distanceMiles ?? null };
   if (Number.isFinite(correction.weightLb) && correction.weightLb >= 0) corrected.weightLb = correction.weightLb;
   if (Number.isInteger(correction.reps) && correction.reps >= 0) corrected.reps = correction.reps;
   if (Number.isInteger(correction.durationSeconds) && correction.durationSeconds >= 0) {
     corrected.durationSeconds = correction.durationSeconds;
   }
   if (SET_STATUSES.includes(correction.status)) corrected.status = correction.status;
+  if (Number.isFinite(correction.distanceMiles) && correction.distanceMiles >= 0) {
+    corrected.distanceMiles = correction.distanceMiles;
+  }
   return corrected;
 }
 // One tap on a correction row's status mark walks the shared status order —

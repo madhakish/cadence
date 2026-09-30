@@ -255,7 +255,7 @@ struct ExerciseDetailView: View {
                         }
                         if let contextualSolution {
                             let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
-                            let theme = defaultGym?.plateTheme ?? .custom
+                            let theme = (sessionGym ?? defaultGym)?.plateTheme ?? .custom
                             BarbellStageView(
                                 solution: contextualSolution,
                                 unit: set.enteredUnit,
@@ -571,7 +571,7 @@ struct ExerciseDetailView: View {
                 NavigationStack {
                     ScrollView {
                         let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
-                        let theme = defaultGym?.plateTheme ?? .custom
+                        let theme = (sessionGym ?? defaultGym)?.plateTheme ?? .custom
                         VStack(alignment: .leading, spacing: 18) {
                             BarbellInspectionView(solution: solution, plateStyle: style, plateTheme: theme)
                             LoadoutSummaryView(

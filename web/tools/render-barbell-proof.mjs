@@ -24,7 +24,7 @@ for (const [style,solution] of profiles) for (const exploded of [false,true]) {
   fixtures.push({loadout:{bar:solution.bar,perSide:solution.perSide,collarLb:solution.collarLb},style,exploded,
     scene:barbellScene(solution,style,exploded)});
   const stage=B.barbellStage(B.barbellSVG(solution,'full',style),{emphasis:'expanded'});
-  if (!exploded) stage.querySelector('.barbell-explode').click();
+  if (exploded) stage.querySelector('.barbell-explode').click();
   const svg=stage.querySelector('svg.realistic');
   svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
   for (const image of svg.querySelectorAll('image')) {
@@ -40,7 +40,7 @@ for (const theme of (process.argv[3] || '').split(',').filter(Boolean)) {
   const solution = C.enteredPlateSolution(C.BARS.bar20kg, [25, 20, 15, 10, 5, 2.5, 1.25].map((value) => ({ plate: { value, unit: 'kg' }, count: 1 })), 5.5);
   for (const exploded of [false, true]) {
     const stage = B.barbellStage(B.barbellSVG(solution, 'full', 'steel', { plateTheme: theme }), { emphasis: 'expanded' });
-    if (!exploded) stage.querySelector('.barbell-explode').click();
+    if (exploded) stage.querySelector('.barbell-explode').click();
     const svg = stage.querySelector('svg.realistic');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     for (const image of svg.querySelectorAll('image')) {

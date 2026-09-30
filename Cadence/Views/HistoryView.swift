@@ -601,6 +601,10 @@ struct SessionDetailView: View {
                 if let text = draft.secondsText, text != (set.durationSeconds.map(String.init) ?? "") {
                     correction.durationSeconds = Int(text)
                 }
+                if let text = draft.yardsText, text != (set.carryYards.map { Weight.trim($0, decimals: 2) } ?? "") {
+                    correction.distanceMiles = Double(text.replacingOccurrences(of: ",", with: "."))
+                        .map(CardioFormat.milesFromYards)
+                }
                 corrections.append((set: set, correction: correction))
             }
         }
@@ -1091,6 +1095,7 @@ struct SetCorrectionDraft {
     var weightText: String?
     var repsText: String?
     var secondsText: String?
+    var yardsText: String?
     var status: SetStatus?
 }
 
@@ -1133,7 +1138,12 @@ private struct HistorySetEditRow: View {
                             text: draftField(\.weightText,
                                              fallback: displayWeightText(set.weightLb, unit: unit)))
                 Text("×").foregroundStyle(.secondary)
-                editorField("Reps", text: draftField(\.repsText, fallback: String(set.reps)))
+                if let yards = set.carryYards {
+                    editorField(set.isPerSide ? "Yards per side" : "Yards",
+                                text: draftField(\.yardsText, fallback: Weight.trim(yards, decimals: 2)))
+                } else {
+                    editorField("Reps", text: draftField(\.repsText, fallback: String(set.reps)))
+                }
             }
             Spacer(minLength: 4)
             if set.isWarmup {

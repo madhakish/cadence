@@ -329,7 +329,7 @@ const statusGlyph = (status) => (status === "completed" ? "✓" : status === "sk
 // empty or garbage field keeps the stored value, and nothing beyond the four
 // performed fields is reachable. The weight edits in the display's primary
 // unit and stores canonical pounds, like every other entry surface.
-function editableHistorySetRow(set, exerciseType, draft) {
+function editableHistorySetRow(set, exerciseType, draft, exerciseName) {
   const unit = C.primaryUnit(ui.prefs.unitDisplay);
   const effectiveStatus = () => draft.status || set.status;
   const statusBtn = ui.h("button", { class: "btn ghost sm mono", text: statusGlyph(effectiveStatus()),
@@ -353,8 +353,12 @@ function editableHistorySetRow(set, exerciseType, draft) {
     : [numberInput(`Weight (${unit})`, draft.weightText ?? displayWeightText(set, unit), false,
       (event) => { draft.weightText = event.target.value; }),
       ui.h("span", { class: "sub", text: "×" }),
-      numberInput("Reps", draft.repsText ?? String(set.reps ?? 0), true,
-        (event) => { draft.repsText = event.target.value; })];
+      C.carryYards(exerciseName, set.distanceMiles) !== null
+        ? numberInput(set.isPerSide ? "Yards per side" : "Yards",
+          draft.yardsText ?? C.trim(C.yardsFromMiles(set.distanceMiles), 2), false,
+          (event) => { draft.yardsText = event.target.value; })
+        : numberInput("Reps", draft.repsText ?? String(set.reps ?? 0), true,
+          (event) => { draft.repsText = event.target.value; })];
   return ui.h("div", { class: `history-set${set.isWarmup ? " warm" : ""}` },
     statusBtn,
     ui.h("div", { class: "history-set-main", style: { display: "flex", gap: "8px", alignItems: "center" } }, ...fields),
@@ -400,6 +404,9 @@ function openDetail(s, exerciseByName) {
         correction.durationSeconds = parseFloat(draft.secondsText);
       }
       if (draft.status && draft.status !== set.status) correction.status = draft.status;
+      if (draft.yardsText?.trim() && draft.yardsText !== C.trim(C.yardsFromMiles(set.distanceMiles), 2)) {
+        correction.distanceMiles = C.milesFromYards(Number(draft.yardsText.replace(",", ".")));
+      }
       entries.push({ set, correction });
     }
     return entries;
@@ -513,7 +520,7 @@ function openDetail(s, exerciseByName) {
           // belong to the Health comparison flow, which reconciles against a
           // measurement instead of a memory.
           if (editing && (isStrengthEntry(e, exercise) || exercise?.type === "timed")) {
-            card.append(editableHistorySetRow(x, exercise?.type, draftFor(x)));
+            card.append(editableHistorySetRow(x, exercise?.type, draftFor(x), e.exerciseName));
             continue;
           }
           const shown = historySetPresentationForTest(x, exercise?.type, e.exerciseName);

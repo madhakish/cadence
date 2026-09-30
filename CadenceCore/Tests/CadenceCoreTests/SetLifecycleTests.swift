@@ -154,6 +154,23 @@ final class SetLifecycleTests: XCTestCase {
         XCTAssertEqual(untouched.status, .completed, "an empty correction changes nothing")
     }
 
+    func testCarryDistanceCorrectionPreservesTheOtherPerformedFacts() {
+        let corrected = SetLifecycle.correctedSetValues(
+            weightLb: 50, reps: 1, durationSeconds: nil, status: .completed,
+            correction: .init(distanceMiles: 80.0 / 1760), distanceMiles: 40.0 / 1760
+        )
+        XCTAssertEqual(corrected.distanceMiles, 80.0 / 1760)
+        XCTAssertEqual(corrected.weightLb, 50)
+        XCTAssertEqual(corrected.reps, 1)
+        for invalid in [-1.0, Double.nan, Double.infinity] {
+            let unchanged = SetLifecycle.correctedSetValues(
+                weightLb: 50, reps: 1, durationSeconds: nil, status: .completed,
+                correction: .init(distanceMiles: invalid), distanceMiles: 40.0 / 1760
+            )
+            XCTAssertEqual(unchanged.distanceMiles, 40.0 / 1760)
+        }
+    }
+
     /// [INV-BANKED-SETS-CORRECTABLE] The status cycle is shared domain
     /// behavior — one tap must walk the same documented order on both clients
     /// (mirrors the core.test.mjs nextSetStatus block).

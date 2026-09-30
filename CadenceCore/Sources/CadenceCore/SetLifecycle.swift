@@ -112,13 +112,16 @@ public enum SetLifecycle {
         public var weightLb: Double?
         public var reps: Int?
         public var durationSeconds: Int?
+        public var distanceMiles: Double?
         public var status: SetStatus?
 
         public init(weightLb: Double? = nil, reps: Int? = nil,
-                    durationSeconds: Int? = nil, status: SetStatus? = nil) {
+                    durationSeconds: Int? = nil, status: SetStatus? = nil,
+                    distanceMiles: Double? = nil) {
             self.weightLb = weightLb
             self.reps = reps
             self.durationSeconds = durationSeconds
+            self.distanceMiles = distanceMiles
             self.status = status
         }
     }
@@ -137,10 +140,10 @@ public enum SetLifecycle {
 
     public static func correctedSetValues(
         weightLb: Double, reps: Int, durationSeconds: Int?, status: SetStatus,
-        correction: SetCorrection
-    ) -> (weightLb: Double, reps: Int, durationSeconds: Int?, status: SetStatus) {
+        correction: SetCorrection, distanceMiles: Double? = nil
+    ) -> (weightLb: Double, reps: Int, durationSeconds: Int?, status: SetStatus, distanceMiles: Double?) {
         var corrected = (weightLb: weightLb, reps: reps,
-                         durationSeconds: durationSeconds, status: status)
+                         durationSeconds: durationSeconds, status: status, distanceMiles: distanceMiles)
         if let value = correction.weightLb, value.isFinite, value >= 0 {
             corrected.weightLb = value
         }
@@ -149,6 +152,9 @@ public enum SetLifecycle {
             corrected.durationSeconds = value
         }
         if let value = correction.status { corrected.status = value }
+        if let value = correction.distanceMiles, value.isFinite, value >= 0 {
+            corrected.distanceMiles = value
+        }
         return corrected
     }
 

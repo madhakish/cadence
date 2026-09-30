@@ -14,7 +14,7 @@ const T = await import("../app/js/plate-theme.js");
 await DB.Exercises.save({ name: "Farmer Carry", type: "dumbbell", category: "Accessory", loadBasis: "perImplement", implementCount: 2 });
 const set = (weightLb, reps, yards = null) => ({ weightLb, reps, distanceMiles: yards == null ? null : C.milesFromYards(yards),
   loadBasis: "perImplement", implementCount: 2, isPerSide: false, isWarmup: false, status: "completed", flags: [] });
-const workout = (id, date, sets, isCompleted) => ({ id, date, notes: "Synthetic regression", isCompleted,
+const workout = (id, date, sets, isCompleted) => ({ id, date: new Date(date).toISOString(), notes: "Synthetic regression", isCompleted,
   exercises: [{ exerciseName: "Farmer Carry", notes: "", sets }] });
 const past = workout("carry-past", "2026-09-20T12:00:00Z", [set(600, 100), set(50, 1, 40)], true);
 await DB.Sessions.save(past);
@@ -23,9 +23,19 @@ await DB.Sessions.save(current);
 const summary = await completeSession(current);
 assert.deepEqual(summary.milestones.map((m) => m.kind), ["volumePR"], "bank compares the 6000 lb·yd carry against 4000 lb·yd, never 120000 lb rep tonnage");
 const banked = (await DB.Milestones.all()).filter((m) => m.date === current.date).map(({ kind, label }) => ({ kind, label }));
+assert.equal(banked.length, 1);
 await rebuildMilestones(["Farmer Carry"]);
 const rebuilt = (await DB.Milestones.all()).filter((m) => m.date === current.date).map(({ kind, label }) => ({ kind, label }));
 assert.deepEqual(rebuilt, banked, "rebuild uses the same distance baseline as bank");
+await DB.Sessions.applyCorrections(current, [{ set: current.exercises[0].sets[0], correction: { distanceMiles: C.milesFromYards(80) } }]);
+assert.equal(C.yardsFromMiles((await DB.Sessions.get(current.id)).exercises[0].sets[0].distanceMiles), 80);
+await rebuildMilestones(["Farmer Carry"]);
+assert.match((await DB.Milestones.all()).find((m) => m.date === current.date && m.kind === "volumePR").label, /8000/,
+  "correcting yards changes the canonical carry record and its derived workload PR");
+for (const invalid of [-1, NaN, Infinity]) {
+  assert.equal(C.correctedSetValues(current.exercises[0].sets[0], { distanceMiles: invalid }).distanceMiles,
+    C.milesFromYards(80), "invalid correction preserves the banked distance");
+}
 assert.match(historySetPresentationForTest({ ...set(50, 1, 40), isPerSide: true }, "dumbbell", "Farmer Carry").actual,
   /each × 40 yd \/ side/, "history states per-hand load and per-side distance");
 

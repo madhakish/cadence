@@ -158,7 +158,8 @@ enum ExportService {
         let defaultBarId: String
         let collarWeightLb: Double
         let loadingPolicy: String
-        /// v15: `PlateThemeID` raw value; older importers ignore it.
+        /// v15: `PlateThemeID` raw value; pre-v15 backups omit it. Importers
+        /// predating v15 reject this newer backup contract.
         let plateTheme: String
         let plateToggles: [ExportPlateToggle]
         let barcodeImage: String?

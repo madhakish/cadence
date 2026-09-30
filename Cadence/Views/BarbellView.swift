@@ -142,7 +142,12 @@ struct BarbellView: View {
                 let token = disc.plate.colorToken(for: plateStyle)
                 let colour = PlateTheme.colour(disc.plate, theme: plateTheme, style: plateStyle)
                 let family = PlateTheme.family(disc.plate, theme: plateTheme, style: plateStyle)
-                let known = PlateSprites.plates["\(family):\(disc.plate.id)"].map { "plate-\($0)-\(angle)" }
+                let geometry = PlateTheme.geometry(disc.plate, theme: plateTheme, style: plateStyle)
+                let shape = PlateSprites.shapes.first {
+                    $0.family == family && abs($0.diameter - geometry.diameter) < 0.01
+                        && abs($0.thickness - geometry.thickness) < 0.01
+                }?.key ?? PlateSprites.plates["\(family):\(disc.plate.id)"]
+                let known = shape.map { "plate-\($0)-\(angle)" }
                 // An unknown shape borrows the family's first sprite, and an
                 // unknown family the steel one; geometry still scales it.
                 func first(_ family: String) -> String? {
