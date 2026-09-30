@@ -603,7 +603,7 @@ struct SessionDetailView: View {
                 }
                 if let text = draft.yardsText, text != (set.carryYards.map { Weight.trim($0, decimals: 2) } ?? "") {
                     correction.distanceMiles = Double(text.replacingOccurrences(of: ",", with: "."))
-                        .map(CardioFormat.milesFromYards)
+                        .map { CardioFormat.miles(fromYards: $0) }
                 }
                 corrections.append((set: set, correction: correction))
             }
