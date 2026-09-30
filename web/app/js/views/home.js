@@ -2,7 +2,7 @@
 import * as ui from "../ui.js";
 import * as C from "../core.js";
 import { sparkline } from "../charts.js";
-import { barbellSVG, dumbbellSVG, prescriptionPlateDetails, stationPlates } from "../barbell.js";
+import { barbellSVG, barbellReadout, dumbbellSVG, prescriptionPlateDetails, stationPlates } from "../barbell.js";
 import { Sessions, Tracks, Gyms, Settings, Programs, Exercises, Checkins, CoachingDecisions, Intervals, intervalSnapshots, topSet, localDayKey } from "../db.js";
 import { coachingReport, applyCoachingRecommendation, coachingDecision } from "../coaching-adapter.js";
 import { createSessionFromTrack, createBlankSession, createSessionFromProgramDay, openSession, planningBase, previewProgramPlan, reconcileRecoveryBridge, volumeFallbackSets } from "./session.js";
@@ -17,7 +17,8 @@ const barbellPrescriptionView = (achievedLb, targetLb, unit, gym, stationDenomin
     gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest");
   const wrap = ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
     barbellSVG(solution, "compact",
-      movementGroup === "olympic" ? "bumper" : "steel").svg);
+      movementGroup === "olympic" ? "bumper" : "steel", { plateTheme: gym?.plateTheme || "custom" }).svg,
+    barbellReadout(solution));
   for (const detail of prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, stationDenomination)) {
     wrap.append(ui.h("span", { class: `sub plate-detail${detail.kind === "target" ? " warn" : ""}`, text: detail.text }));
   }
@@ -419,7 +420,13 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
               : ui.h("span", { class: "title", text: a.exerciseName }),
             ui.h("span", { class: "sub mono", text: isTimed
               ? `${sets} × ${C.cardioDurationLabel(a.targetSeconds || 30)}`
-              : (a.weightLb > 0 ? `${sets}×${accReps} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : `${sets}×${accReps}`) })));
+              // [INV-CARRY-LOGS-DISTANCE] "3 × 40 yd @ 50 lb each".
+              : (() => {
+                const volume = C.logsCarryDistance(a.exerciseName)
+                  ? `${sets} × ${C.carryDistanceLabel(C.CARRY_DEFAULT_YARDS, !!accessoryExercise?.isUnilateral)}` : `${sets}×${accReps}`;
+                return a.weightLb > 0
+                  ? `${volume} @ ${ui.fmtWeight(a.weightLb)}${C.loadBasisSuffix(C.resolvedLoadBasis(accessoryExercise))}` : volume;
+              })() })));
         }
         body.append(accCard);
       }

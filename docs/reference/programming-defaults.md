@@ -49,6 +49,9 @@ catalog currently includes:
 | Barbell Row / Snatch Pull / Clean Pull | 45 | 5 |
 | Face Pulls / Triceps Pushdown | 10 | 5 |
 | Lat Pulldown / Lying Leg Curl | 20 | 5 |
+| Farmer Carry / Suitcase Carry | 50 per hand | 5 |
+| Front-rack Carry (kettlebell) | 35 per hand | 5 |
+| Overhead Carry | 25 per hand | 5 |
 
 These are intentionally suggestions, not claims about what a lifter *should*
 use. Correct the first workout to match the implement, machine stack, range of

@@ -6,7 +6,7 @@
 // Everything is physical millimetres from the bar's centre: x runs along the
 // bar (right side positive), y is up, z is toward the viewer. BarbellScene
 // stays the orthographic sprite model for compact rows; this is the solid.
-import { plateGeometry, plateFamily } from './barbell-scene.js';
+import { plateThemeGeometry, plateThemeFamily } from './plate-theme.js';
 
 export const BORE_RADIUS = 25.25;    // 50.5 mm Olympic bore
 
@@ -18,11 +18,11 @@ const WOMENS = Object.freeze({ ...MENS, sleeveLength: 320, shaftRadius: 12.5 });
 
 export const isWomensBar = (bar) => bar.unit === 'kg' ? bar.value === 15 : bar.value === 35;
 
-export function barbellLayout(solution, style = 'steel', explode = 0, geometry = {}) {
+export function barbellLayout(solution, style = 'steel', explode = 0, geometry = {}, theme = 'custom') {
   const base = isWomensBar(solution.bar) ? WOMENS : MENS;
   const bar = { ...base, shoulderEnd: base.shaftHalfLength + base.shoulderLength };
   const plates = solution.perSide.flatMap((c) => Array.from({ length: Math.max(0, c.count) }, () => c.plate));
-  const shapes = plates.map((plate) => geometry[`${plate.value}-${plate.unit}`] || plateGeometry(plate, style));
+  const shapes = plates.map((plate) => geometry[`${plate.value}-${plate.unit}`] || plateThemeGeometry(plate, theme, style));
   const maxRadius = Math.max(bar.collarRadius, ...shapes.map((shape) => shape.diameter / 2));
   // At 50° yaw, a face projects radius*sin(yaw) along the stack. The gap
   // exceeds diameter*tan(50°), with air between even the largest faces.
@@ -35,7 +35,7 @@ export function barbellLayout(solution, style = 'steel', explode = 0, geometry =
     plates.forEach((plate, index) => {
       const shape = shapes[index];
       const centerX = cursor + shape.thickness / 2 + gap * index;
-      discs.push({ plate, side, index, family: plateFamily(plate, style),
+      discs.push({ plate, side, index, family: plateThemeFamily(plate, theme, style), theme,
         centerX: side * centerX, radius: shape.diameter / 2, thickness: shape.thickness });
       cursor += shape.thickness;
     });
@@ -89,6 +89,21 @@ export function plateProfile(family, diameter, thickness) {
     const hub = Math.max(BORE_RADIUS + 8, 0.2 * R), proud = 0.8, dish = Math.min(2.4, 0.12 * thickness), bevel = Math.min(1.2, 0.15 * thickness);
     half = [[BORE_RADIUS, -(ht + proud)], [hub, -(ht + proud)], [hub, -(ht - dish)],
       [0.82 * R, -(ht - dish)], [0.89 * R, -ht], [R - bevel, -ht], [R, -(ht - bevel)]];
+  } else if (family === 'ipf') {
+    // Calibrated disc: thin painted face recessed inside a raised outer lip.
+    const hub = Math.max(BORE_RADIUS + 8, 0.2 * R), proud = 0.8, lip = Math.min(2.2, 0.12 * thickness), lipW = 0.06 * R;
+    half = [[BORE_RADIUS, -(ht + proud)], [hub, -(ht + proud)], [hub, -(ht - lip)],
+      [R - lipW - 4, -(ht - lip)], [R - lipW, -ht], [R - 1, -ht], [R, -(ht - 1)]];
+  } else if (family === 'iron') {
+    // Cast iron: raised centre boss and a raised rim lip around a sunken face.
+    const boss = Math.max(BORE_RADIUS + 10, 0.24 * R), proud = 1.2, lip = Math.min(3, 0.14 * thickness), lipW = 0.09 * R;
+    half = [[BORE_RADIUS, -(ht + proud)], [boss, -(ht + proud)], [boss + 3, -(ht - lip)],
+      [R - lipW - 3, -(ht - lip)], [R - lipW, -ht], [R - 1.5, -ht], [R, -(ht - 1.5)]];
+  } else if (family === 'machined') {
+    // Turned steel: flat face with one shallow machined step.
+    const hub = Math.max(BORE_RADIUS + 8, 0.22 * R), proud = 0.8, step = Math.min(1.5, 0.08 * thickness);
+    half = [[BORE_RADIUS, -(ht + proud)], [hub, -(ht + proud)], [hub, -(ht - step)],
+      [0.6 * R, -(ht - step)], [0.62 * R, -ht], [R - 1, -ht], [R, -(ht - 1)]];
   } else {
     const hub = Math.max(BORE_RADIUS + 8, 0.25 * R), proud = 0.7, bevel = Math.min(1.5, 0.15 * thickness);
     half = [[BORE_RADIUS, -(ht + proud)], [hub, -(ht + proud)], [hub, -ht], [R - bevel, -ht], [R, -(ht - bevel)]];

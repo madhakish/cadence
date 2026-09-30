@@ -311,6 +311,15 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(Plate(value: 1.25, unit: .kg).id, "1.25-kg")
     }
 
+    // [INV-PLATE-LABELS-PRESERVE-INPUT]
+    func testPlateLabelsPreserveStoredDenominations() {
+        for (value, text) in [(1.125, "1.125"), (1.25, "1.25"), (2.5, "2.5"), (45.0, "45")] {
+            let plate = Plate(value: value, unit: .kg)
+            XCTAssertEqual(plate.denomination, text)
+            XCTAssertEqual(plate.label, "\(text) kg")
+        }
+    }
+
     // MARK: - Plate colours + drawn size (mirrors the web "plate colours" block)
 
     func testPlateColorTokens() {
@@ -353,6 +362,7 @@ final class PlateMathTests: XCTestCase {
         }
     }
 
+    // [INV-PLATE-LABELS-PRESERVE-INPUT]
     func testEnteredLoadoutPreservesCollarToSleeveOrder() {
         let entered = [45.0, 10, 25, 2.5].map {
             PlateCount(plate: Plate(value: $0, unit: .lb), count: 1)

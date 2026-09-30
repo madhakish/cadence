@@ -67,8 +67,14 @@ import Foundation
 /// always has. Older importers reject a v12 bundle on the version gate,
 /// which is correct: parsing it would silently drop the recorded facts
 /// (INV-WOOD-WORK-ROUND-TRIPS).
+///
+/// Version 15 (#55) adds the per-gym `plateTheme` (a `PlateThemeID` raw
+/// value), required and whitelisted from v15. Presentation only; a v≤14
+/// bundle restores every gym as `custom` and never re-infers a theme. Older
+/// importers reject a v15 bundle on the version gate, which is correct:
+/// parsing it would silently drop the gym's chosen look.
 public enum BackupContract {
-    public static let currentSchemaVersion = 14
+    public static let currentSchemaVersion = 15
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

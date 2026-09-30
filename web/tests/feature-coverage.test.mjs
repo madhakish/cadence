@@ -11,7 +11,7 @@ function report() {
 }
 
 test('every registered requirement executes on both browser engines', () => {
-  assert.equal(verifyFeatureCoverage(report()).length, 10);
+  assert.equal(verifyFeatureCoverage(report()).length, 12);
 });
 
 for (const [name, corrupt] of Object.entries({

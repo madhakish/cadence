@@ -216,8 +216,11 @@ final class SessionExercise {
         // a cardio set whose library entry is gone — restored history must
         // behave the same on both clients (mirrors web db.js workingVolume).
         guard exercise?.type != .conditioning else { return 0 }
+        // [INV-CARRY-LOGS-DISTANCE] A distance carry is excluded like a ruck:
+        // its load × yards is compared only with other carries, never summed.
         return workingSets
-            .filter { !(($0.distanceMiles ?? 0) > 0 || ($0.flights ?? 0) > 0 || ($0.durationSeconds ?? 0) > 0) }
+            .filter { CardioFormat.countsTowardTonnage(distanceMiles: $0.distanceMiles, flights: $0.flights,
+                                                       durationSeconds: $0.durationSeconds) }
             .compactMap(\.volumeLb).reduce(0, +)
     }
 
@@ -402,6 +405,13 @@ final class SetEntry {
     var resolvedImplementCount: Int {
         let linked = sessionExercise?.exercise?.resolvedImplementCount ?? 1
         return LoadSemantics.normalizedImplementCount(implementCount > 0 ? implementCount : linked, basis: loadBasis)
+    }
+
+    /// Yards for a distance-carry set; nil for every other set, including a
+    /// carry logged as reps ([INV-CARRY-LOGS-DISTANCE]).
+    var carryYards: Double? {
+        CardioFormat.carryYards(exerciseName: sessionExercise?.exercise?.name ?? "",
+                                distanceMiles: distanceMiles)
     }
 
     var volumeLb: Double? {

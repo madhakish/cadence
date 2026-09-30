@@ -158,6 +158,8 @@ enum ExportService {
         let defaultBarId: String
         let collarWeightLb: Double
         let loadingPolicy: String
+        /// v15: `PlateThemeID` raw value; older importers ignore it.
+        let plateTheme: String
         let plateToggles: [ExportPlateToggle]
         let barcodeImage: String?
         let barcodeLabel: String
@@ -631,6 +633,7 @@ enum ExportService {
                     defaultBarId: Bar.by(id: g.defaultBarID).id,
                     collarWeightLb: g.collarWeightLb,
                     loadingPolicy: g.loadingPolicy.rawValue,
+                    plateTheme: g.plateTheme.rawValue,
                     plateToggles: g.plateToggles.map { ExportPlateToggle(value: $0.value, unit: $0.unitRaw, enabled: $0.enabled) },
                     barcodeImage: dataURL(g.barcodeImageData),
                     barcodeLabel: g.barcodeLabel
@@ -642,7 +645,8 @@ enum ExportService {
                                   secondaryMovementPattern: e.secondaryMovementPattern?.rawValue,
                                   aliases: e.aliases, strategyTags: e.strategyTags,
                                   isUnilateral: e.isUnilateral, loadBasis: e.loadBasis.rawValue,
-                                  implementCount: e.resolvedImplementCount,
+                                  implementCount: LoadSemantics.backupImplementCount(
+                                      stored: e.implementCount, exerciseType: e.typeRaw, basis: e.loadBasis, exerciseName: e.name),
                                   defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
                                   isShelved: e.isShelved, shelvedNote: e.shelvedNote,
                                   watchSite: e.watchSite?.rawValue, gateStatus: e.gateStatus.rawValue,

@@ -137,3 +137,10 @@ actual images before declaring visual verification. XCTest's accessibility
 checks do not claim a manual spoken VoiceOver session. Record exact-head CI,
 simulator capture and any device checks with the review; compilation alone
 proves neither rendering quality nor VoiceOver behavior.
+
+## Exact inline denominations
+
+Inline bars retain the fixed two-view inspector and add a screen-size readout
+for each plate, inside to outside. Mixed units and custom denomination precision
+are preserved. Face stamps below 12 px/pt after fitting are suppressed; the
+readout and the inspector captions remain readable. Counts wrap without shrinking.

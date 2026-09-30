@@ -735,6 +735,7 @@ struct GymEditorView: View {
 
     @State private var photoItem: PhotosPickerItem?
     @State private var showCard = false
+    @State private var confirmPlateProfile = false
 
     var body: some View {
         Form {
@@ -761,8 +762,22 @@ struct GymEditorView: View {
                         Text(policy.label).tag(policy)
                     }
                 }
+                Picker("Plate theme", selection: Binding(
+                    get: { gym.plateTheme },
+                    set: { gym.plateTheme = $0 }
+                )) {
+                    ForEach(PlateThemeID.allCases) { theme in
+                        Text(theme.label).tag(theme)
+                    }
+                }
+                if gym.plateTheme != .custom {
+                    Button("Use this profile's plates") { confirmPlateProfile = true }
+                }
             } footer: {
-                Text("Cadence includes collars in the achieved weight and applies this policy whenever a barbell prescription is snapped to your available plates.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cadence includes collars in the achieved weight and applies this policy whenever a barbell prescription is snapped to your available plates.")
+                    Text("Changes how plates look on the bar for this gym; inventory and totals are unchanged.")
+                }
             }
 
             Section {
@@ -800,6 +815,17 @@ struct GymEditorView: View {
             }
         }
         .navigationTitle(gym.name)
+        .confirmationDialog("Replace the enabled plate inventory?", isPresented: $confirmPlateProfile) {
+            Button("Use \(gym.plateTheme.label) plates") {
+                let previous = gym.plateToggles
+                gym.applyPlateProfileInventory()
+                if !PersistenceErrorCenter.shared.save(context, operation: "Saving the plate inventory") {
+                    gym.plateToggles = previous
+                }
+            }
+        } message: {
+            Text(PlateTheme.set(for: gym.plateTheme.primaryUnit, theme: gym.plateTheme).map(\.label).joined(separator: ", ") + ". Other plates remain available to re-enable.")
+        }
         .saveChangesOnDisappear(context, operation: "Saving the gym")
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -1795,25 +1821,33 @@ private struct ProgramAccessoryRow: View {
                 }
             } else {
                 Stepper("Weight: \(settingsList.unitDisplay.format(lb: accessory.weightLb))", value: $accessory.weightLb, in: 0...500, step: 2.5)
-                // The endpoints carry each other rather than crossing. A
-                // crossed window is a state the engine has to guess at, and
-                // the guess used to hand the lifter a rep jump and a load
-                // step in the same exposure.
-                Stepper("Min reps: \(accessory.minReps)", value: Binding(
-                    get: { accessory.minReps },
-                    set: { (value: Int) in
-                        accessory.minReps = value
-                        accessory.maxReps = max(accessory.maxReps, value)
-                        // Endpoints only — see the lift window above.
-                    }
-                ), in: 1...20)
-                Stepper("Max reps: \(accessory.maxReps)", value: Binding(
-                    get: { accessory.maxReps },
-                    set: { (value: Int) in
-                        accessory.maxReps = value
-                        accessory.minReps = min(accessory.minReps, value)
-                    }
-                ), in: 1...30)
+                if CardioFormat.logsCarryDistance(exerciseName: accessory.exerciseName) {
+                    // [INV-CARRY-LOGS-DISTANCE] A carry is sets of distance; a
+                    // rep window means nothing for it and slots hold no
+                    // distance target yet.
+                    LabeledContent("Distance",
+                                   value: "\(CardioFormat.carryDistanceLabel(yards: CardioFormat.carryDefaultYards)) per set · adjust in the logger")
+                } else {
+                    // The endpoints carry each other rather than crossing. A
+                    // crossed window is a state the engine has to guess at, and
+                    // the guess used to hand the lifter a rep jump and a load
+                    // step in the same exposure.
+                    Stepper("Min reps: \(accessory.minReps)", value: Binding(
+                        get: { accessory.minReps },
+                        set: { (value: Int) in
+                            accessory.minReps = value
+                            accessory.maxReps = max(accessory.maxReps, value)
+                            // Endpoints only — see the lift window above.
+                        }
+                    ), in: 1...20)
+                    Stepper("Max reps: \(accessory.maxReps)", value: Binding(
+                        get: { accessory.maxReps },
+                        set: { (value: Int) in
+                            accessory.maxReps = value
+                            accessory.minReps = min(accessory.minReps, value)
+                        }
+                    ), in: 1...30)
+                }
                 Stepper("Load step: +\(settingsList.unitDisplay.format(lb: accessory.incrementLb)) (0 = bodyweight)", value: $accessory.incrementLb, in: 0...25, step: 2.5)
             }
         }
