@@ -138,3 +138,10 @@
 - Unit follows the exercise — an exercise set to kg on an lb gym shows the theme's kg sibling set and vice versa; toggles apply within the set.
 - Printed on the face — the denomination is printed on the plate face beside the hub, value over unit, condensed heavy type scaled with the plate and foreshortened with the face. The exact per-side list under the bar stays the readable record; #262's floating labels are not adopted.
 - IPF colours — the rulebook fixes only 25 red, 20 blue, 15 yellow; the green/white/black/chrome scheme below 15 kg is manufacturer convention and is presented as such.
+
+## Exercise favorites, 2026-09-30
+
+- A separate 44-point star action saves a shortcut without selecting a lift or changing its gate. Favorites appears before Recent and the collapsed catalog on the shared native browser, including session and program pickers; the web browser mirrors it. Search, movement, equipment, policy, and availability apply before the shortcut list is built.
+- The preference lives on the exercise record, so name edits retain it and seed top-ups cannot replace it. V14 is frozen and native V15 adds `isFavorite = false`; IndexedDB V11 persists the same default. Backup 16 carries a required Boolean. Older backups restore an unstarred library, and the restore preview reports a favorite-only change.
+- Saving uses the native rollback/error surface and the web transaction boundary. A failed write retains the previous star. Keyboard focus follows the row after repaint or returns to the Favorites heading after its last shortcut is removed.
+- This completes the remaining Favorites implementation in #63. Actual native/browser evidence is recorded in the linked PR; #187 still owns the full epic verification matrix and #198 owns purposeful imagery.

@@ -1,11 +1,15 @@
 {
-  "projects": ["chromium", "webkit"],
+  "projects": [
+    "chromium",
+    "webkit"
+  ],
   "requirements": {
     "WEB-WORKOUT-REOPEN": "Completed and planned work, edited reps and session identity survive reopening",
     "WEB-OFFLINE-RESUME": "Cached app resumes and banks an existing workout without a network",
     "WEB-UPDATE-RESUME": "A real worker update preserves active work and other projects' caches",
     "WEB-BACKUP-ROUNDTRIP": "A synthetic blank-workout export restores its portable content in a fresh browser context",
     "WEB-RESTORE-CONTENT": "Same-count changed values prompt for restore; cancel preserves current work",
-    "WEB-PLATE-LABELS": "F1–F8 preserve readable denominations and lb→kg totals at phone and desktop widths"
+    "WEB-PLATE-LABELS": "F1\u2013F8 preserve readable denominations and lb\u2192kg totals at phone and desktop widths",
+    "WEB-EXERCISE-FAVORITES": "Favorites persist, compose with search and filters, preserve keyboard focus, and select from the shared session picker"
   }
 }

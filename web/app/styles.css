@@ -647,3 +647,10 @@ svg.barbell.compact.realistic { width: 100%; height: 84px; }
 .hold-countdown { font-size: clamp(3rem, 16vw, 5rem); font-weight: 750; line-height: 1.2; margin: 20px 0; }
 .hold-timer .btn { min-height: 48px; margin-top: 10px; }
 .hold-timer [hidden] { display: none; }
+
+/* Favorite actions stay separate from opening/selecting a lift. */
+.library-open { display:flex; align-items:center; gap:12px; flex:1; min-width:0; min-height:44px; padding:0; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.library-open .lead { min-width:0; }
+.exercise-favorite { min-width:44px; min-height:44px; flex-shrink:0; padding:6px; font-size:24px; }
+.exercise-favorite[aria-pressed="true"] { color:var(--accent); }
+.library-favorites { margin-bottom:18px; }

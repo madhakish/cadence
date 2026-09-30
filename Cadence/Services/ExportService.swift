@@ -184,6 +184,7 @@ enum ExportService {
         let defaultRestSeconds: Int
         let notes: String
         let isShelved: Bool
+        let isFavorite: Bool
         let shelvedNote: String
         let watchSite: String?
         let gateStatus: String
@@ -649,7 +650,7 @@ enum ExportService {
                                   implementCount: LoadSemantics.backupImplementCount(
                                       stored: e.implementCount, exerciseType: e.typeRaw, basis: e.loadBasis, exerciseName: e.name),
                                   defaultRestSeconds: e.defaultRestSeconds, notes: e.notes,
-                                  isShelved: e.isShelved, shelvedNote: e.shelvedNote,
+                                  isShelved: e.isShelved, isFavorite: e.isFavorite, shelvedNote: e.shelvedNote,
                                   watchSite: e.watchSite?.rawValue, gateStatus: e.gateStatus.rawValue,
                                   gateSite: e.gateSite?.rawValue, reEntryCriteria: e.reEntryCriteria,
                                   completedReEntryCriteria: e.completedReEntryCriteria,

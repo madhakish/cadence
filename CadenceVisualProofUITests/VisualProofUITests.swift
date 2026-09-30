@@ -504,6 +504,50 @@ final class VisualProofUITests: XCTestCase {
         }
     }
 
+    func test16FavoritesInLibraryAndSessionPicker() {
+        app.tabBars.buttons["Settings"].tap()
+        openDisclosure("Programming & library")
+        let library = app.buttons["Exercise library"]
+        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
+        XCTAssertTrue(library.waitForExistence(timeout: 3))
+        library.tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        capture("favorites-01-library-empty-iphone")
+
+        let search = app.searchFields.firstMatch
+        for _ in 0..<3 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap(); search.typeText("Back Squat\n")
+        let add = app.buttons["Add Back Squat to Favorites"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let remove = app.buttons["Remove Back Squat from Favorites"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(remove.value as? String, "Favorite")
+        capture("favorites-02-library-filtered-iphone")
+        XCTAssertTrue(app.navigationBars["Library"].exists, "Starring must not open or select the lift")
+
+        let cancelSearch = app.buttons["Cancel"].firstMatch
+        if cancelSearch.exists { cancelSearch.tap() }
+        capture("favorites-03-library-starred-iphone")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Today"].tap()
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let addExercise = app.buttons["Add exercise"]
+        for _ in 0..<14 where !addExercise.isHittable { app.swipeUp() }
+        XCTAssertTrue(addExercise.waitForExistence(timeout: 3))
+        addExercise.tap()
+        XCTAssertTrue(app.navigationBars["Add exercise"].waitForExistence(timeout: 5))
+        let pickerFavorite = app.buttons["Remove Back Squat from Favorites"].firstMatch
+        XCTAssertTrue(pickerFavorite.waitForExistence(timeout: 5), "The same saved shortcut appears in the session picker")
+        capture("favorites-04-session-picker-iphone")
+        let select = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Back Squat' AND NOT label CONTAINS 'settings'")).firstMatch
+        XCTAssertTrue(select.exists)
+        select.tap()
+        XCTAssertTrue(app.navigationBars["Add exercise"].waitForNonExistence(timeout: 5))
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }

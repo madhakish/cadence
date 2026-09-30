@@ -565,6 +565,11 @@ struct ExerciseDetailView: View {
         .accessibilityIdentifier("exercise-detail-screen")
         .plateCalculatorClearance()
         .navigationTitle(exercise.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ExerciseFavoriteButton(exercise: exercise)
+            }
+        }
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
         .sheet(isPresented: $showExpandedContextBar) {
             if let solution = contextualSolution {

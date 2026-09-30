@@ -3,7 +3,7 @@ import SwiftData
 import CadenceCore
 
 /// The one exercise-finding surface (issue #63). Search first, then two
-/// composable filters, then a compact Recent group, then the categories as
+/// composable filters, then Favorites and Recent, then the categories as
 /// collapsed groups that state their counts — nobody scrolls the whole
 /// catalog to find one lift. A filter reveals only the groups with matches,
 /// opened; clearing it returns every group, collapsed, except the ones the
@@ -107,6 +107,16 @@ struct ExerciseBrowser: View {
                     Button("New exercise") { showNewExercise = true }
                 }
             } else {
+                let favorites = visible.filter(\.isFavorite)
+                Section("Favorites") {
+                    if favorites.isEmpty {
+                        Text(isFiltering ? "No favorites match these filters." : "Star a lift to keep it here.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(favorites) { exercise in row(exercise) }
+                    }
+                }
+                .accessibilityIdentifier("exercise-favorites")
                 let recent = recentExercises(in: visible)
                 if !recent.isEmpty {
                     Section("Recent") {
@@ -151,6 +161,7 @@ struct ExerciseBrowser: View {
                 } label: {
                     LibraryRow(exercise: exercise).foregroundStyle(.primary)
                 }
+                ExerciseFavoriteButton(exercise: exercise)
                 // Detail preview OVER the browser (issue #66): the sheet keeps
                 // the search text and active filters, so inspecting never
                 // restarts the hunt.
@@ -159,17 +170,42 @@ struct ExerciseBrowser: View {
                 } label: {
                     Image(systemName: "info.circle")
                         .foregroundStyle(Theme.accent)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
             }
             .buttonStyle(.borderless)
         } else {
-            NavigationLink {
-                ExerciseDetailView(exercise: exercise)
-            } label: {
-                LibraryRow(exercise: exercise)
+            HStack {
+                NavigationLink {
+                    ExerciseDetailView(exercise: exercise)
+                } label: {
+                    LibraryRow(exercise: exercise)
+                }
+                ExerciseFavoriteButton(exercise: exercise)
             }
         }
+    }
+}
+
+/// Shared by the browser and detail: starring never selects or prescribes a
+/// lift, and a failed write uses the app's visible rollback/error path.
+struct ExerciseFavoriteButton: View {
+    @Environment(\.modelContext) private var context
+    @Bindable var exercise: Exercise
+
+    var body: some View {
+        Button {
+            exercise.isFavorite.toggle()
+            PersistenceErrorCenter.shared.save(context, operation: "Saving the exercise favorite")
+        } label: {
+            Image(systemName: exercise.isFavorite ? "star.fill" : "star")
+                .foregroundStyle(exercise.isFavorite ? Theme.accent : .secondary)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("\(exercise.isFavorite ? "Remove" : "Add") \(exercise.name) \(exercise.isFavorite ? "from" : "to") Favorites")
+        .accessibilityValue(exercise.isFavorite ? "Favorite" : "Not a favorite")
     }
 }
 

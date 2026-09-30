@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class ProgramEquipmentTests: XCTestCase {
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
         return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
     }
 

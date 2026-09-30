@@ -1110,8 +1110,38 @@ export function exerciseLibrary(exercises) {
   });
 }
 
+// A favorite is user-owned state on the exercise, not a programming gate.
+// Publish it only after the transaction commits; a rejection leaves the model
+// and the visible star unchanged. All copies of one row share the same object.
+const pendingFavoriteChanges = new WeakSet();
+function exerciseFavoriteButton(exercise, onSaved = () => {}) {
+  const button = ui.h("button", {
+    class: "btn ghost exercise-favorite", type: "button",
+    text: exercise.isFavorite ? "★" : "☆",
+    "aria-label": `${exercise.isFavorite ? "Remove" : "Add"} ${exercise.name} ${exercise.isFavorite ? "from" : "to"} Favorites`,
+    "aria-pressed": String(!!exercise.isFavorite),
+    "data-favorite-id": exercise.id,
+    onClick: async () => {
+      if (pendingFavoriteChanges.has(exercise)) return;
+      const restoreFocus = document.activeElement === button;
+      pendingFavoriteChanges.add(exercise); button.disabled = true;
+      try {
+        const updated = { ...exercise, isFavorite: !exercise.isFavorite };
+        await Exercises.save(updated);
+        exercise.isFavorite = updated.isFavorite;
+        pendingFavoriteChanges.delete(exercise);
+        onSaved(button, restoreFocus);
+      } catch {
+        pendingFavoriteChanges.delete(exercise); button.disabled = false;
+        ui.toast("Couldn't save this favorite. Try again.");
+      }
+    },
+  });
+  return button;
+}
+
 // The one exercise-finding surface (issue #63). Search first, then two
-// composable filters, then a compact Recent group, then the categories as
+// composable filters, then Favorites and Recent, then the categories as
 // collapsed groups that state their counts — nobody scrolls the whole
 // catalog to find one lift. A filter reveals only the groups with matches,
 // opened; clearing it returns every group, collapsed, except the ones the
@@ -1143,15 +1173,19 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
   const results = ui.h("div", { class: "library-groups" });
   const opened = new Map();
   let recentNames = [];
-  const row = (e) => {
+  const row = (e, entry) => {
+    const favorite = exerciseFavoriteButton(e, (button, restoreFocus) =>
+      paint(restoreFocus ? { id: e.id, entry: button.dataset.entry } : null));
+    favorite.dataset.entry = entry;
     if (!onSelect) {
       const meta = [C.movementPatternName(e.movementPattern), e.type, C.loadBasisLabel(C.resolvedLoadBasis(e)),
         e.isUnilateral ? "per side" : null, e.gateStatus && e.gateStatus !== "open" ? e.gateStatus : null]
         .filter(Boolean).join(" · ");
-      return ui.h("div", { class: "row", onClick: () => exerciseDetail(e) },
-        ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
-          ui.h("span", { class: "sub", text: meta })),
-        ui.h("span", { class: "chev" }));
+      return ui.h("div", { class: "row" },
+        ui.h("button", { class: "library-open", type: "button", onClick: () => exerciseDetail(e, { onClose: paint }) },
+          ui.h("div", { class: "lead" }, ui.h("span", { class: "title", text: e.name }),
+            ui.h("span", { class: "sub", text: meta })),
+          ui.h("span", { class: "chev" })), favorite);
     }
     // The name is the whole button — nothing else rides inside it — so the
     // badge and the detail preview stay separately reachable.
@@ -1159,11 +1193,16 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
       ui.h("button", { class: "btn wide ghost", style: { flex: "1", justifyContent: "flex-start" },
         text: e.name, onClick: () => onSelect(e) }),
       e.isShelved ? ui.h("span", { class: "pill hard", text: COPY.shelved }) : null,
+      favorite,
       ui.h("button", { class: "btn sm ghost", text: "ⓘ",
         "aria-label": `${e.name} — muscles, history, and settings`,
-        onClick: () => exerciseDetail(e) }));
+        onClick: () => exerciseDetail(e, { onClose: paint }) }));
   };
-  const paint = () => {
+  const paint = (restoreFavorite = null) => {
+    const active = document.activeElement;
+    const focusedFavorite = restoreFavorite?.id ? restoreFavorite
+      : results.contains(active) && active.dataset.favoriteId
+        ? { id: active.dataset.favoriteId, entry: active.dataset.entry } : null;
     ui.clear(results);
     clear.hidden = !filtering();
     // Raw query in: the shared matcher owns normalization and returns true
@@ -1184,13 +1223,18 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
           ui.h("button", { class: "btn ghost sm", text: "+ New exercise", onClick: addExercise }))));
       return;
     }
+    const favorites = visible.filter((e) => e.isFavorite);
+    results.append(ui.h("section", { class: "library-favorites", "aria-label": "Favorites" },
+      ui.h("h3", { class: "section-title", tabindex: "-1", text: "Favorites" }),
+      favorites.length ? ui.h("div", { class: "card list" }, ...favorites.map((e) => row(e, "favorites")))
+        : ui.h("p", { class: "muted", text: filtering() ? "No favorites match these filters." : "Star a lift to keep it here." })));
     // Recent is an entry point above the categories, not a category: the
     // same search, filters, policy, and availability apply to it.
     const recent = recentNames.map((name) => visible.find((e) => e.name === name)).filter(Boolean);
     if (recent.length) {
       results.append(ui.h("section", { class: "library-recent" },
         ui.h("div", { class: "section-title", text: "Recent" }),
-        ui.h("div", { class: "card list" }, ...recent.map(row))));
+        ui.h("div", { class: "card list" }, ...recent.map((e) => row(e, "recent")))));
     }
     for (const cat of CATEGORIES) {
       const inCat = visible.filter((e) => e.category === cat).sort((a, b) => a.name.localeCompare(b.name));
@@ -1203,8 +1247,16 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
       // Only a toggle the user makes on a live, unfiltered group is a
       // preference; the programmatic opens above are not.
       group.addEventListener("toggle", () => { if (group.isConnected && !filtering()) opened.set(cat, group.open); });
-      group.append(ui.h("div", { class: "card list" }, ...inCat.map(row)));
+      group.append(ui.h("div", { class: "card list" }, ...inCat.map((e) => row(e, cat))));
       results.append(group);
+    }
+    if (focusedFavorite) {
+      // Adding/removing the Favorites section must not strand keyboard focus
+      // on a discarded row. Restore its copy, or the Favorites heading when
+      // the removed item was the last one in that entry point.
+      const same = [...results.querySelectorAll("[data-favorite-id]")].find((button) =>
+        button.dataset.favoriteId === focusedFavorite.id && button.dataset.entry === focusedFavorite.entry);
+      (same || results.querySelector(".library-favorites h3"))?.focus();
     }
   };
   search.addEventListener("input", paint);
@@ -1385,7 +1437,8 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
         body.append(ui.h("header", { class: "exercise-info-hero" },
           ui.h("span", { class: "eyebrow", text: [e.category, e.movementGroup, e.type].filter(Boolean).join(" · ") }),
           ui.h("h2", { text: e.name }),
-          e.notes ? ui.h("p", { class: "sub", text: e.notes }) : null));
+          e.notes ? ui.h("p", { class: "sub", text: e.notes }) : null,
+          exerciseFavoriteButton(e, () => { draw(); body.querySelector(".exercise-favorite")?.focus(); })));
 
         // The complementary/main relationship and its originating focus, as
         // the engine labelled it. Tier 3 context, never re-derived here.
