@@ -1133,6 +1133,7 @@ function exerciseFavoriteButton(exercise, onSaved = () => {}) {
         onSaved(button, restoreFocus);
       } catch {
         pendingFavoriteChanges.delete(exercise); button.disabled = false;
+        if (restoreFocus && button.isConnected) button.focus();
         ui.toast("Couldn't save this favorite. Try again.");
       }
     },
@@ -1227,7 +1228,7 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
     results.append(ui.h("section", { class: "library-favorites", "aria-label": "Favorites" },
       ui.h("h3", { class: "section-title", tabindex: "-1", text: "Favorites" }),
       favorites.length ? ui.h("div", { class: "card list" }, ...favorites.map((e) => row(e, "favorites")))
-        : ui.h("p", { class: "muted", text: filtering() ? "No favorites match these filters." : "Star a lift to keep it here." })));
+        : ui.h("p", { class: "muted", text: exercises.some((e) => e.isFavorite) ? "No favorites match these filters." : "Star a lift to keep it here." })));
     // Recent is an entry point above the categories, not a category: the
     // same search, filters, policy, and availability apply to it.
     const recent = recentNames.map((name) => visible.find((e) => e.name === name)).filter(Boolean);

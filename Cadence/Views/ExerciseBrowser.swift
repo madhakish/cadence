@@ -110,7 +110,7 @@ struct ExerciseBrowser: View {
                 let favorites = visible.filter(\.isFavorite)
                 Section("Favorites") {
                     if favorites.isEmpty {
-                        Text(isFiltering ? "No favorites match these filters." : "Star a lift to keep it here.")
+                        Text(exercises.contains(where: \.isFavorite) ? "No favorites match these filters." : "Star a lift to keep it here.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(favorites) { exercise in row(exercise) }
