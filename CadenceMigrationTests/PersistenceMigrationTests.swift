@@ -969,7 +969,7 @@ final class PersistenceMigrationTests: XCTestCase {
         // version and restores verbatim.
         let backup = try ExportService.jsonData(context: context)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
-        XCTAssertEqual(json["schemaVersion"] as? Int, 15)
+        XCTAssertEqual(json["schemaVersion"] as? Int, 16)
         XCTAssertEqual((json["settings"] as? [String: Any])?["theme"] as? String, "titanium")
         let restored = try container()
         try ImportService.load(backup, into: restored.mainContext)
