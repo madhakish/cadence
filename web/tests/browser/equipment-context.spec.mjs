@@ -64,6 +64,8 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     await page.getByRole('searchbox', { name: 'Search exercises' }).fill('Back Squat');
     const lift = page.locator('.library-open').filter({ has: page.getByText('Back Squat', { exact: true }) });
     await expect(lift).toBeVisible(); await lift.click();
-    await expect(page.getByRole('heading', { name: 'Back Squat', exact: true })).toBeVisible();
+    const detail = page.getByRole('dialog', { name: 'Back Squat', exact: true });
+    await expect(detail).toBeVisible();
+    await expect(detail.locator('.exercise-info-hero h2')).toHaveText('Back Squat');
   } finally { releaseImages(); await slow.close(); await server.close(); }
 });
