@@ -1,0 +1,49 @@
+import XCTest
+
+/// The same DP-1 scenarios run against both real application revisions.
+/// Fixture launch arguments configure inventory; visible controls exercise
+/// the calculator. No result or artwork is supplied by the test.
+enum CalculatorProofCases {
+    static func run(in test: XCTestCase, legacy: Bool = false) {
+        let app = XCUIApplication()
+        for (scenario, target) in [("lb-exact", "135"), ("mixed", "139"),
+                                   ("kg-change", "22.5"), ("unreachable", "200")] {
+            app.terminate()
+            app.launchArguments = ["--visual-proof", "--plate-proof=\(scenario)", "--plate-target=\(target)",
+                "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+            app.launch()
+            XCTAssertTrue(app.tabBars.buttons["Today"].waitForExistence(timeout: 20))
+            app.buttons["Plate calculator"].tap()
+            XCTAssertTrue(app.navigationBars[legacy ? "Plates" : "Plate calculator"].waitForExistence(timeout: 6))
+            if !legacy {
+                let field = app.textFields["plate-target"]
+                XCTAssertTrue(field.waitForExistence(timeout: 3))
+                field.tap(); field.typeText(target)
+                app.buttons["plate-target-done"].tap()
+                XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+            }
+            if scenario == "kg-change" { app.segmentedControls.buttons["kg"].tap() }
+            let summary = app.staticTexts[legacy ? "Total on bar" : "ACHIEVED WITH BAR"].firstMatch
+            for _ in 0..<4 where !summary.isHittable { app.swipeUp() }
+            XCTAssertTrue(summary.isHittable)
+            capture(test, "\(legacy ? "before" : "after")-calculator-\(scenario)-iphone")
+            if scenario == "mixed" {
+                for _ in 0..<4 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }
+                app.segmentedControls.buttons["On the bar"].tap()
+                let count = app.steppers.matching(NSPredicate(format: "label CONTAINS '1.25' AND label CONTAINS 'kg'")).firstMatch
+                for _ in 0..<8 where !count.isHittable { app.swipeUp() }
+                XCTAssertTrue(count.isHittable)
+                count.buttons["Increment"].tap()
+                for _ in 0..<5 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }
+                capture(test, "\(legacy ? "before" : "after")-calculator-reverse-iphone")
+            }
+        }
+    }
+
+    private static func capture(_ test: XCTestCase, _ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name; attachment.lifetime = .keepAlways
+        test.add(attachment)
+    }
+}

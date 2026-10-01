@@ -235,6 +235,18 @@ final class VisualProofUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
         capture("after-09-settings-iphone")
+        openDisclosure("Rest & training behavior")
+        capture("after-settings-rest-iphone")
+        let sound = app.switches["Completion sound"]
+        for _ in 0..<6 where !sound.isHittable { app.swipeUp() }
+        XCTAssertTrue(sound.isHittable)
+        capture("after-settings-audio-iphone")
+        let duration = app.buttons["Squat & deadlift mains"]
+        for _ in 0..<6 where !duration.isHittable { app.swipeDown() }
+        XCTAssertTrue(duration.isHittable); duration.tap()
+        XCTAssertTrue(app.navigationBars["Squat & deadlift mains"].waitForExistence(timeout: 5))
+        capture("after-duration-picker-iphone")
+        app.navigationBars["Squat & deadlift mains"].buttons["Cancel"].tap()
 
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(element("history-screen").waitForExistence(timeout: 5))
@@ -550,6 +562,35 @@ final class VisualProofUITests: XCTestCase {
 
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    func test17FavoritesAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        app.tabBars.buttons["Settings"].tap()
+        openDisclosure("Programming & library")
+        let library = app.buttons["Exercise library"]
+        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
+        XCTAssertTrue(library.isHittable); library.tap()
+        let search = app.searchFields.firstMatch
+        for _ in 0..<4 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.isHittable)
+        search.tap(); search.typeText("Back Squat\n")
+        let star = app.buttons["Add Back Squat to Favorites"].firstMatch
+        for _ in 0..<6 where !star.isHittable { app.swipeUp() }
+        XCTAssertTrue(star.isHittable)
+        XCTAssertGreaterThanOrEqual(star.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(star.frame.height, 44)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(star.frame))
+        star.tap()
+        XCTAssertTrue(app.buttons["Remove Back Squat from Favorites"].firstMatch.waitForExistence(timeout: 5))
+        capture("favorites-accessibility-iphone")
+    }
+
+    func test18DP1CalculatorStates() {
+        CalculatorProofCases.run(in: self)
     }
 
     private func capture(_ name: String) {

@@ -38,13 +38,6 @@ enum VisualProofSeed {
         }
         gym.collarWeightLb = 0
         gym.loadingPolicy = .closest
-        // #55: `--plate-theme=<id>` puts a shipped theme on the fixture gym so
-        // the visual proof captures each look; without it the backfill's
-        // inference applies (an all-kilogram rack reads as IWF Competition).
-        if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--plate-theme=") }),
-           let theme = PlateThemeID(rawValue: String(argument.dropFirst("--plate-theme=".count))) {
-            gym.plateTheme = theme
-        }
         squat.stationDenomination = .kg
         rdl.stationDenomination = .kg
         squat.notes = "High-bar stance. Brace before the walkout; drive evenly through the whole foot."
@@ -113,32 +106,11 @@ enum VisualProofSeed {
             context: context
         )
         try addWoodSplittingActivity(context: context)
-        if ProcessInfo.processInfo.arguments.contains("--hold-timer-proof"),
-           let plank = exercises.first(where: { $0.name == "Plank" }),
-           let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { !$0.isCompleted }) {
-            for entry in session.exercises {
-                for set in entry.sets { set.status = .completed }
-            }
-            let entry = SessionExercise(order: 2, exercise: plank)
-            entry.exerciseID = plank.id
-            context.insert(entry)
-            session.exercises.append(entry)
-            let seconds = ProcessInfo.processInfo.arguments.contains("--hold-short-proof") ? 3 : 30
-            let set = SetEntry(order: 0, weightLb: 0, reps: 1, durationSeconds: seconds)
-            set.plannedDurationSeconds = seconds
-            appendSet(set, to: entry, context: context)
-        }
-        // Additional DP-1 calculator states alter only this disposable rack.
-        // The production solver and calculator remain the owners of results.
         applyPlateProofScenario(to: gym, context: context)
         try context.save()
-        // The DEBUG-only visual fixture is synthetic and in memory. Replay
-        // its real portable export on web for comparable cross-client proof;
-        // no production store or athlete data is read by this path.
-        let fixtureURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cadence-visual-proof.json")
-        if !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--plate-proof=") || $0.hasPrefix("--plate-theme=") }) {
-            try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
+        if !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--plate-proof=") }) {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("cadence-visual-proof.json")
+            try ExportService.jsonData(context: context).write(to: url, options: .atomic)
         }
     }
 
