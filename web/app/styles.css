@@ -104,8 +104,12 @@ body {
 .tab.active { color: var(--accent); }
 
 /* FAB */
+#calculator-dock {
+  position: fixed; left: 0; right: 0; bottom: calc(60px + var(--safe-bottom)); z-index: 21;
+  min-height: 86px; padding: 12px 18px; display: flex; justify-content: flex-end;
+  background: var(--bg); border-top: 1px solid var(--line);
+}
 #fab {
-  position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
   background: var(--accent); color: var(--on-accent);
   box-shadow: 0 6px 18px var(--shadow); cursor: pointer;

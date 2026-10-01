@@ -8,6 +8,26 @@ test('[WEB-EXERCISE-FAVORITES] saved shortcuts survive reopen and select through
     await page.goto(server.url);
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller
       && performance.getEntriesByType('navigation')[0]?.type === 'reload').catch(() => false)).toBe(true);
+    // Root controls must scroll past the persistent calculator, rather than
+    // remaining visible/tappable beneath it at intermediate scroll positions.
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.locator('summary').filter({ hasText: 'Rest & training behavior' }).click();
+      const rest = page.getByRole('button', { name: /^Squat & deadlift mains:/ });
+      await rest.scrollIntoViewIfNeeded();
+      const protectedPoint = await rest.evaluate((control) => {
+        const dock = document.querySelector('#calculator-dock').getBoundingClientRect();
+        const row = control.getBoundingClientRect();
+        window.scrollBy(0, row.top + row.height / 2 - dock.top - dock.height / 2);
+        return { x: row.left + row.width / 2, y: dock.top + dock.height / 2 };
+      });
+      await expect.poll(() => page.evaluate(({ x, y }) =>
+        !!document.elementFromPoint(x, y)?.closest('#calculator-dock'), protectedPoint)).toBe(true);
+      await rest.click();
+      await expect(page.getByRole('dialog').last().getByLabel('Hours', { exact: true })).toBeVisible();
+      await page.getByRole('dialog').last().getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
     const openLibrary = async () => {
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.locator('summary').filter({ hasText: 'Programming & library' }).click();

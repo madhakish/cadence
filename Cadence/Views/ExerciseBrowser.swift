@@ -22,6 +22,7 @@ struct ExerciseBrowser: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
     @State private var movementFilter: MovementPattern?
     @State private var typeFilter: ExerciseType?
     @State private var openedCategories: Set<ExerciseCategory> = []
@@ -71,6 +72,7 @@ struct ExerciseBrowser: View {
     }
 
     private func clearFilters() {
+        searchFocused = false
         search = ""
         movementFilter = nil
         typeFilter = nil
@@ -79,6 +81,28 @@ struct ExerciseBrowser: View {
     var body: some View {
         let visible = visibleExercises
         List {
+            Section {
+                HStack(alignment: .top) {
+                    TextField("Name, equipment or movement", text: $search, axis: .vertical)
+                        .lineLimit(1...3)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .focused($searchFocused)
+                        .onSubmit { searchFocused = false }
+                        .accessibilityLabel("Search exercises")
+                        .accessibilityIdentifier("exercise-search")
+                    if !search.isEmpty {
+                        Button { search = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .frame(minHeight: 44)
+            }
             Section {
                 Picker("Movement", selection: $movementFilter) {
                     Text("All movements").tag(MovementPattern?.none)
@@ -146,8 +170,15 @@ struct ExerciseBrowser: View {
         .listStyle(.plain)
         .themeListBackground()
         .listSectionSpacing(.compact)
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Name, equipment or movement")
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Search") { searchFocused = false }
+                    .accessibilityIdentifier("exercise-search-done")
+            }
+        }
         .sheet(item: $detailExercise) { exercise in
             NavigationStack {
                 ExerciseDetailView(exercise: exercise)

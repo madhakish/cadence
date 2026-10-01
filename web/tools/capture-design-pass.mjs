@@ -72,6 +72,10 @@ try {
       await top().locator('summary').filter({ hasText: 'Muscles & relationship' }).click();
       await shot('exercise-pane-expanded');
       await top().locator('.anatomy-card').scrollIntoViewIfNeeded();
+      // Scrolling artwork beneath the pointer can hover a muscle even when
+      // nothing is selected. Clear that transient hover for the baseline state.
+      await page.mouse.move(0, 0);
+      await expect(top().locator('.muscle-key[aria-pressed="true"]')).toHaveCount(0);
       await shot('exercise-anatomy');
       await top().getByRole('button', { name: 'Quads, primary muscle', exact: true }).click();
       await top().locator('.anatomy-card').scrollIntoViewIfNeeded(); await shot('exercise-anatomy-selected');
@@ -146,31 +150,7 @@ try {
       await expect(top()).toContainText('No exercises match'); await shot('library-no-results');
       await top().getByRole('button', { name: 'Clear filters', exact: true }).click();
       await shot('library-favorites');
-      if (width === 390) {
-        // CSS zoom is a layout stress, not a claim of manual browser/pinch
-        // zoom testing. Both edge widths also run with reduced motion.
-        await page.emulateMedia({ reducedMotion: 'reduce' });
-        for (const edge of [320, 430]) {
-          await page.setViewportSize({ width: edge, height: 844 });
-          for (const zoom of [1, 2]) {
-            await page.evaluate((value) => { document.documentElement.style.zoom = String(value); }, zoom);
-            const star = top().getByRole('button', { name: 'Remove Back Squat from Favorites', exact: true }).first();
-            await star.scrollIntoViewIfNeeded();
-            const bounds = await star.boundingBox();
-            if (!bounds || bounds.width < 44 || bounds.height < 44
-              || bounds.x < 0 || bounds.x + bounds.width > edge + 1) {
-              throw new Error(`Favorite control clipped at ${edge}px / CSS zoom ${zoom}`);
-            }
-            const file = `after-web-favorites-${edge}-zoom${zoom}.png`;
-            await page.screenshot({ path: join(output, file) });
-            captures.push({ surface: 'library-favorites', width: edge, height: 844, file,
-              cssZoom: zoom, reducedMotion: true, starBounds: bounds });
-          }
-        }
-        await page.evaluate(() => { document.documentElement.style.zoom = ''; });
-        await page.setViewportSize({ width, height });
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
-      }
+
     }
     await closeTop();
     if (phase === 'after') {
@@ -178,6 +158,9 @@ try {
       await top().getByRole('button', { name: '+ Add exercise', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Add exercise', exact: true })
         .getByRole('region', { name: 'Favorites' })).toContainText('Back Squat');
+      const picker = page.getByRole('dialog', { name: 'Add exercise', exact: true });
+      await expect(picker.getByRole('heading', { name: 'Add exercise', exact: true })).toBeInViewport();
+      await expect(picker.getByRole('button', { name: 'Remove Back Squat from Favorites', exact: true }).first()).toBeInViewport();
       await shot('session-picker');
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog', { name: 'Add exercise', exact: true })).toHaveCount(0);
@@ -214,6 +197,40 @@ try {
         await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
         await shot(`app-theme-${theme}-settings`);
       }
+    }
+    // Run zoom stress last: a CSS-zoomed root must never influence the
+    // fixed-position dialogs retained for the ordinary viewport matrix.
+    if (phase === 'after' && width === 390) {
+      await page.evaluate(async (theme) => {
+        const db = await import('./js/db.js');
+        (await import('./js/ui.js')).applyTheme(theme);
+        (await import('./js/views/settings.js')).exerciseLibrary(await db.Exercises.all());
+      }, bundle.settings.theme);
+      await expect(top().locator('.exercise-browser')).toBeVisible();
+      // CSS zoom is a layout stress, not a claim of manual browser/pinch
+      // zoom testing. Both edge widths also run with reduced motion.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      for (const edge of [320, 430]) {
+        await page.setViewportSize({ width: edge, height: 844 });
+        for (const zoom of [1, 2]) {
+          await page.evaluate((value) => { document.documentElement.style.zoom = String(value); }, zoom);
+          const star = top().getByRole('button', { name: 'Remove Back Squat from Favorites', exact: true }).first();
+          await star.scrollIntoViewIfNeeded();
+          const bounds = await star.boundingBox();
+          if (!bounds || bounds.width < 44 || bounds.height < 44
+            || bounds.x < 0 || bounds.x + bounds.width > edge + 1) {
+            throw new Error(`Favorite control clipped at ${edge}px / CSS zoom ${zoom}`);
+          }
+          const file = `after-web-favorites-${edge}-zoom${zoom}.png`;
+          await page.screenshot({ path: join(output, file) });
+          captures.push({ surface: 'library-favorites', width: edge, height: 844, file,
+            cssZoom: zoom, reducedMotion: true, starBounds: bounds });
+        }
+      }
+      await page.evaluate(() => { document.documentElement.style.zoom = ''; });
+      await page.setViewportSize({ width, height });
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await closeTop();
     }
     if (errors.length) throw new Error(errors.join('\n'));
     await context.close();

@@ -276,8 +276,14 @@ final class VisualProofUITests: XCTestCase {
         app.navigationBars.buttons["Cancel"].firstMatch.tap()
 
         let sound = app.switches["Completion sound"]
-        for _ in 0..<6 where !sound.isHittable { app.swipeUp() }
+        for _ in 0..<10 where !visible.contains(sound.frame) {
+            let above = sound.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
         XCTAssertTrue(sound.isHittable)
+        XCTAssertTrue(visible.contains(sound.frame), "The complete audio switch must be clear of the tab bar")
         capture("after-settings-audio-iphone")
 
         app.tabBars.buttons["History"].tap()
@@ -556,17 +562,20 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(library.waitForExistence(timeout: 3))
         library.tap()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.searchFields.firstMatch.isHittable, "Search must be visible on arrival, without a pull-down gesture")
+        XCTAssertTrue(element("exercise-search").waitForExistence(timeout: 3))
+        XCTAssertTrue(element("exercise-search").isHittable, "Search must be visible on arrival, without a pull-down gesture")
         capture("favorites-01-library-empty-iphone")
         openDisclosure("Main")
         capture("favorites-library-category-iphone")
         openDisclosure("Main")
 
-        let search = app.searchFields.firstMatch
+        let search = element("exercise-search")
         for _ in 0..<3 where !search.isHittable { app.swipeDown() }
         XCTAssertTrue(search.waitForExistence(timeout: 3))
-        search.tap(); search.typeText("Back Squat\n")
+        search.tap(); search.typeText("Back Squat")
+        let submitSearch = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submitSearch.waitForExistence(timeout: 5))
+        submitSearch.tap()
         let add = app.buttons["Add Back Squat to Favorites"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
@@ -601,8 +610,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(addExercise.waitForExistence(timeout: 3))
         addExercise.tap()
         XCTAssertTrue(app.navigationBars["Add exercise"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.searchFields.firstMatch.isHittable, "The shared picker must also open with visible search")
+        XCTAssertTrue(element("exercise-search").waitForExistence(timeout: 3))
+        XCTAssertTrue(element("exercise-search").isHittable, "The shared picker must also open with visible search")
         let pickerFavorite = app.buttons["Remove Back Squat from Favorites"].firstMatch
         XCTAssertTrue(pickerFavorite.waitForExistence(timeout: 5), "The same saved shortcut appears in the session picker")
         capture("favorites-04-session-picker-iphone")
@@ -626,10 +635,16 @@ final class VisualProofUITests: XCTestCase {
         let library = app.buttons["Exercise library"]
         for _ in 0..<8 where !library.isHittable { app.swipeUp() }
         XCTAssertTrue(library.isHittable); library.tap()
-        let search = app.searchFields.firstMatch
+        let search = element("exercise-search")
         for _ in 0..<4 where !search.isHittable { app.swipeDown() }
         XCTAssertTrue(search.isHittable)
-        search.tap(); search.typeText("Back Squat\n")
+        search.tap(); search.typeText("Back Squat")
+        let submitSearch = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submitSearch.waitForExistence(timeout: 5))
+        submitSearch.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Submitting search must leave the results unobstructed")
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(search.frame))
+        capture("favorites-accessibility-search-iphone")
         let star = app.buttons["Add Back Squat to Favorites"].firstMatch
         for _ in 0..<6 where !star.isHittable { app.swipeUp() }
         XCTAssertTrue(star.isHittable)
