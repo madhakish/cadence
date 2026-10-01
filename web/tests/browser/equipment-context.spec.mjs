@@ -10,7 +10,9 @@ const openLibrary = async (page) => {
 const geometry = (page) => page.locator('.library-group > summary').evaluateAll((rows) =>
   rows.map((row) => {
     const { x, y, width, height } = row.getBoundingClientRect();
-    return { x, y, width, height };
+    // Ignore subpixel floating-point representation, not visible movement.
+    const pixel = (value) => Math.round(value * 1000) / 1000;
+    return { x: pixel(x), y: pixel(y), width: pixel(width), height: pixel(height) };
   }));
 const decoded = (page) => page.locator('.library-group .equipment-context').evaluateAll(async (images) => {
   await Promise.all(images.map((image) => image.decode()));
@@ -30,6 +32,11 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     });
     await openLibrary(delayed);
     await expect(delayed.locator('.library-group .equipment-context')).toHaveCount(3);
+    // Measure decode independently of the actual sheet's entrance transition.
+    // Requests remain blocked while its authored navigation animation finishes.
+    await delayed.locator('#overlays > .overlay').last().evaluate(async (overlay) => {
+      await Promise.all(overlay.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    });
     const before = await geometry(delayed);
     expect(await delayed.locator('.equipment-context').evaluateAll((images) => images.every((image) => !image.complete))).toBe(true);
     releaseImages();
@@ -55,6 +62,8 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     await openLibrary(page);
     expect(await decoded(page)).toEqual(Array.from({ length: 3 }, () => ({ width: 768, height: 512, alt: '' })));
     await page.getByRole('searchbox', { name: 'Search exercises' }).fill('Back Squat');
-    await expect(page.getByRole('button', { name: 'Back Squat', exact: true })).toBeVisible();
+    const lift = page.locator('.library-open').filter({ has: page.getByText('Back Squat', { exact: true }) });
+    await expect(lift).toBeVisible(); await lift.click();
+    await expect(page.getByRole('heading', { name: 'Back Squat', exact: true })).toBeVisible();
   } finally { releaseImages(); await slow.close(); await server.close(); }
 });

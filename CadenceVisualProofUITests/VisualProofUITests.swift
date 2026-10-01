@@ -645,6 +645,24 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Submitting search must leave the results unobstructed")
         XCTAssertTrue(app.windows.firstMatch.frame.contains(search.frame))
         capture("favorites-accessibility-search-iphone")
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 250)
+        for (id, value) in [("exercise-movement-filter", "All movements"),
+                            ("exercise-equipment-filter", "All equipment")] {
+            let filter = app.buttons[id]
+            XCTAssertTrue(filter.waitForExistence(timeout: 3))
+            XCTAssertEqual(filter.value as? String, value)
+            for _ in 0..<12 where !visible.contains(filter.frame) {
+                let above = filter.frame.minY < visible.minY
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+                start.press(forDuration: 0.01, thenDragTo: end)
+            }
+            XCTAssertTrue(visible.contains(filter.frame))
+            XCTAssertTrue(filter.isHittable)
+            capture("favorites-accessibility-\(id)-iphone")
+        }
         let star = app.buttons["Add Back Squat to Favorites"].firstMatch
         for _ in 0..<6 where !star.isHittable { app.swipeUp() }
         XCTAssertTrue(star.isHittable)

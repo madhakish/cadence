@@ -179,3 +179,5 @@
 - Baseline navigation — both original/current apps reload on service-worker controller change. The proof harness now waits for that app-owned reload; its duplicate forced reload caused an observed ERR_ABORTED race. The controller/reload assertion remains required.
 
 - Desktop loading — the complete inline bar keeps a maximum 560 px drawing width; the calculator pairs its stage with the full load summary at wide widths. Exact sleeve denominations stay fixed-size text. Custom physical face stamps use the upper face band to avoid large-plate/change-plate hub overlap. Updated capture requires both complete calculator stage and summary in the 1280 × 800 viewport; runtime proof is pending.
+
+- Maximum-text filters — c3200 capture confirms search/audio/picker/anatomy fixes but reveals a truncated All movements Picker value. Movement/equipment now expose the same bound Pickers through Menu labels with independent wrapping title/value text. Each control retains a full accessible value; maximum-text proof scrolls each complete filter frame above calculator/tab chrome before capture. New pixels remain pending.

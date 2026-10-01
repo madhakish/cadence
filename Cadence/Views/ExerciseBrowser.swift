@@ -105,18 +105,32 @@ struct ExerciseBrowser: View {
                 .frame(minHeight: 44)
             }
             Section {
-                Picker("Movement", selection: $movementFilter) {
-                    Text("All movements").tag(MovementPattern?.none)
-                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
-                        Text(pattern.name).tag(MovementPattern?.some(pattern))
+                Menu {
+                    Picker("Movement", selection: $movementFilter) {
+                        Text("All movements").tag(MovementPattern?.none)
+                        ForEach(MovementPattern.allCases, id: \.self) { pattern in
+                            Text(pattern.name).tag(MovementPattern?.some(pattern))
+                        }
                     }
+                } label: {
+                    filterLabel("Movement", value: movementFilter?.name ?? "All movements")
                 }
-                Picker("Equipment", selection: $typeFilter) {
-                    Text("All equipment").tag(ExerciseType?.none)
-                    ForEach(ExerciseType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(ExerciseType?.some(type))
+                .accessibilityLabel("Movement")
+                .accessibilityValue(movementFilter?.name ?? "All movements")
+                .accessibilityIdentifier("exercise-movement-filter")
+                Menu {
+                    Picker("Equipment", selection: $typeFilter) {
+                        Text("All equipment").tag(ExerciseType?.none)
+                        ForEach(ExerciseType.allCases, id: \.self) { type in
+                            Text(type.rawValue).tag(ExerciseType?.some(type))
+                        }
                     }
+                } label: {
+                    filterLabel("Equipment", value: typeFilter?.rawValue ?? "All equipment")
                 }
+                .accessibilityLabel("Equipment")
+                .accessibilityValue(typeFilter?.rawValue ?? "All equipment")
+                .accessibilityIdentifier("exercise-equipment-filter")
                 if isFiltering, !visible.isEmpty {
                     Button("Clear filters") { clearFilters() }
                 }
@@ -191,6 +205,20 @@ struct ExerciseBrowser: View {
             }
         }
         .sheet(isPresented: $showNewExercise) { NewExerciseView() }
+    }
+
+    private func filterLabel(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).foregroundStyle(.primary)
+            HStack(alignment: .top, spacing: 8) {
+                Text(value)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down").accessibilityHidden(true)
+            }
+            .foregroundStyle(Theme.accent)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 
     @ViewBuilder
