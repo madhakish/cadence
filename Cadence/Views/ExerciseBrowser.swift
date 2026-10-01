@@ -143,7 +143,8 @@ struct ExerciseBrowser: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Name, equipment or movement")
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Name, equipment or movement")
         .sheet(item: $detailExercise) { exercise in
             NavigationStack {
                 ExerciseDetailView(exercise: exercise)

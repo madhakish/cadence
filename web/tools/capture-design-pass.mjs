@@ -56,7 +56,7 @@ try {
     await expect(top()).toContainText('Wood Splitting'); await shot('ad-hoc-work'); await closeTop();
     await page.evaluate(async (id) => (await import('./js/views/session.js')).openSession(id), sessionID);
     const squat = phase === 'after' ? page.locator('.exercise-card.emphasized .title-button').first()
-      : top().getByRole('button', { name: 'Back Squat', exact: true }).first();
+      : top().getByRole('button', { name: 'Back Squat — muscles, history, and settings', exact: true }).first();
     await expect(squat).toBeVisible(); await shot('session'); await squat.click();
     await expect(top()).toContainText('Back Squat'); await shot('exercise-pane');
     if (phase === 'after') {

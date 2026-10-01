@@ -534,6 +534,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(library.waitForExistence(timeout: 3))
         library.tap()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.searchFields.firstMatch.isHittable, "Search must be visible on arrival, without a pull-down gesture")
         capture("favorites-01-library-empty-iphone")
         openDisclosure("Main")
         capture("favorites-library-category-iphone")
@@ -577,6 +579,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(addExercise.waitForExistence(timeout: 3))
         addExercise.tap()
         XCTAssertTrue(app.navigationBars["Add exercise"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.searchFields.firstMatch.isHittable, "The shared picker must also open with visible search")
         let pickerFavorite = app.buttons["Remove Back Squat from Favorites"].firstMatch
         XCTAssertTrue(pickerFavorite.waitForExistence(timeout: 5), "The same saved shortcut appears in the session picker")
         capture("favorites-04-session-picker-iphone")
