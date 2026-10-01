@@ -48,7 +48,9 @@ try {
       // decode/redraw before retaining pixels; this never changes app state.
       await page.waitForTimeout(600);
       await page.screenshot({ path: join(output, `${phase}-web-${surface}-${width}.png`) });
-      captures.push({ surface, width, height, file: `${phase}-web-${surface}-${width}.png` });
+      const scroll = await page.evaluate(() => ({ windowX: window.scrollX, windowY: window.scrollY,
+        overlayY: document.querySelector('#overlays > .overlay:last-child .overlay-body')?.scrollTop ?? null }));
+      captures.push({ surface, width, height, file: `${phase}-web-${surface}-${width}.png`, scroll });
     };
 
     await nav('home'); await shot('today');
@@ -181,7 +183,12 @@ try {
       await expect(page.getByRole('dialog', { name: 'Add exercise', exact: true })).toHaveCount(0);
       await closeTop();
     }
-    await nav('settings'); await shot('settings');
+    await nav('settings');
+    // Opening the old Library scrolls Settings to its entry near the bottom.
+    // Compare the root composition at the top on both revisions.
+    await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await shot('settings');
     if (phase === 'after') {
       await page.locator('.settings-group summary').filter({ hasText: 'Rest & training behavior' }).click();
     }

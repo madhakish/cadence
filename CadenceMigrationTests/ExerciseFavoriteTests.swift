@@ -146,6 +146,7 @@ final class ExerciseFavoriteTests: XCTestCase {
         let readOnly = try ModelContainer(for: schema,
             configurations: ModelConfiguration("favorites", schema: schema, url: url, allowsSave: false))
         let lift = try XCTUnwrap(try readOnly.mainContext.fetch(FetchDescriptor<Exercise>()).first)
+        // [INV-FAVORITE-FAILED-SAVE] Check the already-bound object after the failed production action.
         XCTAssertFalse(PersistenceErrorCenter.shared.toggleFavorite(lift, context: readOnly.mainContext))
         XCTAssertFalse(lift.isFavorite)
         XCTAssertTrue(PersistenceErrorCenter.shared.message?.contains("Saving the exercise favorite failed") == true)

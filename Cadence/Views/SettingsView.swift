@@ -322,6 +322,7 @@ struct SettingsView: View {
                 }
         }
         .listStyle(.plain)
+        .themeListBackground()
         .accessibilityIdentifier("settings-screen")
         .plateCalculatorClearance()
         .saveChangesOnDisappear(context, operation: "Saving settings")

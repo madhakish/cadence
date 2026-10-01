@@ -258,8 +258,13 @@ final class VisualProofUITests: XCTestCase {
         let window = app.windows.firstMatch.frame
         let visible = CGRect(x: window.minX, y: window.minY + 100,
                              width: window.width, height: window.height - 220)
-        for _ in 0..<6 where !visible.contains(duration.frame) {
-            if duration.frame.minY < visible.minY { app.swipeDown() } else { app.swipeUp() }
+        for _ in 0..<10 where !visible.contains(duration.frame) {
+            // Full-screen swipes bounce this short row across the viewport
+            // in a plain List. Pan by about 130 points to land it in the cut.
+            let above = duration.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
         }
         XCTAssertTrue(visible.contains(duration.frame))
         capture("after-settings-rest-iphone")

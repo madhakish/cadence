@@ -52,6 +52,7 @@ const save = db.Exercises.save;
 db.Exercises.save = async () => { throw new Error('Synthetic storage failure'); };
 const failed = stars('Incline DB Press')[0]; failed.click();
 await until(() => !failed.disabled);
+// [INV-FAVORITE-FAILED-SAVE] A failed boundary write cannot publish an optimistic preference.
 assert.equal(library.find((e) => e.name === 'Incline DB Press').isFavorite, false);
 assert.equal(failed.getAttribute('aria-pressed'), 'false');
 assert.match(document.querySelector('#toast').textContent, /Couldn't save this favorite/);

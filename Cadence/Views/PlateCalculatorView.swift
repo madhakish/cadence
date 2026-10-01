@@ -111,6 +111,7 @@ struct PlateCalculatorView: View {
             referenceSection
         }
         .listStyle(.plain)
+        .themeListBackground()
         .scrollDismissesKeyboard(.immediately)
         .accessibilityIdentifier("plate-calculator-screen")
         .navigationTitle("Plates")

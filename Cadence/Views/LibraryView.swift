@@ -566,6 +566,7 @@ struct ExerciseDetailView: View {
 
         }
         .listStyle(.plain)
+        .themeListBackground()
         .accessibilityIdentifier("exercise-detail-screen")
         .plateCalculatorClearance()
         .navigationTitle(exercise.name)
