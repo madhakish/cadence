@@ -243,8 +243,8 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
         capture("after-09-settings-iphone")
         openDisclosure("Rest & training behavior")
-        capture("after-settings-rest-iphone")
         let duration = app.buttons["Squat & deadlift mains"]
+        XCTAssertTrue(duration.waitForExistence(timeout: 3))
         // Bring the whole row below navigation chrome before tapping it;
         // isHittable alone can be true for a partially obscured list row.
         let window = app.windows.firstMatch.frame
@@ -253,7 +253,9 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<6 where !visible.contains(duration.frame) {
             if duration.frame.minY < visible.minY { app.swipeDown() } else { app.swipeUp() }
         }
-        XCTAssertTrue(visible.contains(duration.frame)); duration.tap()
+        XCTAssertTrue(visible.contains(duration.frame))
+        capture("after-settings-rest-iphone")
+        duration.tap()
         XCTAssertTrue(app.textFields["Hours"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["Minutes"].exists)
         XCTAssertTrue(app.textFields["Seconds"].exists)
@@ -631,6 +633,10 @@ final class VisualProofUITests: XCTestCase {
     }
 
     private func capture(_ name: String) {
+        // XCTest can finish a tap before a disclosure's painted transition.
+        // The earlier proof caught ghosted rows; settle only the screenshot,
+        // beyond the 260 ms authored cut and the platform navigation animation.
+        Thread.sleep(forTimeInterval: 0.6)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways

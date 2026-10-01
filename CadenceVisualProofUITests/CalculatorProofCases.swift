@@ -45,6 +45,8 @@ enum CalculatorProofCases {
     }
 
     private static func capture(_ test: XCTestCase, _ name: String) {
+        // Retain the settled painted state, on both application revisions.
+        Thread.sleep(forTimeInterval: 0.6)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways
         test.add(attachment)

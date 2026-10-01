@@ -73,6 +73,8 @@ final class BaselineVisualProofUITests: XCTestCase {
     }
 
     private func capture(_ name: String) {
+        // Use the same painted-transition allowance as the candidate proof.
+        Thread.sleep(forTimeInterval: 0.6)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
