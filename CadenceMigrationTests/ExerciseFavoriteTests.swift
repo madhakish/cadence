@@ -94,8 +94,7 @@ final class ExerciseFavoriteTests: XCTestCase {
         let readOnly = try ModelContainer(for: schema,
             configurations: ModelConfiguration("favorites", schema: schema, url: url, allowsSave: false))
         let lift = try XCTUnwrap(try readOnly.mainContext.fetch(FetchDescriptor<Exercise>()).first)
-        lift.isFavorite = true
-        XCTAssertFalse(PersistenceErrorCenter.shared.save(readOnly.mainContext, operation: "Saving the exercise favorite"))
+        XCTAssertFalse(PersistenceErrorCenter.shared.toggleFavorite(lift, context: readOnly.mainContext))
         XCTAssertFalse(lift.isFavorite)
         XCTAssertTrue(PersistenceErrorCenter.shared.message?.contains("Saving the exercise favorite failed") == true)
         PersistenceErrorCenter.shared.message = nil

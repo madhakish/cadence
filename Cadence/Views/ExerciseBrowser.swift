@@ -196,8 +196,7 @@ struct ExerciseFavoriteButton: View {
 
     var body: some View {
         Button {
-            exercise.isFavorite.toggle()
-            PersistenceErrorCenter.shared.save(context, operation: "Saving the exercise favorite")
+            PersistenceErrorCenter.shared.toggleFavorite(exercise, context: context)
         } label: {
             Image(systemName: exercise.isFavorite ? "star.fill" : "star")
                 .foregroundStyle(exercise.isFavorite ? Theme.accent : .secondary)
