@@ -170,3 +170,12 @@
 | Keep imagery on actual loading and prescription surfaces. | Search/category navigation and History need clear information rather than unrelated implement thumbnails. |
 | Distinguish simulator checks, CSS zoom stress and physical device checks. | Pixels and automated labels cannot prove a locked-phone workout, headphone routing, or spoken VoiceOver. |
 | Retain incorrectly reached states and visible layout defects in the pixel record. | A green capture job or a scenario filename cannot establish content that is absent, obscured or already selected in its image. |
+
+## Equipment context and width proof, 2026-10-01
+
+- Purposeful category context — three original transparent rack/platform, accessory and conditioning cutouts sit beside labels or above empty-state text. Exact-load diagrams remain authoritative. The original gorilla bytes and 158-asset plate family are unchanged. Runtime native/web twins total 953,444 bytes per client; provenance, prompts, hashes and consuming surfaces are recorded in EQUIPMENT-CONTEXT.md.
+- Layout — fixed image geometry reserves decode space; native category art yields to accessibility text. Narrow web headers wrap without putting words over images. Browser acceptance compares delayed-decode geometry, edge widths/CSS zoom/reduced motion and a real offline reopen.
+- Native width evidence — opt-in capture now selects/creates actual iPhone SE (3rd generation), 375 pt, and iPhone 15 Pro Max, 430 pt, alongside the recorded 402 pt matrix. Edge jobs capture standard/maximum-text Favorites and equipment empty states; geometry attachments preserve each app window and launch arguments. New captures and acceptance are pending until inspected.
+- Baseline navigation — both original/current apps reload on service-worker controller change. The proof harness now waits for that app-owned reload; its duplicate forced reload caused an observed ERR_ABORTED race. The controller/reload assertion remains required.
+
+- Desktop loading — the complete inline bar keeps a maximum 560 px drawing width; the calculator pairs its stage with the full load summary at wide widths. Exact sleeve denominations stay fixed-size text. Custom physical face stamps use the upper face band to avoid large-plate/change-plate hub overlap. Updated capture requires both complete calculator stage and summary in the 1280 × 800 viewport; runtime proof is pending.

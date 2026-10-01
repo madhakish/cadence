@@ -59,11 +59,15 @@ struct ProgramOverviewView: View {
                 }
 
                 if programs.isEmpty {
-                    ContentUnavailableView(
-                        "No program",
-                        systemImage: "list.bullet.clipboard",
-                        description: Text("Start blank, use a template, or import a Cadence program file.")
-                    )
+                    VStack(spacing: 12) {
+                        EquipmentContextImage(category: .main, width: 200)
+                        Text("No program").font(.title2.bold())
+                        Text("Start blank, use a template, or import a Cadence program file.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                 }
             }
             .navigationTitle("Program")

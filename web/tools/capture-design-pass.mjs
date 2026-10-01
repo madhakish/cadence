@@ -23,11 +23,8 @@ try {
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(server.url);
-    if (phase === 'before') {
-      await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller),
-        { timeout: 30_000 }).toBe(true);
-      await page.reload();
-    }
+    // Both application revisions reload on controllerchange. A second
+    // harness reload races that navigation and can abort the baseline page.
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller
       && performance.getEntriesByType('navigation')[0]?.type === 'reload').catch(() => false),
     { timeout: 30_000 }).toBe(true);
@@ -47,6 +44,9 @@ try {
       // Local artwork loads asynchronously into fixed geometry. Wait for its
       // decode/redraw before retaining pixels; this never changes app state.
       await page.waitForTimeout(600);
+      await page.locator('.equipment-context').evaluateAll(async (images) => {
+        await Promise.all(images.map((image) => image.decode()));
+      });
       await page.screenshot({ path: join(output, `${phase}-web-${surface}-${width}.png`) });
       const scroll = await page.evaluate(() => ({ windowX: window.scrollX, windowY: window.scrollY,
         overlayY: document.querySelector('#overlays > .overlay:last-child .overlay-body')?.scrollTop ?? null }));
@@ -88,7 +88,15 @@ try {
 
     await page.evaluate(async () => (await import('./js/views/plates.js')).openPlateCalculator());
     const target = top().locator('input[inputmode="decimal"]').first();
-    await target.fill('139'); await shot('plate-calculator');
+    await target.fill('139');
+    if (phase === 'after' && width === 1280) {
+      await expect.poll(() => top().locator('.plate-answer > .barbell-stage, .plate-answer > .load-summary')
+        .evaluateAll((items) => items.length === 2 && items.every((item) => {
+          const r = item.getBoundingClientRect();
+          return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+        }))).toBe(true);
+    }
+    await shot('plate-calculator');
     if (phase === 'after') {
       await top().locator('.barbell-expand').click();
       await expect(top().locator('.barbell-inspection-surface')).toBeVisible();
@@ -200,6 +208,31 @@ try {
     }
     // Run zoom stress last: a CSS-zoomed root must never influence the
     // fixed-position dialogs retained for the ordinary viewport matrix.
+    if (phase === 'after') {
+      await page.evaluate(async () => {
+        const db = await import('./js/db.js');
+        const { id, ...template } = (await db.Exercises.all()).find((e) => e.category === 'Accessory');
+        const exercise = { ...template, name: 'Synthetic unlogged accessory', favorite: false };
+        await db.Exercises.save(exercise);
+        (await import('./js/views/settings.js')).exerciseDetail(await db.Exercises.byName(exercise.name));
+      });
+      await top().locator('summary').filter({ hasText: 'Previous performance & programming' }).click();
+      await expect(top()).toContainText('No sessions yet.');
+      await top().locator('.equipment-empty').scrollIntoViewIfNeeded();
+      await expect(top().locator('.equipment-empty')).toBeInViewport();
+      await shot('equipment-exercise-empty'); await closeTop();
+      const programs = await page.evaluate(async () => {
+        const db = await import('./js/db.js'); const all = await db.Programs.all();
+        for (const program of all) await db.Programs.del(program.id);
+        return all;
+      });
+      await nav('program');
+      await expect(page.getByRole('heading', { name: 'No program', exact: true })).toBeVisible();
+      await shot('equipment-program-empty');
+      await page.evaluate(async (all) => {
+        const db = await import('./js/db.js'); for (const program of all) await db.Programs.save(program);
+      }, programs);
+    }
     if (phase === 'after' && width === 390) {
       await page.evaluate(async (theme) => {
         const db = await import('./js/db.js');

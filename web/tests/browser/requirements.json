@@ -10,6 +10,7 @@
     "WEB-BACKUP-ROUNDTRIP": "A synthetic blank-workout export restores its portable content in a fresh browser context",
     "WEB-RESTORE-CONTENT": "Same-count changed values prompt for restore; cancel preserves current work",
     "WEB-PLATE-LABELS": "F1\u2013F8 preserve readable denominations and lb\u2192kg totals at phone and desktop widths",
-    "WEB-EXERCISE-FAVORITES": "Favorites persist, compose with search and filters, preserve keyboard focus, and select from the shared session picker"
+    "WEB-EXERCISE-FAVORITES": "Favorites persist, compose with search and filters, preserve keyboard focus, and select from the shared session picker",
+    "WEB-EQUIPMENT-CONTEXT": "Category artwork reserves layout during delayed decode, fits edge widths and zoom, and remains available offline"
   }
 }

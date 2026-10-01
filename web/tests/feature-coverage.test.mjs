@@ -11,7 +11,8 @@ function report() {
 }
 
 test('every registered requirement executes on both browser engines', () => {
-  assert.equal(verifyFeatureCoverage(report()).length, 14);
+  assert.equal(verifyFeatureCoverage(report()).length,
+    Object.keys(manifest.requirements).length * manifest.projects.length);
 });
 
 for (const [name, corrupt] of Object.entries({

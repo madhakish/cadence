@@ -12,6 +12,7 @@ import { historySetPresentationForTest } from "./history.js";
 import { PLATE_THEME_IDS, PLATE_THEME_LABELS, plateThemeSet, plateThemePrimaryUnit, plateThemeInventory } from "../plate-theme.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
 import { Sessions } from "../db.js";
+import { equipmentContext } from "../equipment-context.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
 import { manualNextDayOrders, planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
@@ -1242,6 +1243,7 @@ export function exerciseBrowser(exercises, { onSelect = null, availableOnly = fa
       if (filtering() && !inCat.length) continue;
       const group = ui.h("details", { class: "library-group" },
         ui.h("summary", {},
+          equipmentContext(cat),
           ui.h("span", { class: "title", text: cat }),
           ui.h("span", { class: "count mono", text: String(inCat.length) })));
       group.open = filtering() ? true : (opened.get(cat) ?? false);
@@ -1376,7 +1378,8 @@ async function exerciseInsight(wrap, e) {
   // under the name History gives it. A projection; nothing the engine
   // resolved is recomputed. Warmups and skipped sets were filtered above.
   card.append(ui.h("div", { class: "section-title", text: "Recent sessions" }));
-  if (!hist.length) card.append(ui.h("div", { class: "row set-history-row" }, ui.h("span", { class: "sub", text: "No sessions yet." })));
+  if (!hist.length) card.append(ui.h("div", { class: "row set-history-row equipment-empty" },
+    equipmentContext(e.category, { width: 160 }), ui.h("span", { class: "sub", text: "No sessions yet." })));
   for (const h of hist.slice(0, 5)) {
     card.append(ui.h("div", { class: "row set-history-row" },
       ui.h("div", { class: "lead" },

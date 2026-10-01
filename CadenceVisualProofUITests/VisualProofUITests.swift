@@ -660,6 +660,51 @@ final class VisualProofUITests: XCTestCase {
         CalculatorProofCases.run(in: self)
     }
 
+    func test20EquipmentContextAndEmptyStates() {
+        app.terminate()
+        app.launchArguments += ["--equipment-empty-proof"]
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        app.tabBars.buttons["Program"].tap()
+        XCTAssertTrue(app.staticTexts["No program"].waitForExistence(timeout: 5))
+        capture("equipment-program-empty-iphone")
+
+        app.tabBars.buttons["Settings"].tap()
+        openDisclosure("Programming & library")
+        let library = app.buttons["Exercise library"]
+        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
+        XCTAssertTrue(library.isHittable); library.tap()
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 250)
+        let main = element("exercise-category-Main")
+        let conditioning = element("exercise-category-Conditioning")
+        for _ in 0..<10 where !visible.contains(main.frame) || !visible.contains(conditioning.frame) {
+            let above = main.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(visible.contains(main.frame))
+        XCTAssertTrue(visible.contains(conditioning.frame))
+        capture("equipment-categories-iphone")
+
+        let search = element("exercise-search")
+        for _ in 0..<8 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.isHittable)
+        search.tap(); search.typeText("Synthetic unlogged accessory")
+        let submit = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
+        let lift = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Synthetic unlogged accessory'")).firstMatch
+        for _ in 0..<6 where !lift.isHittable { app.swipeUp() }
+        XCTAssertTrue(lift.isHittable); lift.tap()
+        openDisclosure("Previous performance & programming")
+        let empty = app.staticTexts["No sessions yet."]
+        for _ in 0..<8 where !empty.isHittable { app.swipeUp() }
+        XCTAssertTrue(empty.isHittable)
+        capture("equipment-exercise-empty-iphone")
+    }
+
     /// App palettes are distinct from the ten equipment themes. Retain both
     /// the primary task index and load-entry canvas under every saved palette.
     func test19AppThemeCanvases() {
@@ -696,5 +741,10 @@ final class VisualProofUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        let frame = app.windows.firstMatch.frame
+        let geometry = XCTAttachment(string: "window: \(frame.width) x \(frame.height) pt\nlaunchArguments: \(app.launchArguments.joined(separator: " "))")
+        geometry.name = "\(name)-geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
     }
 }

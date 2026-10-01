@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-01",
+  "tool": "built-in image_gen",
+  "license": "Repository LICENSE: all rights reserved to madhakish",
+  "styleReference": "Main creation output; equipment only, never the gorilla",
+  "backgroundExtractionBriefSummary": "Separate transparent-background edits preserving the equipment, removing studio backdrop/floor/glow; no text, weight markings, logos or new objects. This is a summary of the edit brief, not a verbatim prompt transcript.",
+  "assets": [
+    {
+      "category": "Main",
+      "creationPrompt": "Use case: product-mockup. Asset type: original equipment-context artwork for Cadence, a serious strength-training logbook; this asset will sit beside a Library category label, never behind text and never represent a prescribed load. Create one premium photorealistic studio product cutout of a compact black steel squat rack on a small oak lifting platform, an unloaded stainless Olympic bar resting on its J-hooks, and a tidy pair of steel locking collars beside the platform. Full rack, full bar and full platform remain visible. Three-quarter eye-level view, restrained charcoal/forged-steel material, subtle knurling, honest bolted joints, soft neutral studio edge lighting, crisp readable silhouette at thumbnail size, slightly weathered real equipment. Coherent real physical scene, no gym room or wall; genuinely transparent background. Wide balanced composition with breathing room around the equipment. No people, no plate load, no words or numbers, no logos, no mascot, no cartoon geometry, no decorative effects, no labels, no gradients as background, no skulls or fantasy motifs. The original gorilla artwork is not an input and must not be copied.",
+      "creationOutput": {
+        "file": "exec-cea03180-2397-479f-823e-826b7723da0a.png",
+        "bytes": 1671439,
+        "sha256": "277c915e4c53c9f20f19d8c81979db7f1f4a3ba077f47cf4d824e790f118108b"
+      },
+      "backgroundExtractionOutput": {
+        "file": "exec-df74e5ab-daa2-4e26-b2e8-e1e5595d5760.png",
+        "bytes": 1662144,
+        "sha256": "721569eee2de60ac7d7e9c36a722b4cb1de6b985acea33a36563f9a6821ff576"
+      }
+    },
+    {
+      "category": "Accessory",
+      "creationPrompt": "Use case: product-mockup. Asset type: original equipment-context artwork for Cadence Library's Accessory category. Image 1 is a style/lighting reference ONLY; create a new separate asset, not an edit of the rack. Match its restrained photorealistic forged-steel material, soft neutral studio edge lighting and precise camera realism. Subject: one matched pair of traditional fixed-weight dumbbells with round black cast-iron heads and knurled stainless handles, neatly arranged next to one black cast-iron kettlebell with a clearly open rounded handle. Full implements visible, no cropping, balanced compact three-quarter studio product view, honest small wear and casting texture, crisp recognizable silhouettes at small category-header size. Genuinely transparent background, isolated equipment with breathing room; no backdrop, flooring, fog, vignette or broad glow. No people, exercise poses, words, numbers, weight stamps, brands, logos, mascot, cartoons, plastic-looking geometry, colored decorative effects, or unrelated props. No gorilla input or reproduction. This illustrates training implements, not prescribed load or exact physical mass.",
+      "creationOutput": {
+        "file": "exec-f29e9d5b-2d28-4662-942f-655bb8d409aa.png",
+        "bytes": 2342391,
+        "sha256": "6f7c730cc3fc1a3333ace66d7f72dba816148e163b6cc4b10edd2a5a4097881c"
+      },
+      "backgroundExtractionOutput": {
+        "file": "exec-8a0c85e7-4f45-449c-9bbe-ded4cc64d739.png",
+        "bytes": 2379005,
+        "sha256": "7e92683d0e3c41d4fbf06804d7156e005dd665d4a7a1bbebbf213a54d25423b1"
+      }
+    },
+    {
+      "category": "Conditioning",
+      "creationPrompt": "Use case: product-mockup. Asset type: original conditioning/strongman equipment-context artwork for Cadence Library. Image 1 is a style and lighting reference ONLY. Create a new separate coherent product scene matching its restrained photorealistic black forged steel, subtle wear, crisp knurling/detail, neutral soft studio edge lighting and three-quarter realistic camera. Subject: one compact unloaded steel push sled with a center loading pin and two upright push handles; beside it one matched pair of unloaded farmer-carry frames, each with a central raised grip and two short loading pins. Clear physically plausible construction, full objects visible, no cropping or floating pieces. Balanced wide compact composition with the push sled dominant and carries secondary, recognizable at small UI header size. Isolated on a genuinely transparent background; no gym room, people, floor, fog, vignette or broad glow. No plates, no implied weight load, no text/numbers/stamps, logos, brands, mascot, cartoon equipment, decorative gradients, fantasy or unrelated props. No gorilla source or reproduction. This is context artwork, not an exercise instruction or exact loading diagram.",
+      "creationOutput": {
+        "file": "exec-2ae7d2c2-edf6-4f5c-ae56-b50311cf2677.png",
+        "bytes": 1888800,
+        "sha256": "f5a74e4ae69e38adf0cc9a04ef10b3f1f6c4db0ee23747a54a8b622cb6a9dc59"
+      },
+      "backgroundExtractionOutput": {
+        "file": "exec-f23b960d-c9e1-4da5-88e0-d70180ad0a5d.png",
+        "bytes": 1835519,
+        "sha256": "98fc4b9e0cd989b5bb4a471f139e45e55d480b8ad9533ef8dd806faff1231828"
+      }
+    }
+  ]
+}

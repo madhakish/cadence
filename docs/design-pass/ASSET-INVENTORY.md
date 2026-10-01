@@ -1,7 +1,8 @@
 # Equipment imagery inventory — 1 October 2026
 
 This records the equipment artwork already shipped on main at `20058600` and
-consumed by the #177 candidate. PR #271 adds no equipment artwork. Screenshot
+consumed by the #177 candidate. PR #271 also adds the three original category
+cutouts documented in [EQUIPMENT-CONTEXT.md](EQUIPMENT-CONTEXT.md). Screenshot
 proof files are application captures, not runtime assets.
 
 ## Provenance and license
@@ -30,15 +31,15 @@ family.
 | Exercise information in a workout | The contextual set's actual stack accompanies the resolved prescription and opens inspection; it is not a generic exercise thumbnail. | `LibraryView` / `views/settings.js` |
 | Calculator | The solved or entered loadout is the central visual; the inspector separates physical plates without changing their identity or mass. | `PlateCalculatorView` / `views/plates.js` |
 | Workout preview | Equipment illustrates the planned load before starting, using the same renderer and authoritative solution. | `WorkoutPreviewView` / `views/home.js` |
-| Library and empty states | Search, two composed filters, Favorites/Recent and category counts lead. No ambiguous implement picture stands in for taxonomy or an empty result. | `ExerciseBrowser` / shared `exerciseBrowser` |
+| Library and empty states | Search, filters, Favorites/Recent and category counts lead; three original implement cutouts support category labels and unlogged-detail states. Empty Program uses the unloaded rack/platform. | `ExerciseBrowser`, `LibraryView`, `ProgramOverviewView` / shared `exerciseBrowser`, exercise detail, `views/program.js` |
 | Settings | Task groups and the gym's actual plate-theme choice give equipment context; no image sits behind essential controls. | `SettingsView` / `views/settings.js` |
 | Today and History | Training state, resume/start action and performed work lead; no decorative plate collection competes with them. | `HomeView`, `HistoryView` / `views/home.js`, `views/history.js` |
 
 The first three are distinct non-gorilla surfaces with equipment imagery.
 The original front/back gorilla JPEGs remain unchanged; registered anatomy
 masks are a separate, previously approved asset family. These decisions follow
-the existing [material decision record](DECISIONS.md); #271 does not introduce
-new imagery to otherwise text-oriented navigation.
+the existing [material decision record](DECISIONS.md). The new category family
+extends this map without repeating the gorilla or placing images behind text.
 
 ## Size, availability and layout
 

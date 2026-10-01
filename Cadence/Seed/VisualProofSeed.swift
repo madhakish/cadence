@@ -146,6 +146,15 @@ enum VisualProofSeed {
         }) {
             try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
         }
+        // Screenshot-only empty states, after exporting the canonical matrix
+        // fixture. This container is disposable; no production data is opened.
+        if ProcessInfo.processInfo.arguments.contains("--equipment-empty-proof") {
+            for program in try context.fetch(FetchDescriptor<Program>()) { context.delete(program) }
+            let unlogged = Exercise(name: "Synthetic unlogged accessory", category: .accessory, type: .dumbbell)
+            unlogged.id = StableID.exerciseLegacyID(name: unlogged.name)
+            context.insert(unlogged)
+            try context.save()
+        }
     }
 
     private static func applyPlateProofScenario(to gym: Gym, context: ModelContext) {

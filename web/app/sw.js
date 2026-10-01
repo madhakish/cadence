@@ -15,6 +15,10 @@ const CACHE_PREFIX = "cadence-app-";
 const CACHE = `${CACHE_PREFIX}__BUILD__`;
 const ownedByThisWorker = (key) => key.startsWith(CACHE_PREFIX);
 const ASSETS = [
+  "js/equipment-context.js",
+  "assets/equipment-context/main.png",
+  "assets/equipment-context/accessory.png",
+  "assets/equipment-context/conditioning.png",
   "assets/plates/bumper-face-detail.png",
   "assets/plates/steel-face-detail.png",
   "./", "index.html", "styles.css", "manifest.webmanifest",

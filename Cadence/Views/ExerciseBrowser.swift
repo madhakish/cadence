@@ -22,6 +22,7 @@ struct ExerciseBrowser: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
     @State private var search = ""
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var searchFocused: Bool
     @State private var movementFilter: MovementPattern?
     @State private var typeFilter: ExerciseType?
@@ -155,12 +156,17 @@ struct ExerciseBrowser: View {
                                 ForEach(inCategory) { exercise in row(exercise) }
                             } label: {
                                 HStack {
+                                    if !dynamicTypeSize.isAccessibilitySize {
+                                        EquipmentContextImage(category: category)
+                                    }
                                     Text(category.rawValue).font(.headline)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Spacer()
                                     Text("\(inCategory.count)")
                                         .monospacedDigit()
                                         .foregroundStyle(.secondary)
                                 }
+                                .accessibilityIdentifier("exercise-category-\(category.rawValue)")
                             }
                         }
                     }

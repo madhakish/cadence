@@ -234,6 +234,9 @@ function realisticBarbellSVG(solution, style, exploded = false, theme = "custom"
       fill:colour.ink, 'data-side':side, 'data-stack-index':d.index, 'data-plate-value':d.plate.value,
       'data-plate-denomination':C.plateLabel(d.plate) });
     if (theme === 'custom') {
+    // The upper face band separates a large inner plate's stamp from the
+    // smaller change plate at its hub. Exact sleeve order is also screen text.
+    label.setAttribute('y', d.y - d.radius * .6);
     label.textContent = d.plate.unit === solution.bar.unit ? String(d.plate.value) : C.plateLabel(d.plate);
     art.append(label);
     } else {
