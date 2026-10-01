@@ -237,16 +237,26 @@ final class VisualProofUITests: XCTestCase {
         capture("after-09-settings-iphone")
         openDisclosure("Rest & training behavior")
         capture("after-settings-rest-iphone")
+        let duration = app.buttons["Squat & deadlift mains"]
+        // Bring the whole row below navigation chrome before tapping it;
+        // isHittable alone can be true for a partially obscured list row.
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 220)
+        for _ in 0..<6 where !visible.contains(duration.frame) {
+            if duration.frame.minY < visible.minY { app.swipeDown() } else { app.swipeUp() }
+        }
+        XCTAssertTrue(visible.contains(duration.frame)); duration.tap()
+        XCTAssertTrue(app.textFields["Hours"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Minutes"].exists)
+        XCTAssertTrue(app.textFields["Seconds"].exists)
+        capture("after-duration-picker-iphone")
+        app.navigationBars.buttons["Cancel"].firstMatch.tap()
+
         let sound = app.switches["Completion sound"]
         for _ in 0..<6 where !sound.isHittable { app.swipeUp() }
         XCTAssertTrue(sound.isHittable)
         capture("after-settings-audio-iphone")
-        let duration = app.buttons["Squat & deadlift mains"]
-        for _ in 0..<6 where !duration.isHittable { app.swipeDown() }
-        XCTAssertTrue(duration.isHittable); duration.tap()
-        XCTAssertTrue(app.navigationBars["Squat & deadlift mains"].waitForExistence(timeout: 5))
-        capture("after-duration-picker-iphone")
-        app.navigationBars["Squat & deadlift mains"].buttons["Cancel"].tap()
 
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(element("history-screen").waitForExistence(timeout: 5))
@@ -525,6 +535,9 @@ final class VisualProofUITests: XCTestCase {
         library.tap()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
         capture("favorites-01-library-empty-iphone")
+        openDisclosure("Main")
+        capture("favorites-library-category-iphone")
+        openDisclosure("Main")
 
         let search = app.searchFields.firstMatch
         for _ in 0..<3 where !search.isHittable { app.swipeDown() }
@@ -538,6 +551,19 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertEqual(remove.value as? String, "Favorite")
         capture("favorites-02-library-filtered-iphone")
         XCTAssertTrue(app.navigationBars["Library"].exists, "Starring must not open or select the lift")
+
+        let movement = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movement'")).firstMatch
+        for _ in 0..<4 where !movement.isHittable { app.swipeDown() }
+        XCTAssertTrue(movement.isHittable); movement.tap()
+        app.buttons["Squat"].firstMatch.tap()
+        let equipment = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Equipment'")).firstMatch
+        equipment.tap(); app.buttons["barbell"].firstMatch.tap()
+        capture("favorites-library-composed-iphone")
+        equipment.tap(); app.buttons["dumbbell"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'No exercises match.'"))
+            .firstMatch.waitForExistence(timeout: 3))
+        capture("favorites-library-no-results-iphone")
+        app.buttons["Clear filters"].firstMatch.tap()
 
         let cancelSearch = app.buttons["Cancel"].firstMatch
         if cancelSearch.exists { cancelSearch.tap() }

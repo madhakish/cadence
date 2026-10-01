@@ -15,7 +15,7 @@ enum CalculatorProofCases {
             app.launch()
             XCTAssertTrue(app.tabBars.buttons["Today"].waitForExistence(timeout: 20))
             app.buttons["Plate calculator"].tap()
-            XCTAssertTrue(app.navigationBars[legacy ? "Plates" : "Plate calculator"].waitForExistence(timeout: 6))
+            XCTAssertTrue(app.navigationBars["Plates"].waitForExistence(timeout: 6))
             if !legacy {
                 let field = app.textFields["plate-target"]
                 XCTAssertTrue(field.waitForExistence(timeout: 3))
@@ -32,9 +32,12 @@ enum CalculatorProofCases {
                 for _ in 0..<4 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }
                 app.segmentedControls.buttons["On the bar"].tap()
                 let count = app.steppers.matching(NSPredicate(format: "label CONTAINS '1.25' AND label CONTAINS 'kg'")).firstMatch
-                for _ in 0..<8 where !count.isHittable { app.swipeUp() }
-                XCTAssertTrue(count.isHittable)
-                count.buttons["Increment"].tap()
+                // A SwiftUI Stepper can expose a non-hittable grouping
+                // element even while its Increment button is on screen.
+                let increment = count.buttons["Increment"]
+                for _ in 0..<8 where !increment.isHittable { app.swipeUp() }
+                XCTAssertTrue(increment.isHittable)
+                increment.tap()
                 for _ in 0..<5 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }
                 capture(test, "\(legacy ? "before" : "after")-calculator-reverse-iphone")
             }

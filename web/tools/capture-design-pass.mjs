@@ -125,10 +125,19 @@ try {
     await shot('library');
     if (phase === 'after') {
       const search = top().locator('input[type="search"]');
+      const mainCategory = top().locator('.library-group summary').filter({ hasText: 'Main' }).first();
+      await mainCategory.click(); await shot('library-category'); await mainCategory.click();
       await search.fill('Back Squat');
+      await shot('library-search');
       await top().getByRole('button', { name: 'Add Back Squat to Favorites', exact: true }).first().click();
       await expect(top().getByRole('button', { name: 'Remove Back Squat from Favorites', exact: true }).first()).toBeVisible();
-      await search.fill(''); await shot('library-favorites');
+      await top().getByRole('combobox', { name: 'Movement', exact: true }).selectOption('squat');
+      await top().getByRole('combobox', { name: 'Equipment', exact: true }).selectOption('barbell');
+      await shot('library-composed');
+      await top().getByRole('combobox', { name: 'Equipment', exact: true }).selectOption('dumbbell');
+      await expect(top()).toContainText('No exercises match'); await shot('library-no-results');
+      await top().getByRole('button', { name: 'Clear filters', exact: true }).click();
+      await shot('library-favorites');
       if (width === 390) {
         // CSS zoom is a layout stress, not a claim of manual browser/pinch
         // zoom testing. Both edge widths also run with reduced motion.
@@ -156,6 +165,16 @@ try {
       }
     }
     await closeTop();
+    if (phase === 'after') {
+      await page.evaluate(async (id) => (await import('./js/views/session.js')).openSession(id), sessionID);
+      await top().getByRole('button', { name: '+ Add exercise', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Add exercise', exact: true })
+        .getByRole('region', { name: 'Favorites' })).toContainText('Back Squat');
+      await shot('session-picker');
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog', { name: 'Add exercise', exact: true })).toHaveCount(0);
+      await closeTop();
+    }
     await nav('settings'); await shot('settings');
     if (phase === 'after') {
       await page.locator('.settings-group summary').filter({ hasText: 'Rest & training behavior' }).click();

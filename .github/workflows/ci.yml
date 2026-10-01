@@ -378,7 +378,7 @@ jobs:
           compression-level: 0
           retention-days: 90
 
-  # Rebuilding three historical apps is the expensive safety proof. Run it
+  # Rebuilding historical apps is the expensive safety proof. Run it
   # only when persistence can change, and cache the generic shipped stores by
   # immutable source lineage. Current app compilation remains mandatory above.
   migration-tests:
@@ -396,7 +396,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/cadence-shipped-stores
-          key: shipped-stores-v1-v129-d418550-pr72-c2026d8-pr73-11846b8-${{ hashFiles('.github/scripts/generate-shipped-stores.sh') }}
+          key: shipped-stores-v2-v129-d418550-pr72-c2026d8-pr73-11846b8-v14-2005860-${{ hashFiles('.github/scripts/generate-shipped-stores.sh') }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.shipped-store-cache.outputs.cache-hit != 'true'
         with:
@@ -415,6 +415,12 @@ jobs:
           ref: 11846b8dbdf88aa227f6d54fbc7a23c1b8ba8fea
           path: shipped/pr73
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.shipped-store-cache.outputs.cache-hit != 'true'
+        with:
+          ref: 20058600ec2947c1a4f13a855d3b922ae80e1709
+          path: shipped/v14
+          persist-credentials: false
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
@@ -426,6 +432,7 @@ jobs:
           shipped/v129
           shipped/pr72
           shipped/pr73
+          shipped/v14
           "$RUNNER_TEMP/cadence-shipped-stores"
       - name: Verify shipped-store migrations
         # xcodebuild forwards only TEST_RUNNER_-prefixed variables into the
@@ -440,6 +447,7 @@ jobs:
           TEST_RUNNER_CADENCE_FAILED_UPGRADES_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v129-after-failed-upgrades
           TEST_RUNNER_CADENCE_PR72_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr72
           TEST_RUNNER_CADENCE_PR73_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/pr73
+          TEST_RUNNER_CADENCE_V14_STORE_DIR: ${{ runner.temp }}/cadence-shipped-stores/v14
         run: >-
           xcodebuild test
           -project Cadence.xcodeproj

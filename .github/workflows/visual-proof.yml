@@ -118,7 +118,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cadence-iphone-visual-proof-${{ needs.gate.outputs.sha }}
-          path: dist/visual-proof
+          path: |
+            dist/visual-proof
+            !dist/visual-proof/*.mp4
           if-no-files-found: warn
 
   baseline:
@@ -189,5 +191,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cadence-dp1-baseline-${{ needs.gate.outputs.sha }}
-          path: baseline/dist/baseline-proof
+          path: |
+            baseline/dist/baseline-proof
+            !baseline/dist/baseline-proof/*.mp4
           if-no-files-found: warn
