@@ -128,6 +128,9 @@ targets:
       # code instead of a test-only DTO copy.
       - Cadence/Services/ExportService.swift
       - Cadence/Services/ImportService.swift
+      # Exercise-favorite failure tests use the actual save/rollback/error
+      # boundary. SwiftUI is available in this hostless macOS target.
+      - Cadence/Services/PersistenceErrorCenter.swift
       - Cadence/Services/ProgramExportService.swift
       - Cadence/Services/ProgramImportService.swift
       # The banked-correction boundary is a models-only service; compiling it

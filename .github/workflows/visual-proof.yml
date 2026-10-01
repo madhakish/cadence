@@ -93,9 +93,11 @@ jobs:
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
           -derivedDataPath build/visual-proof
           -resultBundlePath build/VisualProof.xcresult
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test01HomeAndAdHocWork
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test02CurrentSessionAndExactPlateStack
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test03ExercisePaneAndPreservedAnatomy
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test04PlateCalculatorHero
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test05SettingsAndHistory
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test08PlateButtonNeverCoversContent
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test09WorkoutPreviewInspection
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test10PlankCountdownAndLog
@@ -105,6 +107,17 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test15PlateThemesLoadedBar
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test16FavoritesInLibraryAndSessionPicker
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Replay the synthetic native fixture and capture the web matrix
+        run: |
+          mkdir -p dist/visual-proof
+          app_data="$(xcrun simctl get_app_container '${{ steps.simulator.outputs.device-id }}' com.madhakish.Cadence data)"
+          cp "$app_data/tmp/cadence-visual-proof.json" dist/visual-proof/native-fixture.json
+          npm ci --prefix web
+          (cd web && npx --no-install playwright install chromium)
+          node web/tools/capture-design-pass.mjs dist/visual-proof/native-fixture.json dist/visual-proof/web '${{ needs.gate.outputs.sha }}'
       - name: Export screenshot attachments
         if: always()
         run: |

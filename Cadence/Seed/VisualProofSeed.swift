@@ -129,6 +129,12 @@ enum VisualProofSeed {
             appendSet(set, to: entry, context: context)
         }
         try context.save()
+        // The DEBUG-only visual fixture is synthetic and in memory. Replay
+        // its real portable export on web for comparable cross-client proof;
+        // no production store or athlete data is read by this path.
+        let fixtureURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-visual-proof.json")
+        try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
     }
 
     private static func addOpenSession(
