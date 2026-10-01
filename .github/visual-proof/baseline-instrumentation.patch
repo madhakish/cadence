@@ -4,7 +4,7 @@ diff --git a/Cadence/CadenceApp.swift b/Cadence/CadenceApp.swift
 @@ -29,7 +29,34 @@ final class AppBootstrap: ObservableObject {
      @Published private(set) var errorMessage: String?
      @Published private(set) var isTemporary = false
- 
+
 -    init() { loadPersistentStore() }
 +    init() {
 +#if DEBUG
@@ -34,7 +34,7 @@ diff --git a/Cadence/CadenceApp.swift b/Cadence/CadenceApp.swift
 +        }
 +    }
 +#endif
- 
+
      func loadPersistentStore() {
          container = nil
 diff --git a/project.yml b/project.yml
@@ -43,7 +43,7 @@ diff --git a/project.yml b/project.yml
 @@ -158,6 +158,22 @@ targets:
          GENERATE_INFOPLIST_FILE: true
          CODE_SIGNING_ALLOWED: false
- 
+
 +  # Unmerged screenshot target installed into the exact pre-pass checkout.
 +  CadenceBaselineVisualProofUITests:
 +    type: bundle.ui-testing
