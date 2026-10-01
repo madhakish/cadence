@@ -6,12 +6,23 @@ Favorites implementation and collects the combined candidate's evidence.
 A simulator capture or a green build does not establish headphone routing,
 a workout performed while locked, or a manual VoiceOver session.
 
+## Follow-up status
+
+The original source and acceptance tables below are a dated record. Subsequent
+required CI for `70ce0a05` passed all gates, including 16 real browser cases,
+504 core and 81 migration tests, device build and four native interactions/zero
+skips. Exact 375/430 pt visual jobs failed navigation/query/full-frame assertions;
+new proof fixes remain unverified until their own native run. The
+[pixel-review follow-up](PIXEL-REVIEW.md#follow-up-evidence--1-october-2233-utc)
+identifies inspected originals and separates confirmed earlier corrections from
+pending equipment, desktop and full accessibility acceptance. Epic #177 stays open.
+
 ## Source and gates
 
 - Original DP-1 application: `11895fb95cde9e4b938831098d00dd0350b45bc2`.
 - PR base / actual V14 store producer: `20058600ec2947c1a4f13a855d3b922ae80e1709`.
-- Current capture source: `78405bf4a12c32e5be65373b7006cb11c355d4e6`.
-- [Current production CI](https://github.com/madhakish/cadence/actions/runs/36811839564)
+- Original retained capture source: `78405bf4a12c32e5be65373b7006cb11c355d4e6`.
+- [Original source CI](https://github.com/madhakish/cadence/actions/runs/36811839564)
   and [capture run](https://github.com/madhakish/cadence/actions/runs/36811839554).
 - Source CI passed: 504 core tests, 81 migration/backup tests, full web suite
   and 14 Chromium/WebKit acceptance cases, unsigned device build, and all four

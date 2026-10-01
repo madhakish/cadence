@@ -106,7 +106,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
         let toggle = app.buttons["barbell-explode-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
-        XCTAssertEqual(toggle.value as? String, "Assembled", "the inspection opens straight ahead, assembled")
+        assertInspectorState("Assembled", button: toggle)
         // The calculator beneath this sheet has its own accessible bar.
         // The artwork is the SceneKit solid where Metal is available and the
         // sprite scroll view otherwise; both expose the same plate children.
@@ -118,12 +118,12 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-assembled-iphone")
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Exploded")
+        assertInspectorState("Exploded", button: toggle)
         capture("barbell-exploded-iphone")
         XCTAssertFalse(app.buttons["barbell-reset-view"].exists, "inspection has exactly two authored views")
         XCTAssertFalse(app.segmentedControls["barbell-backdrop"].exists)
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Assembled")
+        assertInspectorState("Assembled", button: toggle)
 
         app.navigationBars["Loaded bar"].buttons["Done"].tap()
         let equipment = app.buttons["Equipment & loading"]
@@ -136,7 +136,7 @@ final class VisualProofUITests: XCTestCase {
         inspect.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Exploded")
+        assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
     }
 
@@ -516,6 +516,15 @@ final class VisualProofUITests: XCTestCase {
         text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
+    private func assertInspectorState(_ expected: String, button: XCUIElement) {
+        // Wait for the actual accessible state after one tap; no second tap
+        // or test retry can mask a non-working toggle.
+        let state = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expected), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [state], timeout: 3), .completed,
+                       "Inspector must reach \(expected) after one action")
+        XCTAssertEqual(button.value as? String, expected)
+    }
+
     /// #55: the loaded-bar inspection under each shipped plate theme. The
     /// proof seed reads `--plate-theme=<id>` and puts it on the fixture gym,
     /// so every relaunch shows the same 139 lb target in a different theme:
@@ -546,22 +555,17 @@ final class VisualProofUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
             let toggle = app.buttons["barbell-explode-toggle"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+            assertInspectorState("Assembled", button: toggle)
             capture("after-15-theme-\(theme)-assembled-iphone")
             toggle.tap()
-            XCTAssertTrue(app.buttons["barbell-explode-toggle"].waitForExistence(timeout: 3))
+            assertInspectorState("Exploded", button: toggle)
             capture("after-15-theme-\(theme)-exploded-iphone")
             app.buttons["Done"].tap()
         }
     }
 
     func test16FavoritesInLibraryAndSessionPicker() {
-        app.tabBars.buttons["Settings"].tap()
-        openDisclosure("Programming & library")
-        let library = app.buttons["Exercise library"]
-        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
-        XCTAssertTrue(library.waitForExistence(timeout: 3))
-        library.tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        openExerciseLibrary()
         XCTAssertTrue(element("exercise-search").waitForExistence(timeout: 3))
         XCTAssertTrue(element("exercise-search").isHittable, "Search must be visible on arrival, without a pull-down gesture")
         capture("favorites-01-library-empty-iphone")
@@ -625,16 +629,65 @@ final class VisualProofUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
+    /// The root List ends above the opaque 72 pt calculator band. XCTest
+    /// can report a row below that band as hittable; use its whole frame.
+    private var rootListViewport: CGRect {
+        let window = app.windows.firstMatch.frame
+        let top = app.navigationBars.firstMatch.frame.maxY + 2
+        let bottom = app.tabBars.firstMatch.frame.minY - 72 - 2
+        return CGRect(x: window.minX, y: top, width: window.width, height: bottom - top)
+    }
+
+    private func revealRootListRows(_ rows: [XCUIElement]) {
+        // SwiftUI List creates cells lazily. Reach the last requested row
+        // before measuring the union, then move by the actual overflow.
+        for _ in 0..<20 where !rows.allSatisfy({ $0.exists }) {
+            scrollRootList(by: -100)
+        }
+        XCTAssertTrue(rows.allSatisfy { $0.exists }, "All requested rows exist")
+        for _ in 0..<20 {
+            let frame = rows.dropFirst().reduce(rows[0].frame) { $0.union($1.frame) }
+            let viewport = rootListViewport
+            if viewport.contains(frame) { break }
+            XCTAssertLessThanOrEqual(frame.height, viewport.height,
+                                     "The complete requested content must fit above the calculator band")
+            let delta = frame.minY < viewport.minY
+                ? viewport.minY - frame.minY + 4
+                : viewport.maxY - frame.maxY - 4
+            // A drag shorter than the pan threshold becomes a Menu tap.
+            let distance = max(24, min(80, abs(delta)))
+            scrollRootList(by: delta < 0 ? -distance : distance)
+        }
+        for row in rows {
+            XCTAssertTrue(rootListViewport.contains(row.frame),
+                          "Complete row \(row.label) \(row.frame) must fit in \(rootListViewport)")
+        }
+    }
+
+    private func scrollRootList(by delta: CGFloat) {
+        let viewport = rootListViewport
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
+        let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY + delta))
+        start.press(forDuration: 0.01, thenDragTo: end)
+    }
+
+    private func openExerciseLibrary() {
+        app.tabBars.buttons["Settings"].tap()
+        openDisclosure("Programming & library")
+        let library = app.buttons["Exercise library"]
+        revealRootListRows([library])
+        XCTAssertTrue(library.isHittable)
+        library.tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+    }
+
     func test17FavoritesAtAccessibilityTextSize() {
         app.terminate()
         app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
         app.launch()
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
-        app.tabBars.buttons["Settings"].tap()
-        openDisclosure("Programming & library")
-        let library = app.buttons["Exercise library"]
-        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
-        XCTAssertTrue(library.isHittable); library.tap()
+        openExerciseLibrary()
         let search = element("exercise-search")
         for _ in 0..<4 where !search.isHittable { app.swipeDown() }
         XCTAssertTrue(search.isHittable)
@@ -645,26 +698,17 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Submitting search must leave the results unobstructed")
         XCTAssertTrue(app.windows.firstMatch.frame.contains(search.frame))
         capture("favorites-accessibility-search-iphone")
-        let window = app.windows.firstMatch.frame
-        let visible = CGRect(x: window.minX, y: window.minY + 100,
-                             width: window.width, height: window.height - 250)
         for (id, value) in [("exercise-movement-filter", "All movements"),
                             ("exercise-equipment-filter", "All equipment")] {
             let filter = app.buttons[id]
             XCTAssertTrue(filter.waitForExistence(timeout: 3))
             XCTAssertEqual(filter.value as? String, value)
-            for _ in 0..<12 where !visible.contains(filter.frame) {
-                let above = filter.frame.minY < visible.minY
-                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
-                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
-                start.press(forDuration: 0.01, thenDragTo: end)
-            }
-            XCTAssertTrue(visible.contains(filter.frame))
+            revealRootListRows([filter])
             XCTAssertTrue(filter.isHittable)
             capture("favorites-accessibility-\(id)-iphone")
         }
         let star = app.buttons["Add Back Squat to Favorites"].firstMatch
-        for _ in 0..<6 where !star.isHittable { app.swipeUp() }
+        revealRootListRows([star])
         XCTAssertTrue(star.isHittable)
         XCTAssertGreaterThanOrEqual(star.frame.width, 44)
         XCTAssertGreaterThanOrEqual(star.frame.height, 44)
@@ -673,15 +717,9 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Remove Back Squat from Favorites"].firstMatch.waitForExistence(timeout: 5))
         // A reachable star alone does not prove the lift name/metadata are
         // clear of navigation chrome. Retain the entire favorite row.
-        let favorite = element("favorite-row-Back Squat")
+        let favorite = app.cells.containing(.button, identifier: "Remove Back Squat from Favorites").firstMatch
         XCTAssertTrue(favorite.waitForExistence(timeout: 3))
-        for _ in 0..<12 where !visible.contains(favorite.frame) {
-            let above = favorite.frame.minY < visible.minY
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
-            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
-            start.press(forDuration: 0.01, thenDragTo: end)
-        }
-        XCTAssertTrue(visible.contains(favorite.frame))
+        revealRootListRows([favorite])
         capture("favorites-accessibility-iphone")
     }
 
@@ -698,24 +736,11 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No program"].waitForExistence(timeout: 5))
         capture("equipment-program-empty-iphone")
 
-        app.tabBars.buttons["Settings"].tap()
-        openDisclosure("Programming & library")
-        let library = app.buttons["Exercise library"]
-        for _ in 0..<8 where !library.isHittable { app.swipeUp() }
-        XCTAssertTrue(library.isHittable); library.tap()
-        let window = app.windows.firstMatch.frame
-        let visible = CGRect(x: window.minX, y: window.minY + 100,
-                             width: window.width, height: window.height - 250)
-        let main = element("exercise-category-Main")
-        let conditioning = element("exercise-category-Conditioning")
-        for _ in 0..<10 where !visible.contains(main.frame) || !visible.contains(conditioning.frame) {
-            let above = main.frame.minY < visible.minY
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
-            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
-            start.press(forDuration: 0.01, thenDragTo: end)
+        openExerciseLibrary()
+        let categories = ["Main", "Accessory", "Conditioning"].map {
+            app.cells.containing(.staticText, identifier: $0).firstMatch
         }
-        XCTAssertTrue(visible.contains(main.frame))
-        XCTAssertTrue(visible.contains(conditioning.frame))
+        revealRootListRows(categories)
         capture("equipment-categories-iphone")
 
         let search = element("exercise-search")
@@ -725,12 +750,14 @@ final class VisualProofUITests: XCTestCase {
         let submit = app.buttons["exercise-search-done"]
         XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
         let lift = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Synthetic unlogged accessory'")).firstMatch
-        for _ in 0..<6 where !lift.isHittable { app.swipeUp() }
+        revealRootListRows([lift])
         XCTAssertTrue(lift.isHittable); lift.tap()
         openDisclosure("Previous performance & programming")
         let empty = app.staticTexts["No sessions yet."]
         for _ in 0..<8 where !empty.isHittable { app.swipeUp() }
         XCTAssertTrue(empty.isHittable)
+        let emptyRow = app.cells.containing(.staticText, identifier: "No sessions yet.").firstMatch
+        revealRootListRows([emptyRow])
         capture("equipment-exercise-empty-iphone")
     }
 

@@ -1,0 +1,126 @@
+name: Equipment context comparison
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/equipment-context-proof.yml'
+      - 'web/tools/capture-equipment-context.mjs'
+      - 'docs/design-pass/proof/review-c320/native-fixture.json'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: equipment-context-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin comparison source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Wait for exact-head fast suites
+        if: github.event_name == 'pull_request'
+        env:
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/wait-for-visual-ci.mjs
+  web:
+    name: Compare equipment states on web
+    needs: gate
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Check out the actual pre-art application
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: c3200e6dd24a9ee983294699789d0e22b3ed939e
+          persist-credentials: false
+          path: before-equipment
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Capture the same categories and empty states on both revisions
+        run: |
+          npm ci --prefix web
+          (cd web && npx --no-install playwright install chromium)
+          fixture=docs/design-pass/proof/review-c320/native-fixture.json
+          node web/tools/capture-equipment-context.mjs "$fixture" dist/equipment-before c3200e6dd24a9ee983294699789d0e22b3ed939e before-equipment/web before
+          node web/tools/capture-equipment-context.mjs "$fixture" dist/equipment-after '${{ needs.gate.outputs.sha }}' web after
+          node web/tools/capture-design-pass.mjs "$fixture" dist/current-web-matrix '${{ needs.gate.outputs.sha }}'
+      - name: Retain original comparison pixels
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cadence-equipment-comparison-${{ needs.gate.outputs.sha }}
+          path: |
+            dist/equipment-*
+            dist/current-web-matrix
+          if-no-files-found: warn
+  native-dark:
+    name: Capture native palettes under dark OS appearance
+    needs: gate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Boot the recorded iPhone and select real dark appearance
+        id: simulator
+        run: |
+          device_id="$(python3 .github/visual-proof/select-simulator.py)"
+          echo "device-id=$device_id" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device_id" 2>/dev/null || true
+          xcrun simctl bootstatus "$device_id" -b
+          mkdir -p dist/native-dark
+          xcrun simctl ui "$device_id" appearance dark
+          xcrun simctl ui "$device_id" appearance > dist/native-dark/os-appearance.txt
+      - name: Capture app-controlled palettes and System under dark OS
+        run: >-
+          xcodebuild test -project Cadence.xcodeproj -scheme CadenceVisualProof
+          -configuration Debug
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
+          -derivedDataPath build/native-dark -resultBundlePath build/NativeDark.xcresult
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test19AppThemeCanvases
+      - name: Export palette attachments
+        if: always()
+        run: |
+          mkdir -p dist/native-dark
+          git rev-parse HEAD > dist/native-dark/commit.txt
+          if [[ -d build/NativeDark.xcresult ]]; then
+            xcrun xcresulttool export attachments --path build/NativeDark.xcresult --output-path dist/native-dark
+            xcrun xcresulttool get test-results summary --path build/NativeDark.xcresult > dist/native-dark/test-summary.json
+          fi
+      - name: Retain dark-appearance proof
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cadence-native-dark-${{ needs.gate.outputs.sha }}
+          path: |
+            dist/native-dark
+            !dist/native-dark/*.mp4
+          if-no-files-found: warn

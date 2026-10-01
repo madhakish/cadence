@@ -302,8 +302,10 @@ struct ExerciseDetailView: View {
                         .tracking(0.7)
                         .foregroundStyle(.secondary)
                     if performance.recent.isEmpty {
-                        EquipmentContextImage(category: exercise.category, width: 160)
-                        Text("No sessions yet.").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            EquipmentContextImage(category: exercise.category, width: 160)
+                            Text("No sessions yet.").foregroundStyle(.secondary)
+                        }
                     }
                     ForEach(performance.recent) { row in
                         VStack(alignment: .leading, spacing: 2) {

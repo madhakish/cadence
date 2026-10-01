@@ -152,11 +152,7 @@ struct ExerciseBrowser: View {
                         Text(exercises.contains(where: \.isFavorite) ? "No favorites match these filters." : "Star a lift to keep it here.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(favorites) { exercise in
-                            row(exercise)
-                                .accessibilityElement(children: .contain)
-                                .accessibilityIdentifier("favorite-row-\(exercise.name)")
-                        }
+                        ForEach(favorites) { exercise in row(exercise) }
                     }
                 }
                 .accessibilityIdentifier("exercise-favorites")
@@ -184,7 +180,6 @@ struct ExerciseBrowser: View {
                                         .monospacedDigit()
                                         .foregroundStyle(.secondary)
                                 }
-                                .accessibilityIdentifier("exercise-category-\(category.rawValue)")
                             }
                         }
                     }

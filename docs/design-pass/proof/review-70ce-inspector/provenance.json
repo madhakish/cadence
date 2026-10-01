@@ -1,0 +1,43 @@
+{
+  "sourceSHA": "70ce0a05ee8b008560f928c1a0c5cbea857990ed",
+  "run": 36931857429,
+  "job": 110604158336,
+  "artifact": 11198685263,
+  "result": "18 tests executed; 15 passed, 3 failed (hero toggle immediate-value assertion; absent favorite ID; ambiguous category ID). Web matrix skipped after native failure.",
+  "inspection": "Only these three original PNGs inspected and retained; two named theme screenshots visibly show the exploded state. Their test did not assert that state, so the next harness adds a bounded state expectation after one action. No retry or second tap. The hero failure remains unexplained until that new assertion runs.",
+  "captures": [
+    {
+      "file": "inspector-assembled-before-failure.png",
+      "testIdentifier": "VisualProofUITests/test04PlateCalculatorHero()",
+      "originalExportedFile": "9802B0F2-5163-4F96-9069-08C92C9EFEE4.png",
+      "windowPt": [
+        402,
+        874
+      ],
+      "bytes": 283477,
+      "sha256": "11e8fbe486f52f5063fe65f712d416d0453b4d19a160f31a6e65c49b0db2e674"
+    },
+    {
+      "file": "house-inspector-exploded.png",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "originalExportedFile": "08403287-084A-4E90-AB32-89A73AA19BA8.png",
+      "windowPt": [
+        402,
+        874
+      ],
+      "bytes": 549566,
+      "sha256": "5f980cb24d6091a0bd18f402c1315e34d32ac7f9821255a427a3816a44d3ff1b"
+    },
+    {
+      "file": "iwf-inspector-exploded.png",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "originalExportedFile": "98444830-65F8-4044-A852-006C85A30471.png",
+      "windowPt": [
+        402,
+        874
+      ],
+      "bytes": 603265,
+      "sha256": "128b60e46ded44713d1e9320f589a8caacfc82ae799db35cd2efd4d88dc651af"
+    }
+  ]
+}

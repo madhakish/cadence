@@ -21,6 +21,57 @@ provide the accompanying context. **Inspected does not mean every capture
 meets its intended acceptance condition.** The failures and limits below are
 part of the retained evidence.
 
+## Follow-up evidence — 1 October, 22:33 UTC
+
+The 186-image record below remains tied to `78405bf4`; its findings are historical,
+not claims about later heads. Seven additional originals from `c3200e6` were
+individually inspected and retained in [the pre-art record](proof/review-c320/provenance.json).
+They confirm a fully exposed native audio switch, an actually open mobile web
+picker and cleared mobile anatomy selection. Search/query clears navigation
+chrome. The maximum-text filter value still ellipsized in that revision, and
+the starred lift name was partly above the navigation boundary; those two
+captures were not accepted as complete maximum-text browsing.
+
+At `70ce0a05ee8b008560f928c1a0c5cbea857990ed`, required CI passed: 504 core,
+81 migration/backup, the full web suite, all 16 Chromium/WebKit acceptance cases,
+unsigned device build and four native interactions with zero skips.
+[Run](https://github.com/madhakish/cadence/actions/runs/36931857224).
+The separate [capture run](https://github.com/madhakish/cadence/actions/runs/36931857429)
+passed its baseline and failed both exact edge-width jobs; its main native job
+subsequently executed 18 tests: 15 passed and 3 failed. The web matrix was
+skipped after native failure. Five edge originals were
+inspected and retained with [failure provenance](proof/review-70ce-edges/provenance.json).
+The 430 pt filter values wrap fully and the empty Program shows the original
+rack cutout without cropping. These pixels do not prove the failed paths.
+
+The 430 pt hierarchy shows Library taps attempted below the opaque calculator
+band, an absent favorite-container identifier despite a real List cell, and
+an unreached category screen. At 375 pt, normal Library/picker interaction
+passed; maximum-text Equipment clearance failed with coarse fixed-margin
+scrolling, and the inherited category identifier matched several children.
+The next harness measures the actual navigation/tab-bar boundaries, reveals
+whole cells with measured pans, and requires all three complete category rows
+and the entire starred row. Unexposed/inherited container identifiers were
+removed; the empty-history image and copy now share one native List row.
+Those corrections require new native compilation and runtime proof.
+
+The main job also failed the hero inspector's immediate accessible-value check:
+after one tap it still reported Assembled. Three [inspector originals](proof/review-70ce-inspector/provenance.json)
+were inspected, including two different theme captures visibly in the exploded
+state on this same source. This does not explain away the hero failure. The next
+harness waits up to three seconds for the exact state after one action and makes
+the ten-theme capture assert each state too; it never retries the tap or test.
+
+Three original transparent equipment images are now integrated into category
+browsing, unlogged detail and empty Program. [Asset provenance](EQUIPMENT-CONTEXT.md)
+records their fixed geometry and 953,444-byte client budget. Both browser engines
+passed delayed-decode geometry, real offline reopen/detail navigation, edge widths,
+CSS zoom and reduced motion. Matched pre-art/current captures and real native OS
+Dark palette captures are prepared, but have not run yet. Desktop calculator and
+plate-stamp layout changes also await current pixel inspection. Complete AA,
+spoken VoiceOver, physical locked-workout/audio and manual zoom acceptance remain
+open; automated checks do not substitute for them.
+
 ## Baseline comparison
 
 - Original native Settings and calculator use rounded Form groups. The candidate
@@ -65,8 +116,8 @@ The `barbell-bumper-exploded` native filename still has a Steel fixture summary;
 its name alone does not prove a bumper selection. The explicit test15 equipment
 theme captures supply the bumper variants. The exact original gorilla hashes
 and all 158 equipment PNGs are documented separately in the asset inventory.
-Library/History remain text-led; this PR does not add the broader movement and
-implement illustration family requested by #198.
+At that recorded source, Library/History remain text-led; the follow-up above
+records the subsequently added implement family.
 
 ## Remaining visual and capture defects
 

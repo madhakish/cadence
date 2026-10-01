@@ -8,6 +8,11 @@ Both revisions use the same synthetic seed recipe. Store identities and relative
 
 The baseline checkout receives only the recorded in-memory bootstrap, UI-test target and calculator scenario startup arguments. Its layout, renderer, solver and application behavior are original; [original instrumentation patch (Base64)](proof/final-177/before/instrumentation.patch.b64) records the exact delta.
 
+The pairs below remain the original dated matrix. A later [pixel-review follow-up](PIXEL-REVIEW.md#follow-up-evidence--1-october-2233-utc)
+records seven inspected `c3200e6` correction captures and five inspected `70ce0a0`
+edge captures, preserving failed acceptance evidence. New equipment comparisons
+are pending; these older pairs are not relabeled as current-head proof.
+
 ## iPhone pairs
 
 Both use the original DP-1 iPhone 17 Pro viewport: 1206 × 2622 pixels / 402 × 874 points. These are not 390-point iPhone captures; the separate browser matrix uses the prescribed 390 × 844 viewport.
