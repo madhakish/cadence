@@ -645,6 +645,33 @@ final class VisualProofUITests: XCTestCase {
         CalculatorProofCases.run(in: self)
     }
 
+    /// App palettes are distinct from the ten equipment themes. Retain both
+    /// the primary task index and load-entry canvas under every saved palette.
+    func test19AppThemeCanvases() {
+        for (theme, label) in [("carbon", "Foundry"), ("memento", "Heritage Gold"),
+                               ("titanium", "Titanium"), ("slate", "Slate"), ("system", "System")] {
+            app.terminate()
+            app.launchArguments.removeAll { $0.hasPrefix("--app-theme=") }
+            app.launchArguments.append("--app-theme=\(theme)")
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.tabBars.buttons["Settings"].tap()
+            XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts[label].firstMatch.waitForExistence(timeout: 3))
+            capture("after-19-app-theme-\(theme)-settings-iphone")
+            app.buttons["Plate calculator"].tap()
+            let target = app.textFields["plate-target"]
+            XCTAssertTrue(target.waitForExistence(timeout: 5))
+            target.tap()
+            target.typeText("139")
+            let done = app.buttons["plate-target-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            done.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+            capture("after-19-app-theme-\(theme)-calculator-iphone")
+        }
+    }
+
     private func capture(_ name: String) {
         // XCTest can finish a tap before a disclosure's painted transition.
         // The earlier proof caught ghosted rows; settle only the screenshot,

@@ -52,6 +52,10 @@ enum VisualProofSeed {
         if let settings = try context.fetch(FetchDescriptor<AppSettings>()).first {
             settings.unitDisplay = .lbPrimary
             settings.themeNameRaw = ThemeName.carbon.rawValue
+            if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--app-theme=") }),
+               let theme = ThemeName(rawValue: String(argument.dropFirst("--app-theme=".count))) {
+                settings.themeNameRaw = theme.rawValue
+            }
             settings.haptics = false
         }
 
@@ -137,7 +141,9 @@ enum VisualProofSeed {
         // no production store or athlete data is read by this path.
         let fixtureURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("cadence-visual-proof.json")
-        if !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--plate-proof=") || $0.hasPrefix("--plate-theme=") }) {
+        if !ProcessInfo.processInfo.arguments.contains(where: {
+            $0.hasPrefix("--plate-proof=") || $0.hasPrefix("--plate-theme=") || $0.hasPrefix("--app-theme=")
+        }) {
             try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
         }
     }

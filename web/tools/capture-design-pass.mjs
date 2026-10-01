@@ -201,6 +201,20 @@ try {
     }
     await nav('history'); await page.getByRole('button', { name: 'Log', exact: true }).click();
     await expect(page.locator('#view')).toContainText('Wood Splitting'); await shot('history');
+    if (phase === 'after') {
+      for (const [theme, label] of [['carbon', 'Foundry'], ['memento', 'Heritage Gold'],
+        ['titanium', 'Titanium'], ['slate', 'Slate'], ['system', 'System']]) {
+        await nav('settings');
+        const appearance = page.locator('.settings-group summary').filter({ hasText: 'Appearance & accessibility' });
+        await appearance.click();
+        await page.getByRole('button', { name: label, exact: true }).click();
+        await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+        await appearance.click();
+        await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+        await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+        await shot(`app-theme-${theme}-settings`);
+      }
+    }
     if (errors.length) throw new Error(errors.join('\n'));
     await context.close();
   }
