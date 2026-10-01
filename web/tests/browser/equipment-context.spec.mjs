@@ -46,9 +46,22 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     for (const width of [320, 430, 1280]) {
       await delayed.setViewportSize({ width, height: 844 });
       for (const zoom of [1, 2]) {
-        await delayed.evaluate((value) => { document.documentElement.style.zoom = String(value); }, zoom);
+        await delayed.evaluate(async (value) => {
+          document.documentElement.style.zoom = String(value);
+          // Measure the painted responsive layout after viewport/zoom changes,
+          // including the container-query update on WebKit.
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+        }, zoom);
         const rows = delayed.locator('.library-group > summary');
-        expect(await rows.evaluateAll((items) => items.every((row) => row.scrollWidth <= row.clientWidth + 1))).toBe(true);
+        const metrics = await rows.evaluateAll((items) => items.map((row) => ({
+          label: row.querySelector('.title').textContent,
+          scrollWidth: row.scrollWidth, clientWidth: row.clientWidth,
+          frame: row.getBoundingClientRect().toJSON(),
+          children: [...row.children].map((child) => child.getBoundingClientRect().toJSON()),
+        })));
+        expect(metrics.every((row) => row.scrollWidth <= row.clientWidth + 1),
+          `${width}px at zoom${zoom}: ${JSON.stringify(metrics)}`).toBe(true);
         await expect(delayed.getByRole('searchbox', { name: 'Search exercises' })).toBeVisible();
       }
     }
