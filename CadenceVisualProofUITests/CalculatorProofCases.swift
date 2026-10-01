@@ -27,6 +27,16 @@ enum CalculatorProofCases {
             let summary = app.staticTexts[legacy ? "Total on bar" : "ACHIEVED WITH BAR"].firstMatch
             for _ in 0..<4 where !summary.isHittable { app.swipeUp() }
             XCTAssertTrue(summary.isHittable)
+            if scenario == "unreachable" {
+                let warning = app.staticTexts["No available stack satisfies this loading policy; showing the closest load."]
+                for _ in 0..<5 where !warning.isHittable { app.swipeUp() }
+                XCTAssertTrue(warning.waitForExistence(timeout: 3))
+                let window = app.windows.firstMatch.frame
+                let visible = CGRect(x: window.minX, y: window.minY + 100,
+                                     width: window.width, height: window.height - 200)
+                for _ in 0..<5 where !visible.contains(warning.frame) { app.swipeUp() }
+                XCTAssertTrue(visible.contains(warning.frame), "Unreachable proof must show the policy warning")
+            }
             capture(test, "\(legacy ? "before" : "after")-calculator-\(scenario)-iphone")
             if scenario == "mixed" {
                 for _ in 0..<4 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }

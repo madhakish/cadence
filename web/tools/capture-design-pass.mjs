@@ -57,7 +57,13 @@ try {
     await page.evaluate(async (id) => (await import('./js/views/session.js')).openSession(id), sessionID);
     const squat = phase === 'after' ? page.locator('.exercise-card.emphasized .title-button').first()
       : top().getByRole('button', { name: 'Back Squat — muscles, history, and settings', exact: true }).first();
-    await expect(squat).toBeVisible(); await shot('session'); await squat.click();
+    await expect(squat).toBeVisible(); await shot('session');
+    if (phase === 'after') {
+      await top().locator('.barbell-wrap.current-loadout').first()
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await shot('session-plates');
+    }
+    await squat.click();
     await expect(top()).toContainText('Back Squat'); await shot('exercise-pane');
     if (phase === 'after') {
       await top().locator('summary').filter({ hasText: 'Previous performance & programming' }).click();

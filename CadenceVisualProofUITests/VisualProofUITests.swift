@@ -32,6 +32,14 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["CURRENT SET · NEXT ACTION"].waitForExistence(timeout: 3))
         capture("after-03-current-session-iphone")
+        let inspect = app.buttons["expand-loaded-bar"].firstMatch
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 220)
+        for _ in 0..<5 where !visible.contains(inspect.frame) { app.swipeUp() }
+        XCTAssertTrue(inspect.isHittable)
+        XCTAssertTrue(visible.contains(inspect.frame))
+        capture("after-03b-current-set-plates-iphone")
     }
 
     func test03ExercisePaneAndPreservedAnatomy() {
