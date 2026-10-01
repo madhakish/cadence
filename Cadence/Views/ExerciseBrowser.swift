@@ -143,6 +143,8 @@ struct ExerciseBrowser: View {
                 }
             }
         }
+        .listStyle(.plain)
+        .listSectionSpacing(.compact)
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Name, equipment or movement")
         .sheet(item: $detailExercise) { exercise in

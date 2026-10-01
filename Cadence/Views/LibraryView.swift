@@ -210,7 +210,7 @@ struct ExerciseDetailView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 7) {
