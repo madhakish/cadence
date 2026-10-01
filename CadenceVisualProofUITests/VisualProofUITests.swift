@@ -49,6 +49,13 @@ final class VisualProofUITests: XCTestCase {
         openDisclosure("Previous performance & programming")
         XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
         openDisclosure("Muscles & relationship")
+        for rotation in 1...4 {
+            let reps = element("cycle-plan-reps-\(rotation)")
+            XCTAssertTrue(reps.waitForExistence(timeout: 3))
+            XCTAssertGreaterThanOrEqual(reps.frame.minX, 0)
+            XCTAssertLessThanOrEqual(reps.frame.maxX, app.windows.firstMatch.frame.maxX,
+                                     "Expanded programming prescriptions must fit the phone width")
+        }
         capture("after-04b-exercise-pane-tiers-open-iphone")
         for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
         XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,

@@ -363,11 +363,15 @@ struct ExerciseDetailView: View {
                                             )
                                     }
                                     Spacer()
-                                    Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
-                                        .font(.subheadline.bold().monospacedDigit())
-                                    Text("\(plan.sets)×\(plan.reps)")
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundStyle(.secondary)
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
+                                            .font(.subheadline.bold().monospacedDigit())
+                                        Text("\(plan.sets)×\(plan.reps)")
+                                            .font(.caption.monospacedDigit())
+                                            .foregroundStyle(.secondary)
+                                            .accessibilityIdentifier("cycle-plan-reps-\(phase.rawValue)")
+                                    }
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }
