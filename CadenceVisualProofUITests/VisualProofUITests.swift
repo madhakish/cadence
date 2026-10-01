@@ -671,6 +671,17 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.frame.contains(star.frame))
         star.tap()
         XCTAssertTrue(app.buttons["Remove Back Squat from Favorites"].firstMatch.waitForExistence(timeout: 5))
+        // A reachable star alone does not prove the lift name/metadata are
+        // clear of navigation chrome. Retain the entire favorite row.
+        let favorite = element("favorite-row-Back Squat")
+        XCTAssertTrue(favorite.waitForExistence(timeout: 3))
+        for _ in 0..<12 where !visible.contains(favorite.frame) {
+            let above = favorite.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(visible.contains(favorite.frame))
         capture("favorites-accessibility-iphone")
     }
 
