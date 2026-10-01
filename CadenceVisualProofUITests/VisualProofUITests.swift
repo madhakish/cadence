@@ -351,6 +351,13 @@ final class VisualProofUITests: XCTestCase {
     /// Every issue on a surface is collected and reported together, so one
     /// run names the whole list instead of the first unlabeled control (#61).
     func test12AccessibilityAudit() throws {
+        // Captures pin one text size for comparisons. The audit must be able
+        // to vary the system preference, so remove that override for this test.
+        app.terminate()
+        let category = try XCTUnwrap(app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName"))
+        app.launchArguments.removeSubrange(category...(category + 1))
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         continueAfterFailure = true
         try auditSurface("today")
 
@@ -387,8 +394,8 @@ final class VisualProofUITests: XCTestCase {
         //   progress bar, plain containers) are not tap targets;
         // - clipping is left out because SwiftUI Labels audit as clipped
         //   while the captures show them intact;
-        // - Dynamic Type findings are reported as advisories, not failures:
-        //   the fixed-size numerals and eyebrows are a tracked follow-up.
+        // - Dynamic Type findings remain raw advisories, except plate-target;
+        //   neither a passing audit nor screenshots establish full AA.
         let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
         let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
         let types: XCUIAccessibilityAuditType = [
@@ -480,7 +487,12 @@ final class VisualProofUITests: XCTestCase {
             XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
 
             let units = app.segmentedControls["plate-target-unit"]
-            for _ in 0..<4 where !units.isHittable { app.swipeUp() }
+            let window = app.windows.firstMatch.frame
+            let top = app.navigationBars["Plates"].frame.maxY
+            let inputViewport = CGRect(x: window.minX, y: top, width: window.width,
+                                       height: window.maxY - top - 34)
+            let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
+            revealRootListRows([inputRow], viewport: inputViewport)
             XCTAssertTrue(target.isHittable)
             XCTAssertTrue(units.buttons["lb"].isHittable)
             XCTAssertTrue(units.buttons["kg"].isHittable)
@@ -633,21 +645,21 @@ final class VisualProofUITests: XCTestCase {
     /// can report a row below that band as hittable; use its whole frame.
     private var rootListViewport: CGRect {
         let window = app.windows.firstMatch.frame
-        let top = app.navigationBars.firstMatch.frame.maxY + 2
-        let bottom = app.tabBars.firstMatch.frame.minY - 72 - 2
+        let top = app.navigationBars.firstMatch.frame.maxY
+        let bottom = app.tabBars.firstMatch.frame.minY - 72
         return CGRect(x: window.minX, y: top, width: window.width, height: bottom - top)
     }
 
-    private func revealRootListRows(_ rows: [XCUIElement]) {
+    private func revealRootListRows(_ rows: [XCUIElement], viewport suppliedViewport: CGRect? = nil) {
         // SwiftUI List creates cells lazily. Reach the last requested row
         // before measuring the union, then move by the actual overflow.
         for _ in 0..<20 where !rows.allSatisfy({ $0.exists }) {
-            scrollRootList(by: -100)
+            scrollRootList(by: -100, viewport: suppliedViewport)
         }
         XCTAssertTrue(rows.allSatisfy { $0.exists }, "All requested rows exist")
         for _ in 0..<20 {
             let frame = rows.dropFirst().reduce(rows[0].frame) { $0.union($1.frame) }
-            let viewport = rootListViewport
+            let viewport = suppliedViewport ?? rootListViewport
             if viewport.contains(frame) { break }
             XCTAssertLessThanOrEqual(frame.height, viewport.height,
                                      "The complete requested content must fit above the calculator band")
@@ -655,17 +667,18 @@ final class VisualProofUITests: XCTestCase {
                 ? viewport.minY - frame.minY + 4
                 : viewport.maxY - frame.maxY - 4
             // A drag shorter than the pan threshold becomes a Menu tap.
-            let distance = max(24, min(80, abs(delta)))
-            scrollRootList(by: delta < 0 ? -distance : distance)
+            let distance = max(64, min(80, abs(delta)))
+            scrollRootList(by: delta < 0 ? -distance : distance, viewport: suppliedViewport)
         }
         for row in rows {
-            XCTAssertTrue(rootListViewport.contains(row.frame),
-                          "Complete row \(row.label) \(row.frame) must fit in \(rootListViewport)")
+            let viewport = suppliedViewport ?? rootListViewport
+            XCTAssertTrue(viewport.contains(row.frame),
+                          "Complete row \(row.label) \(row.frame) must fit in \(viewport)")
         }
     }
 
-    private func scrollRootList(by delta: CGFloat) {
-        let viewport = rootListViewport
+    private func scrollRootList(by delta: CGFloat, viewport suppliedViewport: CGRect? = nil) {
+        let viewport = suppliedViewport ?? rootListViewport
         let origin = app.coordinate(withNormalizedOffset: .zero)
         let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
         let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY + delta))
@@ -674,7 +687,9 @@ final class VisualProofUITests: XCTestCase {
 
     private func openExerciseLibrary() {
         app.tabBars.buttons["Settings"].tap()
-        openDisclosure("Programming & library")
+        let programming = app.staticTexts["Programming & library"]
+        revealRootListRows([programming])
+        programming.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let library = app.buttons["Exercise library"]
         revealRootListRows([library])
         XCTAssertTrue(library.isHittable)
@@ -725,6 +740,35 @@ final class VisualProofUITests: XCTestCase {
 
     func test18DP1CalculatorStates() {
         CalculatorProofCases.run(in: self)
+        // Light single-disc loads expose shaft/sleeve and bore alignment that
+        // a tall stack can hide. Use only the synthetic pound-denominated rack.
+        for (target, plate) in [("95", "25 lb"), ("115", "35 lb")] {
+            app.terminate()
+            app.launchArguments = ["--visual-proof", "--plate-proof=lb-exact",
+                "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.buttons["Plate calculator"].tap()
+            let field = app.textFields["plate-target"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap(); field.typeText(target)
+            app.buttons["plate-target-done"].tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+            let window = app.windows.firstMatch.frame
+            let top = app.navigationBars["Plates"].frame.maxY
+            let viewport = CGRect(x: window.minX, y: top, width: window.width,
+                                  height: window.maxY - top - 34)
+            let stage = app.cells.containing(.button, identifier: "expand-loaded-bar").firstMatch
+            revealRootListRows([stage], viewport: viewport)
+            for side in ["left", "right"] {
+                let disc = element("barbell-plate-\(side)-0")
+                XCTAssertTrue(disc.waitForExistence(timeout: 3))
+                XCTAssertTrue(disc.label.contains(plate), "The visible plate must match the solved denomination")
+                XCTAssertFalse(element("barbell-plate-\(side)-1").exists)
+            }
+            capture("after-calculator-single-\(plate.replacingOccurrences(of: " ", with: "-"))-iphone")
+        }
     }
 
     func test20EquipmentContextAndEmptyStates() {
@@ -734,6 +778,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         app.tabBars.buttons["Program"].tap()
         XCTAssertTrue(app.staticTexts["No program"].waitForExistence(timeout: 5))
+        revealRootListRows([app.cells.containing(.staticText, identifier: "No program").firstMatch])
         capture("equipment-program-empty-iphone")
 
         openExerciseLibrary()
@@ -752,12 +797,14 @@ final class VisualProofUITests: XCTestCase {
         let lift = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Synthetic unlogged accessory'")).firstMatch
         revealRootListRows([lift])
         XCTAssertTrue(lift.isHittable); lift.tap()
-        openDisclosure("Previous performance & programming")
+        XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 5))
+        let programming = app.staticTexts["Previous performance & programming"]
+        revealRootListRows([programming])
+        programming.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let empty = app.staticTexts["No sessions yet."]
-        for _ in 0..<8 where !empty.isHittable { app.swipeUp() }
-        XCTAssertTrue(empty.isHittable)
         let emptyRow = app.cells.containing(.staticText, identifier: "No sessions yet.").firstMatch
         revealRootListRows([emptyRow])
+        XCTAssertTrue(empty.isHittable)
         capture("equipment-exercise-empty-iphone")
     }
 

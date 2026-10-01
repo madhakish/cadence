@@ -18,9 +18,13 @@ const WOMENS = Object.freeze({ ...MENS, sleeveLength: 320, shaftRadius: 12.5 });
 
 export const isWomensBar = (bar) => bar.unit === 'kg' ? bar.value === 15 : bar.value === 35;
 
+export const barDimensions = (bar) => {
+  const base = isWomensBar(bar) ? WOMENS : MENS;
+  return { ...base, shoulderEnd: base.shaftHalfLength + base.shoulderLength };
+};
+
 export function barbellLayout(solution, style = 'steel', explode = 0, geometry = {}, theme = 'custom') {
-  const base = isWomensBar(solution.bar) ? WOMENS : MENS;
-  const bar = { ...base, shoulderEnd: base.shaftHalfLength + base.shoulderLength };
+  const bar = barDimensions(solution.bar);
   const plates = solution.perSide.flatMap((c) => Array.from({ length: Math.max(0, c.count) }, () => c.plate));
   const shapes = plates.map((plate) => geometry[`${plate.value}-${plate.unit}`] || plateThemeGeometry(plate, theme, style));
   const maxRadius = Math.max(bar.collarRadius, ...shapes.map((shape) => shape.diameter / 2));

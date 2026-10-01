@@ -181,3 +181,12 @@
 - Desktop loading — the complete inline bar keeps a maximum 560 px drawing width; the calculator pairs its stage with the full load summary at wide widths. Exact sleeve denominations stay fixed-size text. Custom physical face stamps use the upper face band to avoid large-plate/change-plate hub overlap. Updated capture requires both complete calculator stage and summary in the 1280 × 800 viewport; runtime proof is pending.
 
 - Maximum-text filters — c3200 capture confirms search/audio/picker/anatomy fixes but reveals a truncated All movements Picker value. Movement/equipment now expose the same bound Pickers through Menu labels with independent wrapping title/value text. Each control retains a full accessible value; maximum-text proof scrolls each complete filter frame above calculator/tab chrome before capture. New pixels remain pending.
+
+- Proof navigation — use the actual navigation/tab-bar boundary and a pan long enough to activate scrolling. The 3a89 capture passed whole-row Favorites at 430 pt but short proof drags opened a lift or expanded Main; an arbitrary two-point inset caused unnecessary scrolling at the exact band edge. Assertions still require complete rows above the actual band.
+- Baseline comparisons — require the actual pre-art clipboard/guidance state, which has no Program heading. Do not invent current copy on the old application. Independent before/after/full-matrix steps retain all available evidence while preserving failure status.
+
+- **2026-10-01, audit text-size control:** fixed Large text remains useful for comparable screenshot fixtures, but the accessibility audit must run without that launch override so its system-size probes can exercise actual scaling. Remove the pin only for test12; retain raw advisories and the existing failure rules. Earlier advisories on semantic fonts are not dismissed without fresh runtime evidence.
+
+- Inline bar geometry — reuse the existing physical inspector profile for the grip, sleeves and collars. The old inline grip was shortened relative to plate diameter and inserted arbitrary assembled gaps. Preserve exact loaded weights and unchanged sprites.
+- Sprite registration — shift each front face in both projected axes by half its thickness; align its photographed bore, hub mask, bands and stamps with the sleeve. Numeric regressions failed before correction.
+- Native stage — fit the physical scene aspect ratio within the existing170pt cap and add synthetic single25lb/35lb-per-side captures at375/402/430pt. Completion depends on direct native pixel review.

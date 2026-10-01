@@ -58,14 +58,19 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-      - name: Capture the same categories and empty states on both revisions
+      - name: Install capture browser
+        id: browsers
         run: |
           npm ci --prefix web
           (cd web && npx --no-install playwright install chromium)
-          fixture=docs/design-pass/proof/review-c320/native-fixture.json
-          node web/tools/capture-equipment-context.mjs "$fixture" dist/equipment-before c3200e6dd24a9ee983294699789d0e22b3ed939e before-equipment/web before
-          node web/tools/capture-equipment-context.mjs "$fixture" dist/equipment-after '${{ needs.gate.outputs.sha }}' web after
-          node web/tools/capture-design-pass.mjs "$fixture" dist/current-web-matrix '${{ needs.gate.outputs.sha }}'
+      - name: Capture actual pre-art equipment states
+        run: node web/tools/capture-equipment-context.mjs docs/design-pass/proof/review-c320/native-fixture.json dist/equipment-before c3200e6dd24a9ee983294699789d0e22b3ed939e before-equipment/web before
+      - name: Capture current equipment states
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: node web/tools/capture-equipment-context.mjs docs/design-pass/proof/review-c320/native-fixture.json dist/equipment-after '${{ needs.gate.outputs.sha }}' web after
+      - name: Capture current full web matrix
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: node web/tools/capture-design-pass.mjs docs/design-pass/proof/review-c320/native-fixture.json dist/current-web-matrix '${{ needs.gate.outputs.sha }}'
       - name: Retain original comparison pixels
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -8,14 +8,29 @@ a workout performed while locked, or a manual VoiceOver session.
 
 ## Follow-up status
 
-The original source and acceptance tables below are a dated record. Subsequent
-required CI for `70ce0a05` passed all gates, including 16 real browser cases,
-504 core and 81 migration tests, device build and four native interactions/zero
-skips. Exact 375/430 pt visual jobs failed navigation/query/full-frame assertions;
-new proof fixes remain unverified until their own native run. The
-[pixel-review follow-up](PIXEL-REVIEW.md#follow-up-evidence--1-october-2233-utc)
-identifies inspected originals and separates confirmed earlier corrections from
-pending equipment, desktop and full accessibility acceptance. Epic #177 stays open.
+The original source table below is a dated record. Required CI for `3a89d9c`
+[run36936687219](https://github.com/madhakish/cadence/actions/runs/36936687219)
+passed all gates: 504 core and 81 migration tests, full web suite and all16
+Chromium/WebKit cases, production device build and four native interactions
+with zero skips. Its exact DP-1 baseline and real OS Dark native palette job
+passed. All ten Dark Settings/calculator originals were inspected and retained
+with [provenance](proof/review-3a89-dark/provenance.json). At430pt, maximum-text
+search, both complete filters and the whole favorite row passed and were
+[inspected](proof/review-3a89-430/provenance.json). At375pt, the older Settings
+navigation helper failed before that maximum-text proof. Both equipment-category
+captures failed when short drags opened rows; the full native capture is still
+running. The web pre-art comparison also failed an assertion for a heading the
+actual old source never had. These failures and the next measured-navigation,
+historical-copy and audit text-size corrections are recorded in the dated
+[pixel review](PIXEL-REVIEW.md). Their own new-head verification is required.
+
+Earlier inspected c320 originals confirm correctly reached mobile picker,
+unselected anatomy and native audio control, with complete control bounds
+above bottom chrome. Earlier70ce originals show two genuinely exploded theme
+inspectors, while its hero test failed and other theme captures did not assert
+the actual state; the current full run adds bounded state assertions. Historical
+186-image evidence remains valid for its own source, with those defects retained.
+Epic #177 stays open for current proof and the physical/assistive acceptance below.
 
 ## Source and gates
 
@@ -44,7 +59,7 @@ and aggregate jobs can remain on Ubuntu without needing Xcode.
 | Contract | Native | Web | Evidence boundary |
 | --- | --- | --- | --- |
 | One canonical catalog, template-independent top-up | `Seeder` / canonical fixture | `SEED_EXERCISES` / same fixture | Full catalog, taxonomy, seed and invariant suites |
-| Shared browser in Library and calling pickers | `ExerciseBrowser` | `exerciseBrowser` | Library, native picker and desktop modal captures; mobile browser picker capture failed to reach its intended state |
+| Shared browser in Library and calling pickers | `ExerciseBrowser` | `exerciseBrowser` | Library, native picker and desktop modal captures; original mobile picker setup failed; the later c320 capture reaches the real picker |
 | Favorites, Recent, composed search and filters | Persistent exercise Boolean; 44-point independent star | Persistent Boolean; transactional independent star; restored keyboard focus | Native UI, SwiftData tests; both browser engines and IndexedDB migration |
 | Favorite cannot reopen a shelved lift or bypass policy | Visible list filtered before favorites | Same | Policy/availability regression suites |
 | Failed favorite retains previous state | Shared save-error alert; explicit prior-value restoration | Transaction failure/toast; focus retained | Native read-only store and real IndexedDB/UI regressions |
@@ -52,11 +67,11 @@ and aggregate jobs can remain on Ubuntu without needing Xcode.
 | Real plate profiles and local imagery | Same physical profile/PNG family; SceneKit with sprite fallback | Same profile/PNG family; WebGL2 with sprite fallback | Profile/geometry fixture, byte pairing, offline test and inspected captures |
 | Contextual exercise prescription and disclosure | Live set context; history/programming/anatomy tiers | Same | Pane/collapse/expand/anatomy captures |
 | Original signature artwork | Original two gorilla JPEGs | Byte-identical JPEGs | SHA-256 below; mask registration tests |
-| Muscle names and selection | Wider wrapping legend; one column at accessibility sizes; same anatomical order and masks | Wrapping legend and same order/masks | Native/desktop selected and unselected states; nominal mobile unselected capture is already selected; spoken traversal remains unverified |
+| Muscle names and selection | Wider wrapping legend; one column at accessibility sizes; same anatomical order and masks | Wrapping legend and same order/masks | Native/desktop selected and unselected states; original nominal mobile unselected state was selected; later c320 capture clears it; spoken traversal remains unverified |
 | Main set and authored exercise boundaries | Dominant current work; one authoritative mutation path | Same where implemented | Native four-test interaction gate; real browser session progression |
 | Exact staged duration entry | Hours/minutes/seconds; Save/Cancel; zero/fallback semantics | Same | Duration/backup regressions and editor capture |
-| Settings structure | Six task groups and real capabilities | Same | Root/rest/editor captures; attempted native audio capture has its switch below tab chrome; endpoint clearance does not cover intermediate scrolling |
-| Primary canvas | Each native primary List uses its saved theme's background | Existing `--bg` theme tokens | Same five values; native Settings/calculator and browser Settings palette captures |
+| Settings structure | Six task groups and real capabilities | Same | Root/rest/editor captures; original native audio switch was under chrome; later c320 capture shows its complete control above the band; complete runtime traversal remains required |
+| Primary canvas | Each native primary List uses its saved theme's background | Existing `--bg` theme tokens | All five native Settings/calculator palettes inspected under real OS Dark; System follows it and Titanium stays light; browser palette proof is separate |
 | Lock Screen and Dynamic Island | Widget/App Intent projection of saved workout | No web OS Live Activity feature | Compiled production widget and command tests; physical acceptance still required |
 | Completion cue | Device-local sound preference, foreground tone/background notification ownership | Device-local preference and browser audio | Timer ownership regression; actual headphone/audio route still required |
 | Accessibility and motion | Automated labels/audit, 44-point targets, maximum-text captures, Reduce Motion | Keyboard/focus, token contrast, real engines, CSS zoom/edge-width stress and reduced motion | Does not claim manual VoiceOver or actual browser/pinch zoom |
@@ -111,7 +126,11 @@ favorites.
 
 [ASSET-INVENTORY.md](ASSET-INVENTORY.md) lists every equipment PNG, source,
 license record, byte size, dimensions and SHA-256, its native twin and consumers.
-The runtime family has 158 PNGs / 9,594,989 bytes; PR #271 adds no new artwork.
+The existing plate family has158 PNGs /9,594,989 bytes and remains unchanged.
+PR #271 adds three original transparent equipment cutouts,953,444 bytes per
+client, with byte-identical native/web twins and [generation/rights provenance](EQUIPMENT-CONTEXT.md).
+They illustrate Main/Accessory/Conditioning categories, unlogged exercise
+detail and empty Program, with fixed decode geometry and local offline delivery.
 Main workout, contextual exercise detail and calculator each use the athlete's
 actual equipment/loadout. Library, Today and History keep their information
 hierarchy instead of adding unrelated thumbnails.
@@ -142,10 +161,10 @@ remain visible in the evidence index.
 | Every material decision explained concisely | Final one-line decision/reason table in `DECISIONS.md`; dated earlier choices remain historical | No unsupported baseline state is reconstructed |
 | Protected semantic diff empty | Solver/program/session paths unchanged from the actual PR base | Durable Favorites intentionally advances persistence and backup; the literal #187 empty-directory gate needs this explicit feature exception |
 | Main, Library, detail, calculator, Settings authored | Existing material system plus actual native Lists, shared theme canvas, visible search and readable prescriptions | Current pixel inspection is recorded with its viewport and remaining accessibility limits |
-| Three purposeful imagery surfaces and exact gorilla | Workout, contextual detail and calculator; asset inventory and original JPEG hashes | No new broad movement/implement illustration family is added; Library/History remain text-led by the recorded decisions |
+| Three purposeful imagery surfaces and exact gorilla | Workout, contextual detail and calculator; asset inventory and original JPEG hashes | Three new original equipment contexts illustrate category browsing, unlogged detail and empty Program; original gorilla remains byte-identical; current runtime artwork proof remains pending |
 | Essential content AA | Shared contrast fixtures and native audit, controlled backgrounds for load/counts | Unassociated audit contrast/hit-region findings and fixed-type advisories are retained; complete AA is not established |
-| Optimized, local assets and native/web art direction | 158 inventoried PNGs, byte-identical native twins, offline/geometry/renderer checks | Retained captures show the actual platform renderers, not promised pixel identity |
-| Edge widths, maximum text, zoom and motion | 402-point native capture, maximum-text targeted native states; 390/1280 browser matrix; 320/430 CSS zoom 1/2 with reduced motion | Does not establish all native widths or manual 200% browser/pinch zoom; spoken VoiceOver and real device acceptance remain |
+| Optimized, local assets and native/web art direction | 158 unchanged plate PNGs and three new inventoried cutouts with native twins; all16 real-engine checks include decode geometry and offline reopen | Retained captures show the actual platform renderers, not promised pixel identity |
+| Edge widths, maximum text, zoom and motion | 402pt native capture and all five palettes under real OS Dark; passing430pt maximum-text whole-row/filter proof; 390/1280 browser matrix; 320/430 CSS zoom1/2 with reduced motion | 375pt maximum-text and both-width category proof failed and need corrected-harness runs; manual200% browser/pinch zoom, spoken VoiceOver and physical acceptance remain |
 
 The old #177 box for #180 is stale: the renderer issue is closed and the
 implementation is on the PR base. This record does not edit historical issue
@@ -157,24 +176,25 @@ checkboxes or close #187/#198 while their remaining acceptance gates are open.
 | --- | --- | --- |
 | Authored strength-training product | Material decisions and comparable production captures inspected | Visual defects in `PIXEL-REVIEW.md`; physical acceptance below |
 | One restrained material/type/imagery/geometry/motion system | Existing shared tokens, real profiles, local asset family, short two-state inspector cut | Full AA, native widths and physical accessibility remain unproved |
-| Three non-gorilla imagery surfaces; exact original gorilla | Workout, contextual exercise pane, calculator inspected; original hashes match | Broader movement/implement imagery requested by #198 is not added |
-| Search-first, category-navigable discovery | Normal native/browser states and real engine tests; Favorites, Recent and composed filters | Maximum-text chrome overlap, invalid mobile picker capture and spoken VoiceOver |
+| Three non-gorilla imagery surfaces; exact original gorilla | Workout, contextual exercise pane, calculator inspected; original hashes match | Three original equipment-context cutouts are now integrated; current native category/empty and matched web comparison proof remains pending |
+| Search-first, category-navigable discovery | Normal native/browser states and real engine tests; Favorites, Recent and composed filters | 430pt whole-row/filter proof and later correctly reached c320 picker were inspected;375pt proof and spoken VoiceOver remain |
 | Direct HH/MM/SS rest editing | Both editor captures show fields, exact preview, Save/Cancel/Off and carry guidance | Actual assistive-technology check; mobile rest-row button overlap |
 | Workout can progress while phone stays locked | Shared command path, stale/duplicate identity checks, production widget build | Physical locked workout across set/rest/exercise boundaries |
 | Clear, once-only cue through permitted headphone route | Independent preference, audio ownership and quiet-return regressions | Headphones while music plays, background/foreground, mute and route changes |
 | Exact plates and mixed units | Solved/reverse variants and inspector captions/counts inspected | Overlapping desktop inline labels; some achieved totals below first viewport; printed-face AA not established |
-| Every named surface has inspected proof | 186 original app PNGs inspected, including attempted audio state | Audio switch not readable; mobile picker/unselected anatomy state invalid; Lock Screen/Dynamic Island and physical audio absent |
+| Every named surface has inspected proof | 186 original app PNGs inspected, including attempted audio state | Earlier c320 audio/picker/cleared-anatomy captures correct those specific historical setup defects; current equipment/desktop/full inspector proof and physical Lock Screen/Dynamic Island/audio remain |
 | Both clients green, compatible data | 504 core / 81 migration tests, both browser engines, device build and four native interactions passed on source head | Exact final documentation-head run is required and linked from PR #271 |
 
 ## Remaining acceptance work
 
-Resolve the specific retained visual and capture defects in
-[PIXEL-REVIEW.md](PIXEL-REVIEW.md): mobile picker and unselected anatomy setup,
-native audio-setting viewport, maximum-text navigation overlap, intermediate
-floating-button clearance, overlapping desktop inline plate captions and
-oversized first-viewport diagrams. Keep broader imagery, complete AA and
-native width coverage explicit. These findings are not successful acceptance
-checks merely because their capture tests exited green.
+Finish the current native375/402/430pt whole-category/empty-state and inspector
+proof, and the matched actual-before/current web equipment and full desktop
+matrix. Inspect and retain those pixels before marking their visual findings
+resolved. The specific older picker, cleared-anatomy and audio-viewport
+corrections are already inspected; avoid treating invalid historical states as
+current passing evidence. Complete AA, plate-face readability, spoken VoiceOver
+and manual zoom remain explicit. A green capture wrapper alone establishes none
+of those acceptance checks.
 
 Perform one real iPhone workout while locked: complete/skip, rest start/pause/end,
 and transition to the next authored exercise without unlocking. Check stale or
@@ -184,3 +204,7 @@ preference off, silent/DND behavior and route changes without leaving music
 interrupted. Run the Library/picker/duration flow with spoken VoiceOver and
 actual large text/zoom. These are current product acceptance checks, not
 permission to release or merge.
+
+## Inline renderer correction, 2026-10-01
+
+The owner's inline-bar report was reproduced in synthetic preview/calculator pixels and physical geometry assertions. Canvas and SVG now use the existing inspector bar profile, remove assembled air gaps, align front-face bores on the sleeve axis and preserve shaft/sleeve thickness while stretching sprite spans. Native full-bar layout fits the scene ratio within its170pt cap. The full local web suite and photographed-bore regressions pass. Swift/native low-load screenshots at375/402/430pt remain pending on the new source. Original synthetic before-correction pixels and the full3a89 result are retained in [bar provenance](proof/review-3a89-bar/provenance.json); private owner screenshots were not committed. No solver, inventory, progression, store or recorded-load meaning changes.

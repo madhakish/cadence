@@ -69,7 +69,10 @@ try {
       for (const program of await db.Programs.all()) await db.Programs.del(program.id);
       await (await import('./js/ui.js')).nav.go('program');
     });
-    await expect(page.locator('#view .empty h2')).toHaveText('No program');
+    const emptyProgram = page.locator('#view .empty');
+    await expect(emptyProgram).toContainText('Start blank, use a template, or import a Cadence program file.');
+    if (phase === 'after') await expect(emptyProgram.locator('h2')).toHaveText('No program');
+    else await expect(emptyProgram.locator('h2')).toHaveCount(0);
     await expect(page.locator('#view .equipment-context')).toHaveCount(phase === 'after' ? 1 : 0);
     await shot('program-empty');
     expect(errors).toEqual([]);

@@ -72,6 +72,37 @@ plate-stamp layout changes also await current pixel inspection. Complete AA,
 spoken VoiceOver, physical locked-workout/audio and manual zoom acceptance remain
 open; automated checks do not substitute for them.
 
+## Follow-up evidence — 1 October, 23:08 UTC
+
+Required CI for `3a89d9c9a20e219fcc97695c23d2e80114e5d5e8` passed all gates:
+504 core, 81 migration/backup, full web and 16 required Chromium/WebKit cases,
+unsigned device build, and four native interactions with zero failures/skips.
+[Run](https://github.com/madhakish/cadence/actions/runs/36936687219).
+At actual 430 pt, normal Library/picker and the complete maximum-text search,
+filter and favorite-row assertions passed. All four maximum-text originals were
+inspected; the three search/filter exports are byte-identical. The
+[two distinct retained originals](proof/review-3a89-430/provenance.json) show full
+filter values and the entire Back Squat name, metadata and star above the band.
+They do not establish the equipment states that failed later.
+
+The 430 pt equipment proof had all three category rows ending exactly at the
+actual calculator boundary. A two-point artificial viewport inset demanded an
+extra short pan; the 24 pt drag instead opened Back Squat. The original hierarchy
+records that navigation. At 375 pt, a similar short drag expanded Main; Accessory
+then left the lazy hierarchy. Its maximum-text test also overshot Programming &
+library using the old coarse disclosure helper. The next proof uses the exact
+chrome boundaries, minimum 64 pt pans, and measured Settings/detail disclosures;
+whole-row assertions are retained, including Program and empty exercise history.
+
+The new web comparison reached actual pre-art categories and empty exercise
+history, then correctly failed because its Program assertion wrongly expected
+the new No program heading on the old revision. Source `c3200e6` has a clipboard
+and guidance with no heading. The next harness checks that actual baseline,
+while requiring the new heading only after the change. Before, after and full
+web-matrix steps now run independently after browser setup; a failed scenario
+continues to fail the job. Current full native and real OS Dark results are still
+pending. No additional acceptance or physical evidence is inferred.
+
 ## Baseline comparison
 
 - Original native Settings and calculator use rounded Form groups. The candidate
@@ -368,3 +399,18 @@ Findings above qualify the filenames; an entry is not a blanket pass.
 | [after-web-settings-rest-390.png](proof/final-177/after/after-web-settings-rest-390.png) | 390 × 844 |
 | [after-web-today-1280.png](proof/final-177/after/after-web-today-1280.png) | 1280 × 800 |
 | [after-web-today-390.png](proof/final-177/after/after-web-today-390.png) | 390 × 844 |
+
+
+### 2026-10-01, 23:20 UTC — actual native Dark follow-up
+
+Candidate `3a89d9c` [comparison run36936687361](https://github.com/madhakish/cadence/actions/runs/36936687361), native job110619456124, passed `test19AppThemeCanvases` with zero failures/skips. The artifact records actual simulator `dark` appearance, 402×874pt iPhone17Pro and the app theme in each geometry attachment. All ten original Settings/calculator PNGs were directly inspected and are retained with [provenance](proof/review-3a89-dark/provenance.json). Carbon/Foundry, Memento/Heritage Gold and Slate retain dark canvases; Titanium deliberately remains light; System now demonstrably follows OS Dark. Settings shows all six closed sections above the opaque calculator band. Calculator target139lb, whole per-side20kg/1.25kg labels and −0.3lb difference are legible; the load summary starts at the viewport edge and these images do not establish its complete reachability or measured AA contrast.
+
+The next harness revision removes the fixed content-size launch override **only for the accessibility audit**, allowing its system-size probes to run without the screenshot comparison pin. Raw Dynamic Type and unassociated advisories remain recorded, with the same issue policy and plate-target assertion. Whether the pin caused earlier semantic-font advisories is a hypothesis awaiting that run; none is declared a false positive. Full AA remains open. The exact DP-1 baseline also passed; the current full native capture is still running, while both edge jobs and the web equipment comparison have the documented harness failures.
+
+### 2026-10-01, 23:48 UTC — inline bar registration and final 3a89 results
+
+Full native run36936687220 finished16/18, with hero inspector, all ten exact theme-state assertions and402pt maximum-text Favorites passing. Test14 still failed the actual lb button hit check: a segmented-control parent's hit state did not establish the entire input row was exposed. Its replacement measures/reveals the complete input cell. Test20's short category pan opened BackSquat; the64pt minimum pan correction keeps all whole-row assertions. The full artifact is retained locally before publication. Four directly inspected original preview/calculator/assembled/exploded PNGs are retained with [provenance](proof/review-3a89-bar/provenance.json). This supersedes the earlier running status.
+
+Inline Canvas and SVG used shoulder165/145 world units while450mm plates used0.36 units/mm, shortening the grip compared with the inspector's existing1370mm profile. Assembled stacks also inserted arbitrary air gaps. Both inline models now reuse the existing men's/women's bar dimensions, physical sleeve and collar lengths, and touching stack placement. Sprite front faces previously moved by half the projected thickness only in x; the matching y shift now places photographed bores, hub masks, rings and stamps on the tilted sleeve axis. Native full-bar artwork fits its scene aspect ratio within the existing170pt cap. Solver, inventory and recorded loads are unaffected.
+
+Independent physical-proportion and actual photographed-bore assertions failed before these fixes and now pass; the full local web suite passes. Equivalent Swift regressions and low-load native25lb/35lb-per-side captures at375/402/430pt require the next macOS run. The existing158 sprite assets are unchanged. Corrected native pixels, complete maximum-text input reachability and physical/AA acceptance remain pending; browser success does not establish native rendering quality.

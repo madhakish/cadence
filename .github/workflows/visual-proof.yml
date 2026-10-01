@@ -161,6 +161,7 @@ jobs:
           -resultBundlePath build/VisualEdge.xcresult
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test16FavoritesInLibraryAndSessionPicker
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test17FavoritesAtAccessibilityTextSize
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test18DP1CalculatorStates
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test20EquipmentContextAndEmptyStates
       - name: Export edge screenshot attachments
         if: always()

@@ -1,0 +1,32 @@
+{
+  "sourceSHA": "3a89d9c9a20e219fcc97695c23d2e80114e5d5e8",
+  "run": 36936687220,
+  "job": 110619431700,
+  "artifact": 11199285667,
+  "captures": [
+    {
+      "file": "favorites-accessibility-whole-row-430.png",
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "windowPt": [
+        430,
+        932
+      ],
+      "originalExportedFile": "AF2ADBD8-B60C-4B8D-B9CE-2E265F472E8B.png",
+      "sha256": "c91cc79fb5ba0420b25f502b3e0dc696e031dc44e28d6b19287b516559e4637c",
+      "bytes": 340059
+    },
+    {
+      "file": "favorites-accessibility-search-and-filters-430.png",
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "windowPt": [
+        430,
+        932
+      ],
+      "originalExportedFile": "674D9BE2-A449-4850-AB0E-31963B50D244.png",
+      "sha256": "1a57067982bda865f5134f194f09642eeaebb4ed4e7fbefa316a286a392b9411",
+      "bytes": 255860
+    }
+  ],
+  "inspection": "All four search/filter/whole-row PNG attachments inspected. Search/Movement/Equipment exports are byte-identical, so one original is retained for those three states. Whole favorite name, metadata and star are clear of navigation/calculator chrome.",
+  "result": "Tests16 and17 passed; test20 failed when a 24 pt proof drag opened Back Squat. Categories were at the actual band boundary; the harness added an unnecessary2 pt inset. Original failure hierarchy retained. No equipment acceptance claim."
+}
