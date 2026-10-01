@@ -529,6 +529,7 @@ struct HomeView: View {
 
             }
             .listStyle(.plain)
+            .themeListBackground()
             .accessibilityIdentifier("home-screen")
             .navigationTitle("Cadence")
             .plateCalculatorClearance()

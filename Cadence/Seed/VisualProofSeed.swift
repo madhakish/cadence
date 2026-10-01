@@ -52,6 +52,10 @@ enum VisualProofSeed {
         if let settings = try context.fetch(FetchDescriptor<AppSettings>()).first {
             settings.unitDisplay = .lbPrimary
             settings.themeNameRaw = ThemeName.carbon.rawValue
+            if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--app-theme=") }),
+               let theme = ThemeName(rawValue: String(argument.dropFirst("--app-theme=".count))) {
+                settings.themeNameRaw = theme.rawValue
+            }
             settings.haptics = false
         }
 
@@ -128,7 +132,45 @@ enum VisualProofSeed {
             set.plannedDurationSeconds = seconds
             appendSet(set, to: entry, context: context)
         }
+        // Additional DP-1 calculator states alter only this disposable rack.
+        // The production solver and calculator remain the owners of results.
+        applyPlateProofScenario(to: gym, context: context)
         try context.save()
+        // The DEBUG-only visual fixture is synthetic and in memory. Replay
+        // its real portable export on web for comparable cross-client proof;
+        // no production store or athlete data is read by this path.
+        let fixtureURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cadence-visual-proof.json")
+        if !ProcessInfo.processInfo.arguments.contains(where: {
+            $0.hasPrefix("--plate-proof=") || $0.hasPrefix("--plate-theme=") || $0.hasPrefix("--app-theme=")
+        }) {
+            try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
+        }
+        // Screenshot-only empty states, after exporting the canonical matrix
+        // fixture. This container is disposable; no production data is opened.
+        if ProcessInfo.processInfo.arguments.contains("--equipment-empty-proof") {
+            for program in try context.fetch(FetchDescriptor<Program>()) { context.delete(program) }
+            let unlogged = Exercise(name: "Synthetic unlogged accessory", category: .accessory, type: .dumbbell)
+            unlogged.id = StableID.exerciseLegacyID(name: unlogged.name)
+            context.insert(unlogged)
+            try context.save()
+        }
+    }
+
+    private static func applyPlateProofScenario(to gym: Gym, context: ModelContext) {
+        let scenario = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--plate-proof=") }
+            .map { String($0.dropFirst("--plate-proof=".count)) }
+        if scenario == "lb-exact" {
+            gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: $0.unit == .lb) }
+        } else if scenario == "kg-change" {
+            gym.defaultBar = .bar20kg
+            if let settings = try? context.fetch(FetchDescriptor<AppSettings>()).first {
+                settings.unitDisplay = .kgPrimary
+            }
+        } else if scenario == "unreachable" {
+            gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: $0.unit == .lb && $0.value == 45) }
+            gym.loadingPolicy = .exact
+        }
     }
 
     private static func addOpenSession(

@@ -73,8 +73,10 @@ import Foundation
 /// bundle restores every gym as `custom` and never re-infers a theme. Older
 /// importers reject a v15 bundle on the version gate, which is correct:
 /// parsing it would silently drop the gym's chosen look.
+/// Version 16 (#63) adds required per-exercise `isFavorite`. Older bundles
+/// restore unstarred; older binaries reject v16 rather than dropping favorites.
 public enum BackupContract {
-    public static let currentSchemaVersion = 15
+    public static let currentSchemaVersion = 16
 
     public static func supports(schemaVersion: Int?) -> Bool {
         let version = schemaVersion ?? 0

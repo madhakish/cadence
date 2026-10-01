@@ -1,0 +1,1 @@
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Hard work outside the program. It appears in History but never advances your training cycle or lifting volume." StaticText

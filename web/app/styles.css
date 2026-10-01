@@ -104,8 +104,12 @@ body {
 .tab.active { color: var(--accent); }
 
 /* FAB */
+#calculator-dock {
+  position: fixed; left: 0; right: 0; bottom: calc(60px + var(--safe-bottom)); z-index: 21;
+  min-height: 86px; padding: 12px 18px; display: flex; justify-content: flex-end;
+  background: var(--bg); border-top: 1px solid var(--line);
+}
 #fab {
-  position: fixed; right: 18px; bottom: calc(74px + var(--safe-bottom)); z-index: 21;
   width: var(--bigtap); height: var(--bigtap); border-radius: 50%; border: 0;
   background: var(--accent); color: var(--on-accent);
   box-shadow: 0 6px 18px var(--shadow); cursor: pointer;
@@ -114,6 +118,16 @@ body {
 #fab svg { width: 30px; height: 30px; fill: currentColor; }
 
 /* cards & lists */
+.equipment-context { display: block; object-fit: contain; flex: none; max-width: 100%; }
+.equipment-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.empty.equipment-empty { align-items: center; }
+.library-group { container: library-category / inline-size; }
+.library-group > summary > .equipment-context { width: 96px; height: 64px; }
+.library-group > summary > .title { min-width: 0; overflow-wrap: anywhere; }
+@container library-category (max-width: 280px) {
+  .library-group > summary { flex-wrap: wrap; }
+  .library-group > summary > .equipment-context { width: 100%; height: 80px; object-position: left; }
+}
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 10px 0; box-shadow: inset 0 1px 0 var(--edge), 0 8px 24px var(--shadow); }
 .card h2, .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.085em; color: var(--muted); margin: 20px 4px 7px; font-weight: 800; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); }
@@ -633,6 +647,11 @@ button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
 svg.barbell.compact.realistic { width: 100%; height: 84px; }
 .barbell-loading-key { font-size: 1rem; line-height: 1.5; padding: 6px 0; overflow-wrap: anywhere; }
 .barbell-stage-track svg.barbell.realistic { width: 100%; height: auto; display: block; }
+.barbell-stage:not(.expanded) .barbell-stage-track { max-width: 560px; margin-inline: auto; }
+@media (min-width: 760px) {
+  .plate-answer { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 0 20px; align-items: start; }
+  .plate-answer > :not(.barbell-stage):not(.load-summary) { grid-column: 1 / -1; }
+}
 .barbell-stage.expanded { overflow: visible; }
 .barbell-stage.expanded .barbell-stage-track { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .barbell-stage.expanded .barbell-inspection-surface svg { width: 100%; max-width: none; }
@@ -647,3 +666,11 @@ svg.barbell.compact.realistic { width: 100%; height: 84px; }
 .hold-countdown { font-size: clamp(3rem, 16vw, 5rem); font-weight: 750; line-height: 1.2; margin: 20px 0; }
 .hold-timer .btn { min-height: 48px; margin-top: 10px; }
 .hold-timer [hidden] { display: none; }
+
+/* Favorite actions stay separate from opening/selecting a lift. */
+.library-open { display:flex; align-items:center; gap:12px; flex:1; min-width:0; min-height:44px; padding:0; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.library-open .lead { min-width:0; }
+.exercise-favorite { min-width:44px; min-height:44px; flex-shrink:0; padding:6px; font-size:24px; }
+.exercise-favorite[aria-pressed="true"] { color:var(--accent); }
+.library-favorites { margin-bottom:18px; }
+.library-toolbar[hidden], .library-clear[hidden] { display:none; }

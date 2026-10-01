@@ -80,7 +80,7 @@ struct PlateCalculatorView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(gym?.name.uppercased() ?? "YOUR GYM") · PLATE LOADING")
@@ -111,6 +111,7 @@ struct PlateCalculatorView: View {
             referenceSection
         }
         .listStyle(.plain)
+        .themeListBackground()
         .scrollDismissesKeyboard(.immediately)
         .accessibilityIdentifier("plate-calculator-screen")
         .navigationTitle("Plates")

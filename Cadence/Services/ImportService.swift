@@ -173,6 +173,7 @@ enum ImportService {
         var movementPattern: String?; var secondaryMovementPattern: String?; var aliases: [String]?; var strategyTags: [String]?
         var isUnilateral: Bool?; var loadBasis: String?; var implementCount: Int?
         var defaultRestSeconds: Int?; var notes: String?
+        var isFavorite: Bool?
         var isShelved: Bool?; var shelvedNote: String?; var watchSite: String?; var createdAt: Date?
         var gateStatus: String?; var gateSite: String?; var reEntryCriteria: [String]?; var completedReEntryCriteria: [String]?
         var reEntryTestWeightLb: Double?; var reEntryTestSets: Int?; var reEntryTestReps: Int?
@@ -605,6 +606,9 @@ enum ImportService {
         let types: Set<String> = ["barbell", "dumbbell", "kettlebell", "bodyweight", "band", "machine", "timed", "conditioning"]
         for (i, exercise) in (bundle.exercises ?? []).enumerated() {
             let path = "exercises[\(i)]"
+            if schemaVersion >= 16, exercise.isFavorite == nil {
+                throw ImportError.invalidData("\(path).isFavorite: expected a Boolean")
+            }
             _ = try requiredText(exercise.name, "\(path).name")
             try known(exercise.category, categories, "\(path).category", required: schemaVersion >= 1)
             try known(exercise.type, types, "\(path).type", required: schemaVersion >= 1)
@@ -879,7 +883,7 @@ enum ImportService {
                 category: d.category, type: d.type, movementGroup: d.movementGroup,
                 movementPattern: d.movementPattern, secondaryMovementPattern: d.secondaryMovementPattern,
                 loadBasis: d.loadBasis, implementCount: d.implementCount, isUnilateral: d.isUnilateral,
-                defaultRestSeconds: d.defaultRestSeconds, notes: d.notes, isShelved: d.isShelved,
+                defaultRestSeconds: d.defaultRestSeconds, notes: d.notes, isShelved: d.isShelved, isFavorite: d.isFavorite,
                 stationDenomination: d.stationDenomination))
         }
         // Native exercises are upserted by name and never deleted (see `load`
@@ -891,7 +895,7 @@ enum ImportService {
                     category: e.categoryRaw, type: e.typeRaw, movementGroup: e.movementGroup,
                     movementPattern: e.movementPatternRaw, secondaryMovementPattern: e.secondaryMovementPatternRaw,
                     loadBasis: e.loadBasisRaw, implementCount: e.implementCount, isUnilateral: e.isUnilateral,
-                    defaultRestSeconds: e.defaultRestSeconds, notes: e.notes, isShelved: e.isShelved,
+                    defaultRestSeconds: e.defaultRestSeconds, notes: e.notes, isShelved: e.isShelved, isFavorite: e.isFavorite,
                     stationDenomination: e.stationDenominationRaw))
             }
 
@@ -1038,13 +1042,13 @@ enum ImportService {
     private static func exerciseSignature(
         category: String?, type: String?, movementGroup: String?, movementPattern: String?,
         secondaryMovementPattern: String?, loadBasis: String?, implementCount: Int?,
-        isUnilateral: Bool?, defaultRestSeconds: Int?, notes: String?, isShelved: Bool?,
+        isUnilateral: Bool?, defaultRestSeconds: Int?, notes: String?, isShelved: Bool?, isFavorite: Bool?,
         stationDenomination: String?
     ) -> String {
         [category ?? "", type ?? "", movementGroup ?? "", movementPattern ?? "",
          secondaryMovementPattern ?? "", loadBasis ?? "", String(implementCount ?? 0),
          (isUnilateral ?? false) ? "1" : "0", String(defaultRestSeconds ?? 0), notes ?? "",
-         (isShelved ?? false) ? "1" : "0", stationDenomination ?? ""].joined(separator: "\u{1F}")
+         (isShelved ?? false) ? "1" : "0", (isFavorite ?? false) ? "1" : "0", stationDenomination ?? ""].joined(separator: "\u{1F}")
     }
 
     private static func trackSignature(
@@ -1088,6 +1092,7 @@ enum ImportService {
             shelvedNote: d.shelvedNote ?? "",
             watchSite: BodySite.fromStorage(d.watchSite)
         )
+        e.isFavorite = d.isFavorite ?? false
         if let c = d.createdAt { e.createdAt = c }
         e.gateStatus = ExerciseGateStatus(rawValue: d.gateStatus ?? "") ?? (d.isShelved == true ? .shelved : .open)
         e.gateSite = BodySite.fromStorage(d.gateSite)
@@ -1123,6 +1128,8 @@ enum ImportService {
         if let v = d.isUnilateral { e.isUnilateral = v }
         if let v = d.defaultRestSeconds { e.defaultRestSeconds = v }
         if let v = d.notes { e.notes = v }
+        // A pre-v16 backup describes an unstarred library on both clients.
+        e.isFavorite = d.isFavorite ?? false
         if let v = d.isShelved { e.isShelved = v }
         if let v = d.shelvedNote { e.shelvedNote = v }
         if let v = d.gateStatus, let status = ExerciseGateStatus(rawValue: v) { e.gateStatus = status }

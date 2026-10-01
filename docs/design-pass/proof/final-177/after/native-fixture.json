@@ -1,0 +1,5844 @@
+{
+  "appVersion" : "0.1.0",
+  "bodyweight" : [
+
+  ],
+  "checkIns" : [
+
+  ],
+  "coachingDecisions" : [
+
+  ],
+  "exercises" : [
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "488e719d-1aaa-470c-aa0c-f43971f8dd26",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Ab Wheel Rollout",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7a84efc9-052a-4bdb-affb-f026c9b2fa1d",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Arnold Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1eb7a682-05f2-42fb-aeab-37690532072f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "assisted",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Assisted Pull-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7f3e9293-1b1c-4658-aa04-d7810e2a8a96",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipExtension",
+      "name" : "Back Extension",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "acb48602-df66-4957-a2d9-c78cae576106",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Back Squat",
+      "notes" : "High-bar stance. Brace before the walkout; drive evenly through the whole foot.",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "stationDenomination" : "kg",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "4f75445b-ed3f-4dd5-ace2-780b71fc0ced",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "Band External Rotation",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "f30dbe78-2f62-4ffa-a485-a5a5841e5e91",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "shoulderStability",
+      "name" : "Band Pull-aparts",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7e95ae65-0fa7-4ee0-a517-22807b67dbe6",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Banded Chest Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "2198d563-6449-4ded-a7c3-0e11072702f9",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Banded Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "586cd70c-df0f-448a-a948-c42358513a79",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Barbell Bench",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "0ea46090-453e-4230-a799-338859555eb6",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Barbell Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e3dff9cd-71bd-48bd-a41d-a79e20e83673",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipExtension",
+      "name" : "Barbell Hip Thrust",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1cb6e2ce-8750-452b-a31f-5e9d9f5f4857",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Barbell Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "94f83036-17db-468f-a31e-f898c87ac08e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "intervals",
+      "name" : "Battle Ropes",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 45,
+      "gateStatus" : "open",
+      "id" : "85735cc3-903b-4873-a593-4698786a591d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Bear Crawl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "feca43eb-8718-4f6d-ad77-473c8dacb796",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Bent-over DB Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "78f78f04-0129-446e-a616-0bf605f7833f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Bike",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d49bff53-929c-48d8-a2a7-635fb31edd0d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Bird Dog",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "4cbc03cf-7f7d-4c2d-ac57-2687fe594e5b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Box Jumps",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "9f326a4f-0e78-4def-a1ec-9c6cfae8bc7c",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "squat",
+      "movementPattern" : "unilateralKnee",
+      "name" : "Bulgarian Split Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "708d05dd-703a-47fd-a136-000ddf1a0099",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Burpees",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "645b8e3a-5662-4d4b-a703-3535423eeb4e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Cable Chest Fly",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "58ea58c3-c4f6-4a59-a1ec-54ca6927f9bf",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Cable Crunch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "62d52b24-8db8-4db3-a932-785f10e477f0",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Cable Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7369fe8e-45b5-404e-a54d-960441f886a1",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "adductor",
+      "name" : "Cable Hip Adduction",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "b07c7d25-f1de-4802-afd6-8b81d8356b38",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "Cable Lateral Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d7b0f046-d0d1-436e-a25d-e2a60200d591",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Cable Overhead Triceps Extension",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "30cbe1cf-df89-4f8f-aabc-ad05070d2fae",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipExtension",
+      "name" : "Cable Pull-through",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5637def6-7e70-4ef8-a2ae-3c4eb961c1b5",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Chest-supported Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 120,
+      "gateStatus" : "open",
+      "id" : "40e6ad8a-86dd-47da-a0ce-81a242f43b5d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Chin-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "cff4807f-8fde-4757-af94-3e7d79a9f3f5",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e190f080-34b8-4dc9-a6ed-adabb61a9c6d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Clean & Jerk",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "aa08dc07-9340-4fd8-a6d3-8b8d054d7c9f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Clean High Pull",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "55bfdbad-5f40-41f1-a3c2-60b095a2b160",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Clean Pull",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "13eebfcf-4778-439a-a98c-2c8b6419fbfc",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Close-Grip Bench Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "1923b765-0a28-4beb-a0b6-0e6b99f868d1",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Close-Grip Floor Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "74b5ef3b-2224-455e-a3be-6c39ef859707",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Close-Grip Push-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "59ad833e-b49d-4590-a317-1cc7c443bbd4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "adductor",
+      "name" : "Copenhagen Plank",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "timed"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "a27b1512-9b20-49f9-a1a7-9f864958c39f",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "DB Curls",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "05f66629-78d5-4862-a903-c86b0dc55843",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "DB Floor Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d61363fb-3f26-4825-aa45-347c581cf734",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "DB Front Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "136e07a6-7f93-4c38-a126-fa9738794857",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "DB Lateral Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6c735485-fff7-4109-aeaa-8532cedb7ef7",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "DB Overhead Triceps Extension",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5b30b269-b581-42b1-af6c-f04db1103201",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "DB Romanian Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "a36b8b69-e8ca-497f-a1a1-266718dbe8c9",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Dead Bug",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "19a09757-500a-408f-a70f-18e00beafe8b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "edb20745-5a08-453f-a2a4-29a840039917",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Decline Push-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e4029826-4135-4940-ad84-4ff4144702b6",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Diamond Push-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "ff6d22f3-1fa6-4e9a-a083-b646c2c180dc",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Dips",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6d030098-a5f4-4ae2-a1a7-334660a66023",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Elliptical",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "2da7a924-bd73-4539-a473-841e8cfe9b96",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "shoulderStability",
+      "name" : "Face Pulls",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "4190b6c1-aa6d-4f1e-a3a0-6985ed1d2cf3",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "carry",
+      "movementPattern" : "carry",
+      "name" : "Farmer Carry",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "fbbf220b-d04d-4f3d-af67-5773bd7ebef5",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Flat DB Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "f49fdc35-64c7-4b5d-a5f2-e80b8753a1e0",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Floor Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "4d7b2903-978e-447c-a49e-494b10b23304",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "squat",
+      "movementPattern" : "unilateralKnee",
+      "name" : "Forward Lunge",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 300,
+      "gateStatus" : "open",
+      "id" : "dca76a03-0ff1-4ff0-a151-bb5f0028e1c3",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Front Box Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6670ad49-1dac-4654-ab93-805260ed774e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Front Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5255529d-30fa-4b62-ae17-65252daa3eac",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "carry",
+      "movementPattern" : "carry",
+      "name" : "Front-rack Carry",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "60c73a6f-7589-4dbf-aaba-dea3c08f0fe2",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipExtension",
+      "name" : "GHD Back Extension",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "16414ce3-6aa7-45f3-a10b-c86d4d381232",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "GHD Sit-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "8132d5e0-c090-4bff-a38b-d4fa339ef0bc",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipExtension",
+      "name" : "Glute Bridge",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "f0a3f64e-df1c-4996-aaba-e8280269c5dc",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Goblet Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 120,
+      "gateStatus" : "open",
+      "id" : "f29523a4-cf91-49dd-a5df-accc2223e175",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Good Morning",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "2860b1ec-fc1d-47df-a5c5-2257238e4fc1",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Hack Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d4385c03-e43f-4c03-a672-230c37521efb",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Hammer Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "ac45b767-fd5e-4421-aabd-1110e6dee8a4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Hang Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "fa378727-936d-4e14-a7bc-4de2a49cc133",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Hang Power Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "47d041d6-817f-439f-a80d-fcf517c7dcdf",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Hang Power Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "9fd37f40-ef1f-4aa6-a45f-bad404794a21",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Hang Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "ecfb3059-fcb0-4ec6-a7f2-ff1966e98136",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Hanging Knee Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7f5d2905-2556-495f-a7f8-b9072814d240",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Hollow Hold",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "timed"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "272ae504-e122-42b7-a8a8-65e2e0c712ce",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Incline Barbell Bench Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "69d96cb4-df73-4eb7-a10c-fcc97a7116d7",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Incline Bench DB Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "4967c042-9521-4670-af9d-544a54ddc43c",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Incline DB Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "da3147e8-e685-4249-a0c2-b7f1409a6fbb",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Incline DB Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "dfa9cccc-d965-474b-a658-b7bfe44354bb",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Incline Push-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "82885dc0-b33d-499a-a5d4-29f2634113b4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "intervals",
+      "name" : "Jump Rope",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "0426309f-249e-44b7-a88d-0f0969d78970",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "KB Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7c9491b9-5764-4d15-a95c-caf0e3702015",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "KB Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "48c37674-9050-46b3-a0cd-97befecded83",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "KB Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+        "Kettlebell Snatch"
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1f88a5a0-4e6c-4348-a136-ba4b65b27f1d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "KB Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "07d2bb66-06da-45c8-ac30-2b5576c00938",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "KB Swing",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "58e32e6d-c643-436a-a2d0-121096b53fcb",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Landmine Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "71520cb2-dde3-4aa7-a861-b8e8af71a98e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Lat Pulldown",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "61aebad8-caa7-49ba-aa13-b09dcb27f8f4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Leg Extension",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d5ac8595-b13d-4f02-a97a-e9fc1e251e5d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Leg Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 300,
+      "gateStatus" : "open",
+      "id" : "4385f6d7-6520-4df9-a3b2-781091b5102f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Low Box Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "42e926ba-48c2-4e58-a6ef-27f547c82f6e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "hinge",
+      "movementPattern" : "kneeFlexion",
+      "name" : "Lying Leg Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "72eeff01-c276-4e6a-a6f7-583b1716ea81",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Machine Chest Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1fb87bce-5ae9-4bc8-a831-6f6dad339316",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Monster Walk",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 45,
+      "gateStatus" : "open",
+      "id" : "e3c12949-dd0c-48ae-a52a-19490861b8e8",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Mountain Climbers",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "51b2b138-3bac-4a5f-a05d-be2c66ee43d4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Muscle Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "2fd6e538-1989-464c-a815-53e921c53dbc",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Muscle Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "8622d49f-52e6-4390-a299-86ad21c33baf",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "hinge",
+      "movementPattern" : "kneeFlexion",
+      "name" : "Nordic Hamstring Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "4685b5a9-d0c2-4b09-af99-db7913c2f54e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "One-arm Cable Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "bc26ee62-e5db-479a-a2eb-c01ab43f00b9",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "carry",
+      "movementPattern" : "carry",
+      "name" : "Overhead Carry",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5938e9d7-702b-4195-a88f-b85e0c38f515",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Overhead DB Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7801715e-956c-4b68-a12b-e3e5f0bd8bfa",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Overhead Press",
+      "notes" : "Strict barbell press",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "0423bbf0-8bd9-4b02-a7ba-bbd50b100649",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Overhead Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e5898f7d-bf33-4725-aa0f-1defda58317d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Pallof Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "band"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 300,
+      "gateStatus" : "open",
+      "id" : "1ebeeae6-92a0-47da-a293-4b6dfc17cbaa",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Paused Box Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "b820ed48-8b1f-4fdd-aaab-a6acffd2453a",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Pec Deck",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "08202ac2-92f1-4d25-a04f-99d43600a707",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Pendlay Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "d602748b-c5e7-4c09-aee8-801de3e3a509",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Plank",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "timed"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "f59db0d2-cc2c-4121-a54a-55a28fda22f8",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Power Clean",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "df9ab132-325e-4c82-a256-ffbd2d82e3b3",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Power Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "625de117-49b7-4551-a5b9-dc435bcd6b0d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Preacher Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 120,
+      "gateStatus" : "open",
+      "id" : "1ea0c910-ec90-440c-abac-463a7cd7f29b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Pull-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "2235ec5a-546d-4e81-a4b8-83a3dfa10791",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Push Jerk",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "eda29b83-91b1-4be3-ad3c-409ad7f6bf7d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Push Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "8c53a8a3-48de-4d34-a28d-033bb1f24491",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Push-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "92b82665-5317-451f-a6b4-f1c1e7187f50",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "Rear Delt Fly",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e16fcbb9-d660-4b0c-a793-7ecc00b5cafe",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Reverse Crunch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "71149a40-6af8-4fb4-a86a-0879a0afb5bf",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "squat",
+      "movementPattern" : "unilateralKnee",
+      "name" : "Reverse Lunge",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7bcca711-c9e6-4061-a379-11f77614e552",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "Reverse Pec Deck",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1f8d4b46-1ab0-401e-a05c-7f6848ed5a77",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Ring Row",
+      "notes" : "Face-pull style",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "55dd7118-7154-4f53-a87c-960330a19a0b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Romanian Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "stationDenomination" : "kg",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "b1a75631-ac16-401b-ab4e-878585ba8d8b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Row Erg",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "e899ce60-6a0f-4acd-ae92-e0fce9be8ce4",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Ruck",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+        "Running",
+        "Jog"
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d82862ff-d699-4c28-ae18-5679ff408b1a",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Run",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "a3427f54-e4e8-4c12-a5a7-ca3677d0e354",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "intervals",
+      "name" : "Run-Walk Intervals",
+      "notes" : "Jog min \/ walk min × rounds",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "ed5a2dd2-81bb-40ef-a826-4a0bdc33d2e8",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Seated Cable Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "7ba99413-e741-486e-a1f0-9003cc404be0",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "calves",
+      "movementPattern" : "calves",
+      "name" : "Seated Calf Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5eaf75e6-9ff0-4cb6-a973-a60ae1d77d89",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "hinge",
+      "movementPattern" : "kneeFlexion",
+      "name" : "Seated Leg Curl",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "62913874-c575-4b46-a3a6-1c6cff4af4ee",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Seated Upright DB Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "ee08976f-abfa-43ad-ac9d-cc03d7ad1294",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Side Plank",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "timed"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "5ea3c704-4047-4b92-a958-e034a30ff635",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "Single-arm DB Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 45,
+      "gateStatus" : "open",
+      "id" : "344f710e-16f3-4367-a788-e6f64a1df84d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Sit-ups",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "f9994ece-be5e-4b46-abe1-544d160fec6e",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Ski Erg",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6c95c454-48d2-47c5-a9f1-9b3281d86026",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Skull Crusher",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "c66944eb-73b9-42fc-a23e-737ae103b271",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "intervals",
+      "name" : "Sled Pull",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "9a315855-16a8-49d3-af3e-651a84dfc1cb",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "intervals",
+      "name" : "Sled Push",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "782b7da5-6e8d-4e62-a3b1-f8d98ab6a11f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Snatch",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "c6fdde8e-1a57-4f73-ab89-5b249cfb0826",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Snatch High Pull",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "95b51b8e-7c8c-494f-ac4c-21ae6aaf753c",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "olympic",
+      "movementPattern" : "olympicPower",
+      "name" : "Snatch Pull",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "ef9b6a86-c312-4c99-a1a3-87b2a87c70d7",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Snatch-grip Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "0f822e59-0e0e-4d02-adaa-116d4a15e45f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Speed Bench Press",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "e92f7ebb-f388-4822-a55c-fa6e47a240e2",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Speed Box Squat",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "c0150e6e-f960-4b9f-a0d9-6bdeabd10b04",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Speed Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "c20db911-5cc3-46a3-a2cf-4b0c6b808e6b",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "verticalPress",
+      "name" : "Split Jerk",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6461df8c-cf06-41a8-af7e-55ec6c1cb680",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Stair Climber",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d24254b3-f97d-42d2-aef0-8880dd44e11d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "calves",
+      "movementPattern" : "calves",
+      "name" : "Standing Calf Raise",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d89edbe5-5444-4342-abb0-94949cda5263",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "squat",
+      "movementPattern" : "unilateralKnee",
+      "name" : "Step-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "974eef3d-e90b-42d5-a195-c8ec5719e96a",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Straight-arm Pulldown",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "f19fa3c7-76df-4bbb-a64f-e85895c2ff18",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "carry",
+      "movementPattern" : "carry",
+      "name" : "Suitcase Carry",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "a0510efe-ba19-46ce-afec-38d5d0836404",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Sumo Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "d5138c6d-1d54-4f05-a2ca-936e5f925b50",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Swimming",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "9d5c7a0c-f437-424d-a736-147dd6c0df91",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "horizontalPull",
+      "name" : "T-Bar Row",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+        "Squat to Press"
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 120,
+      "gateStatus" : "open",
+      "id" : "6922a10c-2d4c-49fe-a142-f868f2c0518d",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "press",
+      "movementPattern" : "horizontalPress",
+      "name" : "Thruster",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6213929f-f0b5-4c68-aea2-e215f808a7b6",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "totalBar",
+      "movementGroup" : "hinge",
+      "movementPattern" : "hipHinge",
+      "name" : "Trap Bar Deadlift",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "barbell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "1f6f7262-f538-47ce-ac94-d3703cf1d659",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "arms",
+      "movementPattern" : "arms",
+      "name" : "Triceps Pushdown",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "machine"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "14dc2c02-a828-4e80-a91c-df8039839a02",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "core",
+      "movementPattern" : "core",
+      "name" : "Turkish Get-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "kettlebell"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "6afb0908-9f70-463d-a583-26d9eae7703c",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "easyAerobic",
+      "name" : "Walk",
+      "notes" : "Distance \/ time \/ incline",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "955e9217-240d-4a8d-ae19-16dbc8424cd0",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : true,
+      "loadBasis" : "bodyweight",
+      "movementGroup" : "squat",
+      "movementPattern" : "unilateralKnee",
+      "name" : "Walking Lunges",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "44e337d0-7bb1-476b-a7b1-8205d4aad54c",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "squat",
+      "movementPattern" : "squat",
+      "name" : "Wall Sit",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "timed"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "50021c33-3211-4d68-aa73-217868da4e4f",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Weighted Chin-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Main",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 180,
+      "gateStatus" : "open",
+      "id" : "47d0bb81-62f6-49a3-ae73-0dab655dc415",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "pull",
+      "movementPattern" : "verticalPull",
+      "name" : "Weighted Pull-up",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "bodyweight"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Conditioning",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 0,
+      "gateStatus" : "open",
+      "id" : "05c70564-c15c-4a9c-a107-acd7d11f0e02",
+      "implementCount" : 1,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "externalTotal",
+      "movementGroup" : "conditioning",
+      "movementPattern" : "mixedConditioning",
+      "name" : "Wood Splitting",
+      "notes" : "Duration \/ maul weight",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "conditioning"
+    },
+    {
+      "aliases" : [
+
+      ],
+      "category" : "Accessory",
+      "completedReEntryCriteria" : [
+
+      ],
+      "createdAt" : "2026-10-01T04:18:46Z",
+      "defaultRestSeconds" : 60,
+      "gateStatus" : "open",
+      "id" : "21c20fc3-62b3-45f9-a37c-18ec08722eaf",
+      "implementCount" : 2,
+      "isFavorite" : false,
+      "isShelved" : false,
+      "isUnilateral" : false,
+      "loadBasis" : "perImplement",
+      "movementGroup" : "shoulder",
+      "movementPattern" : "shoulderStability",
+      "name" : "Y-T-W Raises",
+      "notes" : "",
+      "reEntryCriteria" : [
+
+      ],
+      "reEntryTestReps" : 5,
+      "reEntryTestSets" : 3,
+      "reEntryTestWeightLb" : 0,
+      "shelvedNote" : "",
+      "strategyTags" : [
+
+      ],
+      "type" : "dumbbell"
+    }
+  ],
+  "exportedAt" : "2026-10-01T04:18:47Z",
+  "gyms" : [
+    {
+      "barcodeLabel" : "Membership tag",
+      "collarWeightLb" : 0,
+      "defaultBarId" : "45-lb",
+      "id" : "EE62E792-7A78-44E4-9B2A-F3342ED7A1D8",
+      "isDefault" : true,
+      "loadingPolicy" : "closest",
+      "name" : "Foundry Barbell",
+      "plateTheme" : "custom",
+      "plateToggles" : [
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 45
+        },
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 35
+        },
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 25
+        },
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 10
+        },
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 5
+        },
+        {
+          "enabled" : false,
+          "unit" : "lb",
+          "value" : 2.5
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 25
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 20
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 15
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 10
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 5
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 2.5
+        },
+        {
+          "enabled" : true,
+          "unit" : "kg",
+          "value" : 1.25
+        }
+      ]
+    }
+  ],
+  "intervals" : [
+
+  ],
+  "milestones" : [
+
+  ],
+  "programs" : [
+    {
+      "coachEnabled" : false,
+      "currentWeek" : 2,
+      "cycleNumber" : 3,
+      "days" : [
+        {
+          "accessories" : [
+
+          ],
+          "lifts" : [
+            {
+              "baseWeightLb" : 139,
+              "capacityManaged" : true,
+              "currentReps" : 5,
+              "deloadMultiplier" : 0.775,
+              "doubleProgressionSets" : 3,
+              "dropIncrementLb" : 0,
+              "estimatedMaxLb" : 185,
+              "exerciseId" : "acb48602-df66-4957-a2d9-c78cae576106",
+              "exerciseName" : "Back Squat",
+              "id" : "272A33AE-D0BE-44A4-BC9D-03391C30289E",
+              "lastIncrementLb" : 0,
+              "lastPeakSingleLb" : 0,
+              "loadOffsetLb" : 0,
+              "maximumReps" : 8,
+              "maximumSets" : 6,
+              "minimumReps" : 5,
+              "order" : 0,
+              "peakOffsetLb" : 0,
+              "peakSingleEnabled" : false,
+              "peakSingleIncrementLb" : 5,
+              "phasePrimerEnabled" : true,
+              "prescription" : "hypertrophy",
+              "role" : "main",
+              "stallCount" : 0,
+              "warmupPolicy" : "automatic"
+            },
+            {
+              "baseWeightLb" : 183,
+              "capacityManaged" : true,
+              "currentReps" : 5,
+              "deloadMultiplier" : 0.775,
+              "doubleProgressionSets" : 3,
+              "dropIncrementLb" : 0,
+              "estimatedMaxLb" : 235,
+              "exerciseId" : "55dd7118-7154-4f53-a87c-960330a19a0b",
+              "exerciseName" : "Romanian Deadlift",
+              "id" : "4EA56D34-9DCE-4FCA-B9F1-27E859687989",
+              "lastIncrementLb" : 0,
+              "lastPeakSingleLb" : 0,
+              "loadOffsetLb" : 0,
+              "maximumReps" : 8,
+              "maximumSets" : 6,
+              "minimumReps" : 5,
+              "order" : 1,
+              "peakOffsetLb" : 0,
+              "peakSingleEnabled" : false,
+              "peakSingleIncrementLb" : 5,
+              "phasePrimerEnabled" : true,
+              "prescription" : "automatic",
+              "role" : "complementary",
+              "stallCount" : 0,
+              "warmupPolicy" : "automatic"
+            }
+          ],
+          "name" : "Lower Forge",
+          "order" : 0,
+          "trainingIntent" : "volume"
+        }
+      ],
+      "equipmentPolicy" : "any",
+      "focus" : "hypertrophy",
+      "id" : "C217C9C9-3492-4FC3-BD1A-ECC7C1418FED",
+      "isActive" : true,
+      "maximumAddedSetsPerRotation" : 6,
+      "name" : "Foundry Hypertrophy",
+      "nextDayIndex" : 0,
+      "preferredSessionSpacingDays" : 3,
+      "roundingLb" : 5
+    }
+  ],
+  "schemaVersion" : 16,
+  "sessions" : [
+    {
+      "completedAt" : "2026-09-10T05:20:46Z",
+      "date" : "2026-09-10T04:18:46Z",
+      "exercises" : [
+        {
+          "barId" : "45-lb",
+          "exerciseId" : "acb48602-df66-4957-a2d9-c78cae576106",
+          "name" : "Back Squat",
+          "notes" : "",
+          "phase" : "R2 Load 5×3",
+          "plannedReps" : 6,
+          "plannedSets" : 3,
+          "plannedWeightLb" : 127.67334831932908,
+          "prescriptionStyle" : "hypertrophy",
+          "programSlotId" : "272A33AE-D0BE-44A4-BC9D-03391C30289E",
+          "role" : "main",
+          "sets" : [
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 127.67334831932908,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "completed",
+              "targetWeightLb" : 125,
+              "weightLb" : 127.67334831932908
+            }
+          ],
+          "targetWeightLb" : 125
+        }
+      ],
+      "gym" : "Foundry Barbell",
+      "gymId" : "EE62E792-7A78-44E4-9B2A-F3342ED7A1D8",
+      "id" : "447B5ACD-5C34-447B-A75A-4312B14DB027",
+      "isCompleted" : true,
+      "notes" : "",
+      "programTag" : {
+        "cycleNumber" : 2,
+        "dayIndex" : 0,
+        "programId" : "C217C9C9-3492-4FC3-BD1A-ECC7C1418FED",
+        "programName" : "Foundry Hypertrophy",
+        "week" : 1
+      }
+    },
+    {
+      "completedAt" : "2026-09-17T05:20:46Z",
+      "date" : "2026-09-17T04:18:46Z",
+      "exercises" : [
+        {
+          "barId" : "45-lb",
+          "exerciseId" : "acb48602-df66-4957-a2d9-c78cae576106",
+          "name" : "Back Squat",
+          "notes" : "",
+          "phase" : "R2 Load 5×3",
+          "plannedReps" : 6,
+          "plannedSets" : 3,
+          "plannedWeightLb" : 133.18490487395104,
+          "prescriptionStyle" : "hypertrophy",
+          "programSlotId" : "272A33AE-D0BE-44A4-BC9D-03391C30289E",
+          "role" : "main",
+          "sets" : [
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 133.18490487395104,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "completed",
+              "targetWeightLb" : 132,
+              "weightLb" : 133.18490487395104
+            }
+          ],
+          "targetWeightLb" : 132
+        }
+      ],
+      "gym" : "Foundry Barbell",
+      "gymId" : "EE62E792-7A78-44E4-9B2A-F3342ED7A1D8",
+      "id" : "AE0EFE42-BF75-4DCD-BB7F-C4F6C7154D1C",
+      "isCompleted" : true,
+      "notes" : "",
+      "programTag" : {
+        "cycleNumber" : 2,
+        "dayIndex" : 0,
+        "programId" : "C217C9C9-3492-4FC3-BD1A-ECC7C1418FED",
+        "programName" : "Foundry Hypertrophy",
+        "week" : 2
+      }
+    },
+    {
+      "completedAt" : "2026-09-24T05:20:46Z",
+      "date" : "2026-09-24T04:18:46Z",
+      "exercises" : [
+        {
+          "barId" : "45-lb",
+          "exerciseId" : "acb48602-df66-4957-a2d9-c78cae576106",
+          "name" : "Back Squat",
+          "notes" : "",
+          "phase" : "R2 Load 5×3",
+          "plannedReps" : 6,
+          "plannedSets" : 3,
+          "plannedWeightLb" : 138.69646142857295,
+          "prescriptionStyle" : "hypertrophy",
+          "programSlotId" : "272A33AE-D0BE-44A4-BC9D-03391C30289E",
+          "role" : "main",
+          "sets" : [
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 138.69646142857295,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "completed",
+              "targetWeightLb" : 136,
+              "weightLb" : 138.69646142857295
+            }
+          ],
+          "targetWeightLb" : 136
+        }
+      ],
+      "gym" : "Foundry Barbell",
+      "gymId" : "EE62E792-7A78-44E4-9B2A-F3342ED7A1D8",
+      "id" : "56C8927C-2133-4B7B-856E-006D29AB4CD5",
+      "isCompleted" : true,
+      "notes" : "",
+      "programTag" : {
+        "cycleNumber" : 2,
+        "dayIndex" : 0,
+        "programId" : "C217C9C9-3492-4FC3-BD1A-ECC7C1418FED",
+        "programName" : "Foundry Hypertrophy",
+        "week" : 3
+      }
+    },
+    {
+      "activity" : {
+        "cordVolume" : 0.42,
+        "estimatedStrikes" : 510,
+        "kind" : "woodSplitting",
+        "rounds" : 38,
+        "sessionRPE" : 8.5,
+        "splitPieces" : 214
+      },
+      "completedAt" : "2026-09-30T08:38:46Z",
+      "date" : "2026-09-30T04:18:46Z",
+      "exercises" : [
+        {
+          "exerciseId" : "05c70564-c15c-4a9c-a107-acd7d11f0e02",
+          "name" : "Wood Splitting",
+          "notes" : "",
+          "sets" : [
+            {
+              "durationSeconds" : 15600,
+              "enteredUnit" : "kg",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "externalTotal",
+              "prescriptionBlock" : "conditioning",
+              "reps" : 0,
+              "status" : "completed",
+              "weightLb" : 17.636980974790205
+            }
+          ]
+        }
+      ],
+      "id" : "6F0848FA-93CC-4E1C-B1F6-73E8568455CA",
+      "isCompleted" : true,
+      "notes" : "Oak rounds after rain; Fiskars IsoCore maul."
+    },
+    {
+      "date" : "2026-10-01T03:54:46Z",
+      "exercises" : [
+        {
+          "barId" : "45-lb",
+          "exerciseId" : "acb48602-df66-4957-a2d9-c78cae576106",
+          "name" : "Back Squat",
+          "notes" : "",
+          "phase" : "R2 Load 5×3",
+          "plannedReps" : 6,
+          "plannedSets" : 3,
+          "plannedWeightLb" : 138.69646142857295,
+          "prescriptionStyle" : "hypertrophy",
+          "programSlotId" : "272A33AE-D0BE-44A4-BC9D-03391C30289E",
+          "role" : "main",
+          "sets" : [
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : true,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 8,
+              "plannedWeightLb" : 45,
+              "prescriptionBlock" : "warmup",
+              "reps" : 8,
+              "status" : "completed",
+              "targetWeightLb" : 45,
+              "weightLb" : 45
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : true,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 5,
+              "plannedWeightLb" : 89.09245243697552,
+              "prescriptionBlock" : "warmup",
+              "reps" : 5,
+              "status" : "completed",
+              "targetWeightLb" : 89,
+              "weightLb" : 89.09245243697552
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 138.69646142857295,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "completed",
+              "targetWeightLb" : 139,
+              "weightLb" : 138.69646142857295
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 138.69646142857295,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "planned",
+              "targetWeightLb" : 139,
+              "weightLb" : 138.69646142857295
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 6,
+              "plannedWeightLb" : 138.69646142857295,
+              "prescriptionBlock" : "work",
+              "reps" : 6,
+              "status" : "planned",
+              "targetWeightLb" : 139,
+              "weightLb" : 138.69646142857295
+            }
+          ],
+          "targetWeightLb" : 139
+        },
+        {
+          "barId" : "45-lb",
+          "exerciseId" : "55dd7118-7154-4f53-a87c-960330a19a0b",
+          "name" : "Romanian Deadlift",
+          "notes" : "",
+          "phase" : "R2 Load 5×3",
+          "plannedReps" : 8,
+          "plannedSets" : 3,
+          "plannedWeightLb" : 182.78891386554847,
+          "prescriptionStyle" : "automatic",
+          "programSlotId" : "4EA56D34-9DCE-4FCA-B9F1-27E859687989",
+          "role" : "complementary",
+          "sets" : [
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 8,
+              "plannedWeightLb" : 182.78891386554847,
+              "prescriptionBlock" : "work",
+              "reps" : 8,
+              "status" : "planned",
+              "targetWeightLb" : 183,
+              "weightLb" : 182.78891386554847
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 8,
+              "plannedWeightLb" : 182.78891386554847,
+              "prescriptionBlock" : "work",
+              "reps" : 8,
+              "status" : "planned",
+              "targetWeightLb" : 183,
+              "weightLb" : 182.78891386554847
+            },
+            {
+              "enteredUnit" : "lb",
+              "flags" : [
+
+              ],
+              "implementCount" : 1,
+              "isPerSide" : false,
+              "isWarmup" : false,
+              "loadBasis" : "totalBar",
+              "plannedReps" : 8,
+              "plannedWeightLb" : 182.78891386554847,
+              "prescriptionBlock" : "work",
+              "reps" : 8,
+              "status" : "planned",
+              "targetWeightLb" : 183,
+              "weightLb" : 182.78891386554847
+            }
+          ],
+          "targetWeightLb" : 183
+        }
+      ],
+      "gym" : "Foundry Barbell",
+      "gymId" : "EE62E792-7A78-44E4-9B2A-F3342ED7A1D8",
+      "id" : "7D13B245-F7C1-4B0F-8557-37D21D0EDE54",
+      "isCompleted" : false,
+      "notes" : "",
+      "programTag" : {
+        "cycleNumber" : 3,
+        "dayIndex" : 0,
+        "planNames" : [
+          "Back Squat",
+          "Romanian Deadlift"
+        ],
+        "programId" : "C217C9C9-3492-4FC3-BD1A-ECC7C1418FED",
+        "programName" : "Foundry Hypertrophy",
+        "week" : 2
+      },
+      "programTemplateId" : "visual-proof"
+    }
+  ],
+  "settings" : {
+    "accessoryRestSeconds" : 90,
+    "autoStartRest" : false,
+    "birthYear" : 0,
+    "gymTagFirstLaunchOfDay" : false,
+    "haptics" : false,
+    "loadSemanticsMigrated" : true,
+    "mainCompoundRestSeconds" : 300,
+    "mainUpperRestSeconds" : 180,
+    "olympicRestSeconds" : 240,
+    "rest" : {
+      "accessorySeconds" : 90,
+      "mainCompoundSeconds" : 300,
+      "mainUpperSeconds" : 180,
+      "olympicSeconds" : 240,
+      "secondarySeconds" : 180
+    },
+    "restSeedStampsCleared" : true,
+    "secondaryRestSeconds" : 180,
+    "seededAt" : "2026-10-01T04:18:46Z",
+    "theme" : "carbon",
+    "unitDisplay" : "lbPrimary",
+    "verticalPullMainsPromoted" : true
+  },
+  "tracks" : [
+
+  ]
+}

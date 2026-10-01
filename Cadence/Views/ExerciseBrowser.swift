@@ -3,7 +3,7 @@ import SwiftData
 import CadenceCore
 
 /// The one exercise-finding surface (issue #63). Search first, then two
-/// composable filters, then a compact Recent group, then the categories as
+/// composable filters, then Favorites and Recent, then the categories as
 /// collapsed groups that state their counts — nobody scrolls the whole
 /// catalog to find one lift. A filter reveals only the groups with matches,
 /// opened; clearing it returns every group, collapsed, except the ones the
@@ -22,6 +22,8 @@ struct ExerciseBrowser: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted }, sort: \WorkoutSession.date, order: .reverse)
     private var completedSessions: [WorkoutSession]
     @State private var search = ""
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @FocusState private var searchFocused: Bool
     @State private var movementFilter: MovementPattern?
     @State private var typeFilter: ExerciseType?
     @State private var openedCategories: Set<ExerciseCategory> = []
@@ -71,6 +73,7 @@ struct ExerciseBrowser: View {
     }
 
     private func clearFilters() {
+        searchFocused = false
         search = ""
         movementFilter = nil
         typeFilter = nil
@@ -80,18 +83,54 @@ struct ExerciseBrowser: View {
         let visible = visibleExercises
         List {
             Section {
-                Picker("Movement", selection: $movementFilter) {
-                    Text("All movements").tag(MovementPattern?.none)
-                    ForEach(MovementPattern.allCases, id: \.self) { pattern in
-                        Text(pattern.name).tag(MovementPattern?.some(pattern))
+                HStack(alignment: .top) {
+                    TextField("Name, equipment or movement", text: $search, axis: .vertical)
+                        .lineLimit(1...3)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .focused($searchFocused)
+                        .onSubmit { searchFocused = false }
+                        .accessibilityLabel("Search exercises")
+                        .accessibilityIdentifier("exercise-search")
+                    if !search.isEmpty {
+                        Button { search = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear search")
                     }
                 }
-                Picker("Equipment", selection: $typeFilter) {
-                    Text("All equipment").tag(ExerciseType?.none)
-                    ForEach(ExerciseType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(ExerciseType?.some(type))
+                .frame(minHeight: 44)
+            }
+            Section {
+                Menu {
+                    Picker("Movement", selection: $movementFilter) {
+                        Text("All movements").tag(MovementPattern?.none)
+                        ForEach(MovementPattern.allCases, id: \.self) { pattern in
+                            Text(pattern.name).tag(MovementPattern?.some(pattern))
+                        }
                     }
+                } label: {
+                    filterLabel("Movement", value: movementFilter?.name ?? "All movements")
                 }
+                .accessibilityLabel("Movement")
+                .accessibilityValue(movementFilter?.name ?? "All movements")
+                .accessibilityIdentifier("exercise-movement-filter")
+                Menu {
+                    Picker("Equipment", selection: $typeFilter) {
+                        Text("All equipment").tag(ExerciseType?.none)
+                        ForEach(ExerciseType.allCases, id: \.self) { type in
+                            Text(type.rawValue).tag(ExerciseType?.some(type))
+                        }
+                    }
+                } label: {
+                    filterLabel("Equipment", value: typeFilter?.rawValue ?? "All equipment")
+                }
+                .accessibilityLabel("Equipment")
+                .accessibilityValue(typeFilter?.rawValue ?? "All equipment")
+                .accessibilityIdentifier("exercise-equipment-filter")
                 if isFiltering, !visible.isEmpty {
                     Button("Clear filters") { clearFilters() }
                 }
@@ -107,6 +146,16 @@ struct ExerciseBrowser: View {
                     Button("New exercise") { showNewExercise = true }
                 }
             } else {
+                let favorites = visible.filter(\.isFavorite)
+                Section("Favorites") {
+                    if favorites.isEmpty {
+                        Text(exercises.contains(where: \.isFavorite) ? "No favorites match these filters." : "Star a lift to keep it here.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(favorites) { exercise in row(exercise) }
+                    }
+                }
+                .accessibilityIdentifier("exercise-favorites")
                 let recent = recentExercises(in: visible)
                 if !recent.isEmpty {
                     Section("Recent") {
@@ -121,7 +170,11 @@ struct ExerciseBrowser: View {
                                 ForEach(inCategory) { exercise in row(exercise) }
                             } label: {
                                 HStack {
+                                    if !dynamicTypeSize.isAccessibilitySize {
+                                        EquipmentContextImage(category: category)
+                                    }
                                     Text(category.rawValue).font(.headline)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Spacer()
                                     Text("\(inCategory.count)")
                                         .monospacedDigit()
@@ -133,13 +186,38 @@ struct ExerciseBrowser: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Name, equipment or movement")
+        .listStyle(.plain)
+        .themeListBackground()
+        .listSectionSpacing(.compact)
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Search") { searchFocused = false }
+                    .accessibilityIdentifier("exercise-search-done")
+            }
+        }
         .sheet(item: $detailExercise) { exercise in
             NavigationStack {
                 ExerciseDetailView(exercise: exercise)
             }
         }
         .sheet(isPresented: $showNewExercise) { NewExerciseView() }
+    }
+
+    private func filterLabel(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).foregroundStyle(.primary)
+            HStack(alignment: .top, spacing: 8) {
+                Text(value)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down").accessibilityHidden(true)
+            }
+            .foregroundStyle(Theme.accent)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 
     @ViewBuilder
@@ -151,6 +229,7 @@ struct ExerciseBrowser: View {
                 } label: {
                     LibraryRow(exercise: exercise).foregroundStyle(.primary)
                 }
+                ExerciseFavoriteButton(exercise: exercise)
                 // Detail preview OVER the browser (issue #66): the sheet keeps
                 // the search text and active filters, so inspecting never
                 // restarts the hunt.
@@ -159,17 +238,41 @@ struct ExerciseBrowser: View {
                 } label: {
                     Image(systemName: "info.circle")
                         .foregroundStyle(Theme.accent)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .accessibilityLabel("\(exercise.name) — muscles, history, and settings")
             }
             .buttonStyle(.borderless)
         } else {
-            NavigationLink {
-                ExerciseDetailView(exercise: exercise)
-            } label: {
-                LibraryRow(exercise: exercise)
+            HStack {
+                NavigationLink {
+                    ExerciseDetailView(exercise: exercise)
+                } label: {
+                    LibraryRow(exercise: exercise)
+                }
+                ExerciseFavoriteButton(exercise: exercise)
             }
         }
+    }
+}
+
+/// Shared by the browser and detail: starring never selects or prescribes a
+/// lift, and a failed write uses the app's visible rollback/error path.
+struct ExerciseFavoriteButton: View {
+    @Environment(\.modelContext) private var context
+    @Bindable var exercise: Exercise
+
+    var body: some View {
+        Button {
+            PersistenceErrorCenter.shared.toggleFavorite(exercise, context: context)
+        } label: {
+            Image(systemName: exercise.isFavorite ? "star.fill" : "star")
+                .foregroundStyle(exercise.isFavorite ? Theme.accent : .secondary)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("\(exercise.isFavorite ? "Remove" : "Add") \(exercise.name) \(exercise.isFavorite ? "from" : "to") Favorites")
+        .accessibilityValue(exercise.isFavorite ? "Favorite" : "Not a favorite")
     }
 }
 

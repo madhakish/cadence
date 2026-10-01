@@ -114,16 +114,15 @@ struct RootView: View {
 }
 
 extension View {
-    /// Reserve the band the floating plate-calculator button occupies, so a
-    /// list or form scrolls clear of it. Apply it to the scroll content
+    /// Reserve an opaque band for the floating plate-calculator button, so
+    /// intermediate rows cannot show through beneath it. Apply it to scroll content
     /// inside a NavigationStack: the same inset placed on the tab root,
     /// outside the stack, never reached the Settings form on device
     /// (#196), because the UIKit-backed stack manages its own safe area.
-    func plateCalculatorClearance() -> some View {
+    @MainActor func plateCalculatorClearance() -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
+            Theme.background
                 .frame(height: Theme.plateButtonClearance)
-                .allowsHitTesting(false)
         }
     }
 }

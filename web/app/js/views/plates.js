@@ -127,7 +127,7 @@ export async function openPlateCalculator() {
       const unitControl = ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], unit,
         (nextUnit) => { unit = nextUnit; update(); });
       const target = ui.h("div", { class: "card target-entry" }, ui.field("Requested target", input), unitControl);
-      const output = ui.h("div");
+      const output = ui.h("div", { class: "plate-answer" });
       input.addEventListener("input", () => { targetVal = Number.parseFloat(input.value) || 0; update(); });
       panel.append(target, output);
 
@@ -155,7 +155,7 @@ export async function openPlateCalculator() {
 
     const drawReverse = () => {
       const plates = availablePlates();
-      const output = ui.h("div");
+      const output = ui.h("div", { class: "plate-answer" });
       const editor = ui.h("div", { class: "card plate-list" });
       const orderEditor = ui.h("div");
       const recompute = () => {

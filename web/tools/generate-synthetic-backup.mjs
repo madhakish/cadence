@@ -101,6 +101,11 @@ const mkSet = (order, w, r, o = {}) => ({
 // ---- 0. seed the generic library and empty stores ----
 await db.ensureSeeded();
 const lib = await db.Exercises.all();
+// Fictional shortcuts exercise the portable preference on both clients.
+for (const name of ["Back Squat", "Incline DB Press", "Plank"]) {
+  const exercise = lib.find((e) => e.name === name);
+  exercise.isFavorite = true; await db.Exercises.save(exercise);
+}
 
 // ---- 1. a second gym: kg plates only (stresses kg plate math + gym switching) ----
 await db.Gyms.save({
