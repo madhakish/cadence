@@ -1,0 +1,20 @@
+XCUIAccessibilityAuditType(rawValue: 4): The size of this SwiftUI.AccessibilityNode is too small for user to interact. — (no element)
+XCUIAccessibilityAuditType(rawValue: 4): The size of this SwiftUI.AccessibilityNode is too small for user to interact. — (no element)
+XCUIAccessibilityAuditType(rawValue: 1): Contrast failed for SwiftUI.AccessibilityNode — (no element)
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "WORKING SET 2 OF 3" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "reps" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "✓ Set 1" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "SQUAT" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "R2 LOAD" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Set 2 · now" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "kg" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Rest 5:00" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Set load · bar included" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "6" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Start workout" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "138.7" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "lb" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "exercise-info-Back Squat" Button
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "MAIN" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "62.9" StaticText
+XCUIAccessibilityAuditType(rawValue: 65536): User will not be able to change the font size of this SwiftUI.AccessibilityNode — "Set 3" StaticText
