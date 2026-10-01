@@ -442,7 +442,19 @@ export const Exercises = {
     const exercise = await get("exercises", name);
     return exercise ? normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) }) : null;
   },
-  save: (exercise) => put("exercises", normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) })),
+  save(exercise) {
+    const value = normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) });
+    return run("exercises", "readwrite", async (os) => {
+      const [existing, target] = await Promise.all([
+        reqP(os.index("byId").get(value.id)), reqP(os.get(value.name)),
+      ]);
+      if (target && target.id !== value.id) throw new Error(`An exercise named ${value.name} already exists.`);
+      // Names are store keys; portable identity survives a rename. Delete and
+      // put share a transaction so a failed write retains the old definition.
+      if (existing && existing.name !== value.name) os.delete(existing.name);
+      return reqP(os.put(value));
+    });
+  },
 };
 export const Gyms = {
   async all() {

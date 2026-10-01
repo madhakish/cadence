@@ -6,7 +6,7 @@ by the iOS app and web PWA. It is not an IndexedDB or SwiftData dump.
 ## Versioning
 
 `schemaVersion` is an integer at the bundle root. Current exporters write
-version **15**. A missing version means the legacy version-0 shape.
+version **16**. A missing version means the legacy version-0 shape.
 
 Importers accept their current version and older versions they know how to
 migrate. They reject a newer or invalid version before opening a write
@@ -18,6 +18,28 @@ The source-of-truth constants are:
 - Web: `BACKUP_SCHEMA_VERSION` in `web/app/js/db.js`
 
 These values must change together.
+
+## Version 16 exercise favorites
+
+Version 16 (#63) adds required `exercises[].isFavorite`: a JSON Boolean
+(`true` or `false`) recording the user's independent favorite choice. It
+does not change shelving, availability, exercise identity, or logged work.
+Both exporters write it for every exercise definition. A version-16 bundle
+with a missing, null, or non-Boolean value rejects in preflight before writes.
+
+Version-15-and-older exercise definitions restore an absent or null favorite
+as `false`; a supplied Boolean is retained. A supplied non-null value of any
+other type rejects. Restoring definitions replaces their favorite values,
+while a bundle omitting the entire `exercises` section leaves the local
+library and its favorites untouched. Favorite-only changes appear as changed
+exercises in the named restore preview and cannot suppress a restore as equal.
+
+Older importers reject version 16 on the version gate rather than silently
+discarding favorites. This is a SemVer major compatibility boundary. Current
+clients continue to accept supported older backups without resetting stores;
+use a pre-upgrade backup when recovering into an older build. Native storage
+advances separately to V15 and IndexedDB to V11; older native binaries cannot
+open the upgraded V15 store.
 
 ## Version 15 gym plate theme
 
@@ -374,6 +396,10 @@ instead — see [program file](program-file.md).
   both clients agree on identity for identical content.
 - Version-12-and-older bundles cannot carry `"titanium"`; the theme they name
   restores verbatim, and an unregistered theme value rejects the bundle.
+- Version-15-and-older exercise definitions default absent or null
+  `isFavorite` to `false`; supplied Booleans survive. Version 16 requires a
+  Boolean for every definition. Omitted exercise sections preserve local
+  favorites, like other omitted top-level sections.
 - Missing top-level sections leave the corresponding local store untouched.
 - Import runs a full preflight before storage is touched. Missing identifiers,
   invalid dates or numbers, unknown enum values, duplicate keys, and impossible

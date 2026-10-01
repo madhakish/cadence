@@ -7,7 +7,10 @@ const legacy = { id, name: 'Synthetic Favorite', category: 'Main', type: 'barbel
   defaultRestSeconds: 123, aliases: ['Fixture squat'] };
 const old = await new Promise((resolve, reject) => {
   const req = indexedDB.open('cadence', 10);
-  req.onupgradeneeded = () => req.result.createObjectStore('exercises', { keyPath: 'name' });
+  req.onupgradeneeded = () => {
+    const exercises = req.result.createObjectStore('exercises', { keyPath: 'name' });
+    exercises.createIndex('byId', 'id', { unique: true });
+  };
   req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
 });
 await new Promise((resolve, reject) => {
@@ -53,4 +56,16 @@ const renamed = { ...(await db.Exercises.byName(legacy.name)), name: 'Renamed Fa
 await db.Exercises.save(renamed);
 assert.equal((await db.Exercises.byName(renamed.name)).id, id);
 assert.equal((await db.Exercises.byName(renamed.name)).isFavorite, true);
+assert.equal(await db.Exercises.byName(legacy.name), null, 'rename removes the old name key');
+assert.equal((await db.Exercises.all()).filter((e) => e.id === id).length, 1);
+
+const occupied = { ...renamed, id: 'b0000000-0000-4000-8000-000000000063', name: 'Occupied Favorite', isFavorite: false };
+await db.Exercises.save(occupied);
+await assert.rejects(db.Exercises.save({ ...renamed, name: occupied.name }), /already exists/);
+assert.deepEqual(await db.Exercises.byName(renamed.name), renamed, 'name collision retains the original exercise');
+assert.deepEqual(await db.Exercises.byName(occupied.name), occupied, 'name collision cannot overwrite another identity');
+
+await assert.rejects(db.Exercises.save({ ...renamed, name: 'Failed Rename', uncloneable: () => {} }), { name: 'DataCloneError' });
+assert.deepEqual(await db.Exercises.byName(renamed.name), renamed, 'failed put rolls back the old-key deletion and favorite');
+assert.equal(await db.Exercises.byName('Failed Rename'), null);
 console.log('V10 → V11 favorites migration, seed preservation, v16 round trip, preview, and legacy restore passed');
