@@ -11,6 +11,20 @@ The original application has no selected-muscle, Favorites, duration-editor or t
 
 All 186 original PNGs and both audit text attachments were inspected. [Pixel review](../../PIXEL-REVIEW.md) records the findings: the mobile picker and unselected anatomy images do not reach their intended state, the native audio switch is below tab chrome, and layout/maximum-text/contrast limits remain. Filenames describe attempted scenarios, not successful acceptance. Source metadata and original image bytes remain intact.
 
+## Original instrumentation bytes
+
+[The baseline patch](before/instrumentation.patch.b64) is retained in Base64.
+Unified-diff empty context records contain trailing spaces; encoding preserves
+those original bytes while satisfying the repository whitespace gate. Decode
+with Python, then apply the resulting patch to the original checkout:
+
+```sh
+python -c 'import base64,pathlib; p=pathlib.Path("docs/design-pass/proof/final-177/before/instrumentation.patch.b64"); pathlib.Path("/tmp/cadence-dp1-instrumentation.patch").write_bytes(base64.b64decode(p.read_bytes()))'
+```
+
+Decoded patch SHA-256: `152d22c4b3a0f795c4fa79ed5f282b053791d5ed50cac76f649d9b4f25aa93c7`.
+No application code or PNG bytes changed for this packaging correction.
+
 ## Accessibility evidence limits
 
 Raw native audit advisories are linked below. They include unassociated hit-region/contrast findings and fixed-size ancillary labels. The audit filters platform chrome, decorative plate-face contrast and noninteractive regions; it does not prove complete AA or spoken VoiceOver. The clearance test inspects controls at the scrolled end, not every intermediate scroll position. CSS zoom is layout stress, not manual browser/pinch zoom. Physical Lock Screen/Dynamic Island, headphones and spoken VoiceOver remain acceptance gates.

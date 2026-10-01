@@ -6,7 +6,7 @@ Before: `11895fb95cde9e4b938831098d00dd0350b45bc2`. After: `78405bf4a12c32e5be65
 
 Both revisions use the same synthetic seed recipe. Store identities and relative timestamps are created for each run; baseline export schema 12 and candidate schema 16 reflect the actual application contracts. Web replays each revision's native fixture through its production importer.
 
-The baseline checkout receives only the recorded in-memory bootstrap, UI-test target and calculator scenario startup arguments. Its layout, renderer, solver and application behavior are original; [instrumentation patch](proof/final-177/before/instrumentation.patch) records the exact delta.
+The baseline checkout receives only the recorded in-memory bootstrap, UI-test target and calculator scenario startup arguments. Its layout, renderer, solver and application behavior are original; [original instrumentation patch (Base64)](proof/final-177/before/instrumentation.patch.b64) records the exact delta.
 
 ## iPhone pairs
 
