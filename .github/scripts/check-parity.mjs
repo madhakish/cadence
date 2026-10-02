@@ -5,8 +5,8 @@
 // Fails when: a public Swift symbol is absent from the map; a map entry names a
 // Swift symbol that no longer exists; a mapped JS twin is not exported; a JS
 // export the module owns (its whole file, or its `jsSections` of a file several
-// modules share) is neither a twin nor listed in webOnly; a swiftOnly/webOnly
-// entry has no reason. It checks names, not behaviour: shared fixtures and the
+// modules share) is neither any module's twin nor listed in webOnly; a
+// swiftOnly/webOnly entry has no reason. It checks names, not behaviour: shared fixtures and the
 // invariant registry own behaviour.
 //
 // Deliberately dependency-free, like check-invariants.mjs: a regex and
@@ -115,6 +115,17 @@ let failures = 0;
 const fail = (msg) => { console.error(`FAIL ${msg}`); failures += 1; };
 let checked = 0;
 
+// JS sections do not follow Swift file boundaries one for one, so a twin that
+// any module claims accounts for the export in whichever owned section it
+// sits. Keyed by file: the same name in another JS file is a different export.
+const twinned = new Set();
+for (const spec of Object.values(map.modules)) {
+  for (const value of Object.values(spec.symbols)) {
+    const twin = typeof value === "string" ? value : value.js;
+    if (twin) twinned.add(`${spec.js}#${twin}`);
+  }
+}
+
 for (const [mod, spec] of Object.entries(map.modules)) {
   const swift = new Map(swiftSymbols(join(ROOT, spec.swift)).filter(IN_SCOPE).map((s) => [s.key, s]));
   const exports = jsExports(join(ROOT, spec.js));
@@ -140,14 +151,15 @@ for (const [mod, spec] of Object.entries(map.modules)) {
     if (!String(reason).trim()) fail(`${mod}: webOnly ${name} has no reason`);
     claimed.add(name);
   }
-  // A module owns its whole JS file unless it names the sections it owns.
+  // A module owns its whole JS file unless it names the sections it owns; an
+  // empty `jsSections` owns none (its twins sit in sections other modules own).
   const present = new Set(exports.values());
   for (const section of spec.jsSections ?? []) {
     if (!present.has(section)) fail(`${mod}: ${spec.js} has no exports under a "// ---- ${section} ----" header`);
   }
   for (const [name, section] of exports) {
     if (spec.jsSections && !spec.jsSections.includes(section)) continue;
-    if (!claimed.has(name)) fail(`${mod}: ${spec.js} exports ${name}, which is neither a Swift twin nor webOnly`);
+    if (!claimed.has(name) && !twinned.has(`${spec.js}#${name}`)) fail(`${mod}: ${spec.js} exports ${name}, which is neither a Swift twin nor webOnly`);
   }
 }
 
