@@ -118,9 +118,23 @@ the other feature areas and durable release symbols/toolchain metadata remain
 tracked in #254. The invariant registry's token scan is
 traceability evidence, not proof that every cited assertion executed.
 
-Administrative rulesets, classic branch protection, deployment restrictions,
-and service-side security scanning must be verified with the required account
-access. Workflow source alone cannot establish their enforcement.
+### Verified merge policy (2026-10-02)
+
+The GitHub API confirms classic protection on `main`: pull requests are
+required, approving-review count is zero, administrators are included, linear
+history is required, and force pushes and branch deletion are disabled.
+Required checks are bound to the GitHub Actions app: `App build (macOS)`,
+`CadenceCore tests (Linux)`, `Web tests (parity + smoke)`, and `PR contract`.
+The app aggregate requires successful core/web/preflight
+checks and all native validation selected for the change.
+
+Repository auto-merge is enabled. `auto-merge.yml` opts non-draft, same-repository
+pull requests into native squash auto-merge when they target the default
+branch. It runs without checking out PR code and matches the observed head
+commit; GitHub continues enforcing required checks and blocking reviews.
+
+Deployment restrictions and service-side security scanning still require
+separate verification. Workflow source alone cannot establish their enforcement.
 
 Pages recovery checks the validation aggregate, not the overall CI conclusion.
 A publishing failure may fail the overall run after validation succeeds; that
