@@ -130,6 +130,15 @@ assert_job_contains native-smoke "node .github/scripts/verify-native-smoke.mjs"
 assert_job_contains native-smoke $'- name: Require all four interaction tests to execute\n        if: always()'
 assert_job_contains app-build 'NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}'
 assert_job_contains deploy-web "needs: [changes, web-tests, app-build]"
+# Pages must evaluate its gate even when a PR-only app-build dependency was
+# skipped on main; without always() the job is skipped on every main push.
+assert_job_contains deploy-web $'if: >-\n      always() &&'
+assert_job_contains deploy-web "needs.changes.result == 'success' &&"
+assert_job_contains deploy-web "needs.web-tests.result == 'success' &&"
+assert_job_contains deploy-web "needs.app-build.result == 'success' &&"
+assert_job_contains deploy-web "github.event_name == 'push' &&"
+assert_job_contains deploy-web "github.ref == 'refs/heads/main' &&"
+assert_job_contains deploy-web "needs.changes.outputs.web == 'true'"
 assert_job_contains app-build 'CORE_RESULT: ${{ needs.core-tests.result }}'
 assert_job_contains app-build 'WEB_RESULT: ${{ needs.web-tests.result }}'
 assert_job_contains app-build "DEVICE_REQUIRED: \${{ github.event_name == 'pull_request' && needs.changes.outputs.native == 'true' }}"
