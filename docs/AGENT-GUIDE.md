@@ -266,7 +266,14 @@ load semantics, cardio format): each Swift selector names its JS export, or is
 marked `swiftOnly`/`webOnly` with a reason. A new public symbol in a mapped
 module needs a twin or a reasoned one-sided entry; `npm test` runs
 `.github/scripts/check-parity.mjs` to enforce it. A Swift label rename counts
-as a new selector. The map checks names, not behaviour; fixtures still own that.
+as a new selector. Public initialisers and the unmarked members of a
+`public extension` are part of that surface; stored fields and enum cases are
+not, and an initialiser that only assigns stored fields is listed `swiftOnly`.
+Load semantics and cardio format share `core.js`, so each owns the
+`// ---- Section ----` headers named in its `jsSections`: an export added under
+one needs an entry, a renamed header needs the map updated, and `core.js`
+sections no mapped module owns are outside the check. The map checks names, not
+behaviour; fixtures still own that.
 
 `CadenceCore` must remain Foundation-only and Linux-testable. Do not import
 SwiftUI, SwiftData, UIKit, ActivityKit, HealthKit, or other Apple-only frameworks

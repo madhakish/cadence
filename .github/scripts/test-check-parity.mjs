@@ -75,6 +75,67 @@ test("T5: relabelling a Swift selector fails as both unmapped and stale", () => 
   assert.match(out, /map entry CardioFormat\.durationSeconds\(flights:pacePerMinute:\) matches no public Swift symbol/);
 });
 
+test("T6: unmarked members of a public extension are public", () => {
+  const { status, out } = check((edit) => edit(map.modules.LoadSemantics.swift, (s) => `${s}
+public extension LoadBasis {
+    static func heaviest() -> LoadBasis { .totalBar }
+    private static func hidden() -> Int { 0 }
+    internal var note: String { "" }
+}
+
+extension LoadBasis {
+    static func quiet() -> Int { 0 }
+}
+
+public extension Plate {
+    var isChange: Bool { false }
+}
+`));
+  assert.equal(status, 1);
+  assert.match(out, /public Swift LoadBasis\.heaviest\(\) .* is not in the parity map/);
+  assert.match(out, /public Swift Plate\.isChange .* is not in the parity map/);
+  // Lower access wins, an internal extension stays internal, and extending a
+  // type is not a declaration of it.
+  assert.doesNotMatch(out, /LoadBasis\.(hidden|note|quiet)|public Swift Plate /);
+});
+
+test("T7: a public init is a selector like any func", () => {
+  const scene = "BarbellScene.init(loadout:style:exploded:geometry:theme:)";
+  const { status, out } = check((edit) => {
+    edit(map.modules.BarbellScene.swift, (s) => s.replace(
+      "    public init(diameter: Double, thickness: Double) {",
+      "    public init?(side: Double) { self.init(diameter: side, thickness: side) }\n\n    public init(diameter: Double, thickness: Double) {"));
+    editMap(edit, (m) => { delete m.BarbellScene.symbols[scene]; });
+  });
+  assert.equal(status, 1);
+  assert.match(out, /public Swift PlateGeometry\.init\(side:\) .* is not in the parity map/);
+  assert.ok(out.includes(`public Swift ${scene} `), out);
+});
+
+test("T8: modules sharing a JS file own its sections exhaustively", () => {
+  const core = map.modules.LoadSemantics.js;
+  const { status, out } = check((edit) => {
+    edit(core, (s) => s
+      .replace("// ---- Explicit set lifecycle", "export const loadNote = 1;\n// ---- Explicit set lifecycle")
+      .replace("// ---- Health reconciliation", "export const carryNote = 1;\n// ---- Health reconciliation")
+      .concat("\nexport const elsewhere = 1;\n"));
+    editMap(edit, (m) => { delete m.LoadSemantics.webOnly.resolvedLoadBasis; });
+  });
+  assert.equal(status, 1);
+  assert.match(out, /LoadSemantics: .* exports loadNote, which is neither a Swift twin nor webOnly/);
+  assert.match(out, /LoadSemantics: .* exports resolvedLoadBasis, which is neither a Swift twin nor webOnly/);
+  assert.match(out, /CardioFormat: .* exports carryNote, which is neither a Swift twin nor webOnly/);
+  // Sections no mapped module owns stay outside the gate.
+  assert.doesNotMatch(out, /elsewhere/);
+});
+
+test("T9: an owned section that no longer exists fails", () => {
+  const { status, out } = check((edit) => edit(map.modules.LoadSemantics.js,
+    (s) => s.replace("// ---- Load semantics ---", "// ---- Load meaning ---")));
+  assert.equal(status, 1);
+  assert.match(out, /LoadSemantics: .* has no exports under a "\/\/ ---- Load semantics ----" header/);
+});
+
 test("one-sided entries need a reason", () => {
   const { status, out } = check((edit) => editMap(edit, (m) => {
     m.LoadSemantics.symbols["LoadSemantics.compatible(_:_:)"] = { swiftOnly: " " };

@@ -1,11 +1,10 @@
 {
-  "$comment": "Swift<->JS public-surface parity map. Keys under `symbols` are CadenceCore selectors as check-parity.mjs extracts them (funcs keyed with external labels; stored fields and enum cases are out of scope in v1). A value is the JS export twin (string), {\"js\": export, \"note\": why-the-shape-differs}, or {\"swiftOnly\": reason}. `webOnly` lists JS exports with no Swift twin. `exhaustiveJs: true` means every export of `js` must be accounted for.",
+  "$comment": "Swift<->JS public-surface parity map. Keys under `symbols` are CadenceCore selectors as check-parity.mjs extracts them (funcs and inits keyed with external labels; stored fields and enum cases are out of scope in v1, and an init that only assigns stored fields is listed `swiftOnly` for the same reason). A value is the JS export twin (string), {\"js\": export, \"note\": why-the-shape-differs}, or {\"swiftOnly\": reason}. `webOnly` lists JS exports with no twin in the module's Swift file; the reason names the Swift counterpart elsewhere, if there is one. Every export of `js` must be accounted for; modules that share a `js` file each list the `// ---- Section ----` headers they own in `jsSections` and account for the exports under those.",
   "version": 1,
   "modules": {
     "PlateTheme": {
       "swift": "CadenceCore/Sources/CadenceCore/PlateTheme.swift",
       "js": "web/app/js/plate-theme.js",
-      "exhaustiveJs": true,
       "symbols": {
         "PlateThemeID": { "js": "PLATE_THEME_IDS", "note": "enum cases as a frozen id array" },
         "PlateThemeID.id": { "swiftOnly": "Identifiable conformance; JS ids are the strings themselves" },
@@ -16,6 +15,7 @@
         "PlateHubFinish": { "swiftOnly": "typed enum; JS carries hub finish as a string in PLATE_THEMES" },
         "BarFinish": { "swiftOnly": "typed enum; JS carries bar finish as a string in PLATE_THEMES" },
         "PlateMaterial": { "swiftOnly": "value type; JS returns a plain object from plateThemeMaterial()" },
+        "PlateMaterial.init(finish:metal:roughness:photoFamily:)": { "swiftOnly": "memberwise init; JS builds the plain object directly" },
         "PlateRatios": { "swiftOnly": "value type; JS returns a plain object from plateThemeRatios()" },
         "PlateTheme": { "js": "PLATE_THEMES", "note": "struct + static `all` table vs frozen theme table" },
         "PlateTheme.description(_:)": "plateThemeDescription",
@@ -36,7 +36,6 @@
     "BarbellScene": {
       "swift": "CadenceCore/Sources/CadenceCore/BarbellScene.swift",
       "js": "web/app/js/barbell-scene.js",
-      "exhaustiveJs": true,
       "symbols": {
         "PlateFaceTint": { "swiftOnly": "namespace struct; JS uses plateTint* functions" },
         "PlateFaceTint.red": { "swiftOnly": "matrix component accessor; JS indexes the array" },
@@ -49,24 +48,25 @@
         "PlateFaceTint.lift(for:target:)": { "swiftOnly": "JS twin plateTintLiftForTarget is module-private (not exported)" },
         "PlateFaceTint.target(forFill:)": "plateTintTargetForFill",
         "PlateFaceTint.greyMix": "PLATE_TINT_GREY_MIX",
+        "PlateFaceTint.init(token:)": { "js": "plateTintMatrix", "note": "source-compatible overload; JS defaults style to steel" },
+        "PlateFaceTint.init(token:style:)": { "js": "plateTintMatrix", "note": "JS returns the matrix the init stores" },
+        "PlateFaceTint.init(fill:style:target:)": { "js": "plateTintMatrixForFill", "note": "JS returns the matrix the init stores" },
         "PlateFaceTint.apply(luminance:)": "plateTintApply",
         "PlateGeometry": { "swiftOnly": "value type; JS returns a plain {diameter, thickness}" },
+        "PlateGeometry.init(diameter:thickness:)": { "swiftOnly": "memberwise init; JS builds the plain object directly" },
         "PlateGeometry.reference(_:style:)": "plateGeometry",
         "PlateGeometry.family(_:style:)": "plateFamily",
         "PlateGeometry.familyLabel(_:)": "plateFamilyLabel",
         "BarbellScene": "barbellScene",
+        "BarbellScene.init(loadout:style:exploded:geometry:theme:)": "barbellScene",
         "BarbellScene.Disc": { "swiftOnly": "value type; JS discs are plain objects" },
         "BarbellScene.Disc.accessibilityLabel": "discAccessibilityLabel"
       },
-      "webOnly": {
-        "plateTintMatrix": "Swift twin is PlateFaceTint(token:style:).matrix; initialisers and stored fields are outside the checked surface",
-        "plateTintMatrixForFill": "Swift twin is PlateFaceTint(fill:style:target:).matrix; see plateTintMatrix"
-      }
+      "webOnly": {}
     },
     "BarbellInspector": {
       "swift": "CadenceCore/Sources/CadenceCore/BarbellInspector.swift",
       "js": "web/app/js/barbell-inspector.js",
-      "exhaustiveJs": true,
       "symbols": {
         "BarbellInspector": { "swiftOnly": "namespace enum" },
         "BarbellInspector.boreRadius": "BORE_RADIUS",
@@ -78,13 +78,16 @@
         "BarbellInspector.isWomensBar(_:)": "isWomensBar",
         "BarbellInspector.layout(loadout:style:explode:geometry:theme:)": "barbellLayout",
         "BarbellInspector.Point3": { "swiftOnly": "value type; JS uses {x,y,z}" },
+        "BarbellInspector.Point3.init(x:y:z:)": { "swiftOnly": "memberwise init; JS builds the plain object directly" },
         "BarbellInspector.Camera": { "swiftOnly": "value type; JS uses {yaw,pitch,zoom}" },
+        "BarbellInspector.Camera.init(yaw:pitch:zoom:)": { "swiftOnly": "memberwise init; JS builds the plain object directly" },
         "BarbellInspector.Camera.initial(exploded:)": "inspectorCamera",
         "BarbellInspector.Camera.position(distance:)": "cameraOrbitPosition",
         "BarbellInspector.Frame": { "swiftOnly": "value type; JS returns a plain object from inspectorFrame()" },
         "BarbellInspector.frame(layout:explode:)": "inspectorFrame",
         "BarbellInspector.minimumWidth(layout:viewportWidth:exploded:)": "inspectorWidth",
         "BarbellInspector.ProfilePoint": { "swiftOnly": "value type; JS uses [r, z] pairs" },
+        "BarbellInspector.ProfilePoint.init(radius:axial:)": { "swiftOnly": "memberwise init; JS builds the [r, z] pair directly" },
         "BarbellInspector.plateProfile(family:diameter:thickness:)": "plateProfile"
       },
       "webOnly": {}
@@ -92,7 +95,7 @@
     "LoadSemantics": {
       "swift": "CadenceCore/Sources/CadenceCore/LoadSemantics.swift",
       "js": "web/app/js/core.js",
-      "exhaustiveJs": false,
+      "jsSections": ["Load semantics"],
       "symbols": {
         "LoadBasis": { "js": "LOAD_BASES", "note": "enum cases as a string array" },
         "LoadBasis.label": "loadBasisLabel",
@@ -112,12 +115,16 @@
         "LoadSemantics.heroLoadLabel(weightLb:basis:)": "heroLoadLabel",
         "LoadSemantics.compatible(_:_:)": { "swiftOnly": "basis equality used by PRDetection; JS PR comparison compares basis strings inline" }
       },
-      "webOnly": {}
+      "webOnly": {
+        "equipmentPolicyAllows": "Swift twin is EquipmentPolicy.allows(exerciseType:) in ProgramPolicy.swift, which is not a mapped module",
+        "resolvedLoadBasis": "stored-or-inferred basis of an exercise record; the Swift twin is the Exercise.loadBasis getter in the app target, outside CadenceCore",
+        "hasLoadStep": "Swift twin is ProgramProgression.hasLoadStep(incrementLb:supportsLoadableIncrement:) in ProgramProgression.swift, which is not a mapped module"
+      }
     },
     "CardioFormat": {
       "swift": "CadenceCore/Sources/CadenceCore/CardioFormat.swift",
       "js": "web/app/js/core.js",
-      "exhaustiveJs": false,
+      "jsSections": ["Cardio set formatting", "Climbed flights", "Distance carries"],
       "symbols": {
         "CardioFormat": { "swiftOnly": "namespace enum" },
         "CardioFormat.speedMph(distanceMiles:durationSeconds:)": "cardioSpeedMph",
