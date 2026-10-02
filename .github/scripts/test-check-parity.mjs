@@ -136,6 +136,45 @@ test("T9: an owned section that no longer exists fails", () => {
   assert.match(out, /LoadSemantics: .* has no exports under a "\/\/ ---- Load semantics ----" header/);
 });
 
+test("T10: a twin claimed by another module accounts for an export in an owned section", () => {
+  // equipmentPolicyAllows sits under "Load semantics", which LoadSemantics owns,
+  // and is ProgramPolicy's twin. Dropping that claim leaves it unaccounted for.
+  const allows = "EquipmentPolicy.allows(exerciseType:)";
+  const { status, out } = check((edit) => editMap(edit, (m) => {
+    m.ProgramPolicy.symbols[allows] = { swiftOnly: "test: claim withdrawn" };
+  }));
+  assert.equal(status, 1);
+  assert.match(out, /LoadSemantics: .* exports equipmentPolicyAllows, which is neither a Swift twin nor webOnly/);
+});
+
+test("T11: a twin claim is per JS file", () => {
+  // A same-named export in another mapped file is a different export, so a
+  // claim there must not satisfy the owner of the core.js section.
+  const allows = "EquipmentPolicy.allows(exerciseType:)";
+  const { status, out } = check((edit) => {
+    edit(map.modules.PlateTheme.js, (s) => `${s}\nexport const equipmentPolicyAllows = 1;\n`);
+    editMap(edit, (m) => {
+      m.ProgramPolicy.js = m.PlateTheme.js;
+      // Its other twins live in core.js; park them so only the claim under test remains.
+      for (const key of Object.keys(m.ProgramPolicy.symbols)) {
+        m.ProgramPolicy.symbols[key] = key === allows ? "equipmentPolicyAllows" : { swiftOnly: "test: twin lives in core.js" };
+      }
+    });
+  });
+  assert.equal(status, 1);
+  assert.match(out, /LoadSemantics: .* exports equipmentPolicyAllows, which is neither a Swift twin nor webOnly/);
+  assert.doesNotMatch(out, /PlateTheme: .* exports equipmentPolicyAllows/);
+});
+
+test("T12: a module with no owned section gates nothing in its JS file", () => {
+  // ProgramPolicy's twins sit in sections other modules own (`jsSections: []`);
+  // a new export in an unowned section is outside every module's gate.
+  const { status, out } = check((edit) => edit(map.modules.ProgramPolicy.js,
+    (s) => s.replace("// ---- Restore preview", "export const policyNote = 1;\n// ---- Restore preview")));
+  assert.equal(status, 0, out);
+  assert.doesNotMatch(out, /policyNote/);
+});
+
 test("one-sided entries need a reason", () => {
   const { status, out } = check((edit) => editMap(edit, (m) => {
     m.LoadSemantics.symbols["LoadSemantics.compatible(_:_:)"] = { swiftOnly: " " };
