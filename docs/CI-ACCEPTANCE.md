@@ -123,8 +123,9 @@ traceability evidence, not proof that every cited assertion executed.
 The GitHub API confirms classic protection on `main`: pull requests are
 required, approving-review count is zero, administrators are included, linear
 history is required, and force pushes and branch deletion are disabled.
-Required checks are bound to the GitHub Actions app: `App build (macOS)`
-and `PR contract`. The app aggregate requires successful core/web/preflight
+Required checks are bound to the GitHub Actions app: `App build (macOS)`,
+`CadenceCore tests (Linux)`, `Web tests (parity + smoke)`, and `PR contract`.
+The app aggregate requires successful core/web/preflight
 checks and all native validation selected for the change.
 
 Repository auto-merge is enabled. `auto-merge.yml` opts non-draft, same-repository
