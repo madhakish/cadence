@@ -260,6 +260,14 @@ When one side changes, update the other implementation and equivalent tests in
 the same PR. Regenerate fixtures only after reviewing the semantic diff; do not
 update snapshots merely to silence a failure.
 
+[`docs/reference/parity-map.json`](reference/parity-map.json) maps the public
+surface of the mirrored modules (plate themes, barbell scene and inspector,
+load semantics, cardio format): each Swift selector names its JS export, or is
+marked `swiftOnly`/`webOnly` with a reason. A new public symbol in a mapped
+module needs a twin or a reasoned one-sided entry; `npm test` runs
+`.github/scripts/check-parity.mjs` to enforce it. A Swift label rename counts
+as a new selector. The map checks names, not behaviour; fixtures still own that.
+
 `CadenceCore` must remain Foundation-only and Linux-testable. Do not import
 SwiftUI, SwiftData, UIKit, ActivityKit, HealthKit, or other Apple-only frameworks
 into it. Guard genuinely Darwin-only tests with `#if canImport(Darwin)`.

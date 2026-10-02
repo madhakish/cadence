@@ -152,6 +152,17 @@ if [[ "${test_command%% && *}" != "node ../.github/scripts/check-invariants.mjs"
   exit 1
 fi
 
+# The parity checker follows it, under the same single-owner rule.
+if grep -Fq "run: node ../.github/scripts/check-parity.mjs" "$workflow"; then
+  echo "ci.yml must not run the parity checker twice" >&2
+  exit 1
+fi
+remaining_tests="${test_command#* && }"
+if [[ "${remaining_tests%% && *}" != "node ../.github/scripts/check-parity.mjs" ]]; then
+  echo "npm test must run the parity checker second" >&2
+  exit 1
+fi
+
 # Browser tests run before the web gate can release app builds or Pages.
 assert_job_contains web-tests 'run: npx --no-install playwright install chromium webkit'
 assert_job_contains web-tests 'run: npm run test:browser'
