@@ -1471,6 +1471,8 @@ const gymSignature = (g) => [
 // session's sets and a program's slot contents are themselves nested
 // structures) — the shared BackupContract explicitly asks for a
 // collection-appropriate shallow comparison here, not a deep recursive diff.
+// A session's performed set facts are the exception: they are what the
+// lifter edits, so they join the signature as a compact digest.
 // The v12 activity object is the first user-entered session-level fact
 // outside `exercises`, so it joins the shallow signature: an edit to RPE or
 // cords on one device must not preview as "unchanged" on the other
@@ -1485,10 +1487,18 @@ const tfhSignature = s => s.tfhPolicyId == null ? "" : JSON.stringify(stableTFH(
   anchors:(s.exercises || []).map(e=>e.tfhAnchor ?? null),
   benchmarks:(s.exercises || []).map(e=>(e.sets || []).map(x=>x.tfhBenchmark ?? null)),
 }));
+// Performed set facts, in order. Without them a same-id session whose reps
+// changed previewed as "unchanged" while restore overwrote the set. Missing
+// values take the defaults restore itself applies, so an untouched session
+// still previews as unchanged. Mirrors native ImportService.setDigest.
+const setDigest = (s) => (s.exercises || []).map((e) => (e.sets || []).map((x) => [
+  numOrZero(x.weightLb), numOrZero(x.reps), x.status || (s.isCompleted !== false ? "completed" : "planned"),
+  x.isWarmup ? 1 : 0, x.durationSeconds ?? "", x.distanceMiles ?? "",
+].join(",")).join(";")).join("|");
 const sessionSignature = (s) => [
   strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
   s.activity ? JSON.stringify(portableActivity(s.activity)) : "",
-  tfhSignature(s),
+  tfhSignature(s), setDigest(s),
 ].join("");
 
 const programSignature = (p) => [

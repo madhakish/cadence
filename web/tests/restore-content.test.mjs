@@ -22,8 +22,14 @@ await db.Sessions.save({ id, date: "2025-01-01T12:00:00.000Z", isCompleted: true
 const original = await db.exportBundle();
 const corrected = structuredClone(original);
 corrected.sessions[0].exercises[0].sets[0].weightLb = 95;
-assert.equal(C.isNamedRestoreNoOp(await db.namedRestorePreview(corrected)), true,
-  "Reproduction: the shallow preview misses a corrected weight with identical IDs and counts");
+// The named preview's set digest now sees a corrected weight with identical
+// IDs and counts (it used to report the session as unchanged, leaving the
+// full-content comparison below as the only guard).
+const correctedPreview = await db.namedRestorePreview(corrected);
+assert.equal(C.isNamedRestoreNoOp(correctedPreview), false,
+  "the preview names a corrected weight with identical IDs and counts");
+assert.ok(correctedPreview.sessions.some((d) => d.id === id && d.status === "changed"),
+  "the corrected session previews as changed");
 
 async function chooseFile(bundle) {
   document.getElementById("overlays").replaceChildren();
@@ -40,7 +46,8 @@ async function chooseFile(bundle) {
 // Drive the file picker and confirmation, not just the lower-level importer.
 await chooseFile(corrected);
 assert.ok(button("Restore"), `Corrected backup was blocked: ${document.getElementById("toast").textContent}`);
-assert.match(document.getElementById("overlays").textContent, /Recorded values or settings differ/);
+assert.match(document.getElementById("overlays").textContent, /Sessions: 2025-01-01T12:00:00\.000Z \(changed\)/,
+  "the confirmation names the corrected session");
 button("Cancel").click();
 assert.equal((await db.Sessions.get(id)).exercises[0].sets[0].weightLb, 100, "Cancel does not write");
 assert.equal((await db.Checkpoints.all()).length, 0, "Preview does not create checkpoints");
@@ -56,6 +63,15 @@ assert.equal(await db.backupMatchesCurrent(stored), true);
 await chooseFile(stored);
 assert.match(document.getElementById("toast").textContent, /matches your current data/);
 assert.equal(button("Restore"), undefined, "A truly identical backup skips restore");
+
+// A difference the named preview does not itemize (settings) still reaches
+// confirmation, through the generic line rather than a named entity.
+const settingsOnly = structuredClone(stored);
+settingsOnly.settings = { ...settingsOnly.settings, autoStartRest: !settingsOnly.settings.autoStartRest };
+await chooseFile(settingsOnly);
+assert.ok(button("Restore"), "a settings-only difference still asks to restore");
+assert.match(document.getElementById("overlays").textContent, /Recorded values or settings differ/);
+button("Cancel").click();
 
 // Every payload section participates, including sections absent from the
 // named preview. These are synthetic comparison facts, not workout fixtures.
