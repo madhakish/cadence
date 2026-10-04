@@ -1947,6 +1947,19 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(diffPreview.programs.some((d) => d.status === "changed" && d.id === changedProgram.id),
     `a program with a different slot count (was ${originalSlotCount}) previews as changed`);
 
+  // Same id, same date, same exercise count: only a performed set value
+  // differs. Restore overwrites that set, so the preview must name the session
+  // as changed instead of "unchanged" while the rest stay unchanged.
+  const repsEdited = structuredClone(parsed);
+  const editedSession = repsEdited.sessions.find((s) => s.exercises?.some((e) => e.sets?.length));
+  const editedSet = editedSession.exercises.find((e) => e.sets?.length).sets[0];
+  editedSet.reps = (editedSet.reps || 0) + 1;
+  const repsPreview = await db.namedRestorePreview(repsEdited);
+  ok(repsPreview.sessions.some((d) => d.id === editedSession.id && d.status === "changed"),
+    "a reps-only edit to a resident session previews as changed");
+  ok(repsPreview.sessions.filter((d) => d.status !== "unchanged").length === 1,
+    "the set digest leaves every untouched session unchanged");
+
   // A bundle that keeps the `programs` key but empties it wholesale-replaces
   // the store with nothing — every current program previews as removed.
   const emptied = { ...structuredClone(parsed), programs: [] };
