@@ -29,6 +29,13 @@ export const PROGRAMMING_DEFAULTS = [
   rec("Accessory", "machine", 20, 35, 5, "Lat Pulldown"),
   rec("Accessory", "machine", 20, 35, 5, "Lying Leg Curl"),
 
+  // Loaded carries, per hand. A carry is grip- and trunk-limited, so the light
+  // accessory-dumbbell fallback (5 lb) is not a training load.
+  rec("Accessory", "dumbbell", 50, 70, 5, "Farmer Carry"),
+  rec("Accessory", "dumbbell", 50, 70, 5, "Suitcase Carry"),
+  rec("Accessory", "kettlebell", 35, 53, 5, "Front-rack Carry"),
+  rec("Accessory", "dumbbell", 25, 35, 5, "Overhead Carry"),
+
   rec("Main", "barbell", 45, 65, 5),
   rec("Main", "dumbbell", 10, 20, 5),
   rec("Main", "kettlebell", 15, 25, 5),

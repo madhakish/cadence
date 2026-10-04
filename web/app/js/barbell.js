@@ -1,22 +1,32 @@
 // Shared compact/full barbell graphics. Callers resolve the rack through core;
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
-import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix } from "./barbell-scene.js";
+import { barbellScene, discAccessibilityLabel, plateFamily, plateFamilyLabel, plateTintMatrix, plateTintMatrixForFill } from "./barbell-scene.js";
 import { PLATE_SPRITES } from "./plate-sprites.js";
-import { barbellGL, BACKDROPS } from "./barbell-gl.js";
+import { plateThemeColour, plateThemeDescription, plateThemeFamily, plateThemeGeometry } from "./plate-theme.js";
+import { barbellGL } from "./barbell-gl.js";
+import { barbellLayout, inspectorWidth } from "./barbell-inspector.js";
 
 // Rendered loaded-bar sprites (web/tools/render-plate-sprites.py): one per
 // plate shape and scene angle, plus shaft, sleeves, and collars. Placement
 // comes from the same BarbellScene geometry both clients share.
 const spriteURL = (name) => new URL(`../assets/plates/${name}.png`, import.meta.url).href;
-export function plateSpriteName(plate, style, exploded) {
-  const family = plateFamily(plate, style);
+export function plateSpriteName(plate, style, exploded, theme = "custom") {
+  const family = plateThemeFamily(plate, theme, style);
   const angle = exploded ? "exploded" : "assembled";
-  const shape = PLATE_SPRITES.plates[`${family}:${plate.value}-${plate.unit}`];
-  const name = `plate-${shape}-${angle}`;
-  if (shape && PLATE_SPRITES.sprites[name]) return name;
-  // An unknown shape borrows the family's first sprite; geometry still scales it.
-  return Object.keys(PLATE_SPRITES.sprites).find((key) => key.startsWith(`plate-${family}-`) && key.endsWith(`-${angle}`));
+  const named = (shape) => shape && PLATE_SPRITES.sprites[`plate-${shape}-${angle}`] ? `plate-${shape}-${angle}` : null;
+  // A theme's exact shape (family + millimetres) first, then the family's
+  // registered denomination, then the family's first sprite; geometry still
+  // scales whatever is found. Unknown families fall back to steel.
+  if (theme !== "custom" && Array.isArray(PLATE_SPRITES.shapes)) {
+    const { diameter, thickness } = plateThemeGeometry(plate, theme, style);
+    const exact = PLATE_SPRITES.shapes.find((s) => s.family === family && s.diameter === diameter && s.thickness === thickness);
+    if (exact && named(exact.key)) return named(exact.key);
+  }
+  const registered = named(PLATE_SPRITES.plates[`${family}:${plate.value}-${plate.unit}`]);
+  if (registered) return registered;
+  const first = (fam) => Object.keys(PLATE_SPRITES.sprites).find((key) => key.startsWith(`plate-${fam}-`) && key.endsWith(`-${angle}`));
+  return first(family) || first("steel");
 }
 // Map a bar sprite's axis reference points onto two scene points. Thickness
 // comes from the sprite's nominal span (so an exploded scene's longer sleeve
@@ -41,8 +51,8 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
 // an honest edge-on load-order diagram, where a large horizontal number would
 // imply physically impossible plate thickness. Decorative: callers provide
 // the adjacent denomination label. Mirrors PlateFaceBadge.
-export function plateBadgeSVG(plate, style = "steel") {
-  const colour = C.plateColour(C.plateColorToken(plate, style));
+export function plateBadgeSVG(plate, style = "steel", { exact = false, plateTheme = "custom" } = {}) {
+  const colour = plateThemeColour(plate, plateTheme, style);
   const foreground = colour.ink;
   const svg = el("svg", { class: `plate-badge ${style}`, viewBox: "0 0 52 52",
     "aria-hidden": "true", focusable: "false" });
@@ -54,7 +64,7 @@ export function plateBadgeSVG(plate, style = "steel") {
   );
   const value = el("text", { x: 26, y: 24, "text-anchor": "middle",
     "font-size": 15, "font-weight": 800, fill: foreground });
-  value.textContent = C.trim(plate.value, 2);
+  value.textContent = String(plate.value);
   const unit = el("text", { x: 26, y: 36, "text-anchor": "middle",
     "font-size": 9, "font-weight": 700, fill: foreground });
   unit.textContent = plate.unit;
@@ -95,11 +105,11 @@ export function prescriptionPlateDetails(targetLb, achievedLb, unit, bar, gym, s
 // `presentation` is chosen by the SURFACE (a set row vs the current set's
 // stage); `emphasis` is the state (current / standard / muted) and changes
 // only opacity — never geometry, order, or labels.
-export function barbellSVG(solution, presentation = "compact", plateStyle = "steel", { emphasis = "standard" } = {}) {
+export function barbellSVG(solution, presentation = "compact", plateStyle = "steel", { emphasis = "standard", plateTheme = "custom" } = {}) {
   if (!solution?.bar || !Array.isArray(solution?.perSide)) {
     throw new TypeError("barbellSVG requires a complete plate solution");
   }
-  const rendered = realisticBarbellSVG(solution, plateStyle);
+  const rendered = realisticBarbellSVG(solution, plateStyle, false, plateTheme);
   rendered.svg.classList.add(`emphasis-${emphasis}`);
   if (presentation !== "full") {
     rendered.svg.classList.remove("full");
@@ -110,15 +120,22 @@ export function barbellSVG(solution, presentation = "compact", plateStyle = "ste
   return rendered;
 }
 
+// Condensed industrial sans for the printed denomination, system-first.
+const PLATE_PRINT_FONT = '"Barlow Condensed", "Roboto Condensed", "Arial Narrow", "SF Pro Display", -apple-system, sans-serif';
 let sceneID = 0;
-function realisticBarbellSVG(solution, style, exploded = false) {
-  const scene = barbellScene(solution, style, exploded);
+function realisticBarbellSVG(solution, style, exploded = false, theme = "custom") {
+  const scene = barbellScene(solution, style, exploded, {}, theme);
   const id = `bar-art-${++sceneID}`;
   const stackLabel = solution.perSide.length ? `${C.perSideLabel(solution.perSide)} per side` : solution.collarLb > 0 ? "with collars, no plates" : "bar only";
-  const svg = el('svg', { class: `barbell full ${style} realistic`,
+  const svg = el('svg', { id, class: `barbell full ${style} realistic`,
     viewBox: `0 0 ${scene.width} ${scene.height}`, role: 'group',
     'aria-label': `${exploded ? 'Exploded' : 'Assembled'} loaded bar, ${C.both(solution.totalLb)}, ${stackLabel}`,
     'data-exploded': exploded });
+  const minimumLegibleWidth = Math.max(320, scene.width * 12 / (exploded ? 14 : 10));
+  const visibility = el('style');
+  visibility.textContent = !exploded && theme === 'custom'
+    ? `@container plate-stage (width < ${minimumLegibleWidth}px) { #${id} .barbell-plate-label { display: none; } }` : '';
+  svg.append(visibility);
   const defs = el('defs');
   const angle = exploded ? 'exploded' : 'assembled';
   for (const token of Object.keys(C.PLATE_COLOURS)) {
@@ -129,6 +146,20 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     defs.append(filter);
   }
   svg.append(defs);
+  // Themed fills are arbitrary colours: one filter per distinct fill, made on
+  // first use from the same luminance matrix (custom keeps the token filters).
+  const fillFilters = new Map();
+  const filterFor = (token, fill) => {
+    if (theme === 'custom') return `${id}-${token}`;
+    const key = fill.slice(1).toLowerCase();
+    if (!fillFilters.has(key)) {
+      const filter = el('filter', { id: `${id}-fill-${key}`, 'color-interpolation-filters': 'sRGB' });
+      filter.append(el('feColorMatrix', { type:'matrix', values: plateTintMatrixForFill(fill, style).join(' ') }));
+      defs.append(filter);
+      fillFilters.set(key, filter.getAttribute('id'));
+    }
+    return fillFilters.get(key);
+  };
   const root = el('g', { transform: `translate(${scene.width/2} ${scene.height/2})` });
   svg.append(root);
   const point = x => ({ x: x * scene.axisX, y: x * scene.axisY });
@@ -152,7 +183,7 @@ function realisticBarbellSVG(solution, style, exploded = false) {
   const focusable = [];
   for (const d of [...scene.discs].sort((a, b) => b.x - a.x)) {
     const token = C.plateColorToken(d.plate, style);
-    const colour = C.plateColour(token);
+    const colour = plateThemeColour(d.plate, theme, style);
     const side = d.side < 0 ? 'left' : 'right';
     // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
     const x = d.x - d.depth/2;
@@ -164,25 +195,62 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     // inspection's plate activation all land here.
     group.append(el('ellipse', { class:'barbell-plate-target', cx:x, cy:d.y, rx:d.faceRadius, ry:d.radius, fill:'transparent' }));
     focusable.push({ side: d.side, index: d.index, group });
-    const name = plateSpriteName(d.plate, style, exploded);
+    const name = plateSpriteName(d.plate, style, exploded, theme);
     const meta = PLATE_SPRITES.sprites[name];
     const k = d.radius / meta.faceRadius;
     const frame = { x: x - meta.faceCenter[0] * k, y: d.y - meta.faceCenter[1] * k, width: meta.size[0] * k, height: meta.size[1] * k };
     art.append(el('image', { class:'barbell-plate-face', href:spriteURL(name), ...frame, 'data-sprite':name,
-      'data-center-x':d.x, preserveAspectRatio:'none', filter:`url(#${id}-${token})` }));
+      'data-center-x':d.x, preserveAspectRatio:'none', filter:`url(#${filterFor(token, colour.fill)})` }));
     const clipID = `${id}-hub-${side}-${d.index}`;
     const clip = el('clipPath', { id:clipID });
     clip.append(el('ellipse', { cx:x, cy:d.y, rx:d.faceRadius*meta.hubRadius, ry:d.radius*meta.hubRadius }));
     defs.append(clip);
     art.append(el('image', { class:'barbell-plate-hub', href:spriteURL(name), ...frame,
       preserveAspectRatio:'none', 'clip-path':`url(#${clipID})` }));
+    // Theme details the sprites do not bake: a colour band on the rim and a
+    // ring at the hub edge in the numeral colour, drawn as ellipse strokes.
+    const themeDetails = plateThemeDescription(theme).details || [];
+    if (themeDetails.includes('colourBand') && colour.band) {
+      art.append(el('ellipse', { class:'barbell-plate-band', cx:x, cy:d.y, rx:d.faceRadius*.985, ry:d.radius*.985,
+        fill:'none', stroke:colour.band, 'stroke-width':Math.max(1.5, d.radius*.045) }));
+    }
+    if (themeDetails.includes('hubRing')) {
+      art.append(el('ellipse', { class:'barbell-plate-hub-ring', cx:x, cy:d.y, rx:d.faceRadius*meta.hubRadius*1.12, ry:d.radius*meta.hubRadius*1.12,
+        fill:'none', stroke:colour.ink, 'stroke-width':Math.max(1, d.radius*.03) }));
+    }
+    // The denomination is printed on the face beside the hub, value over unit,
+    // foreshortened with the face like the approved plate-loading mockups.
     const labelSize = exploded ? 14 : 10;
-    const label = el('text', { class:'barbell-plate-label', x, y:d.y-d.radius*.48,
-      'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800,
+    // The print scales with the plate (the value is ~22% of its radius, as on
+    // a real disc); the font-size attribute stays the legibility baseline.
+    // Centred in the band between the sprite's hub insert and the rim.
+    const hubEdge = meta.hubRadius ?? .25, rimEdge = .92;
+    const printX = x + d.faceRadius * (hubEdge + rimEdge) / 2, squash = Math.max(.35, d.faceRadius / d.radius);
+    const grow = d.radius * .22 / labelSize;
+    const print = el('g', { class:'barbell-plate-print', 'font-family':PLATE_PRINT_FONT,
+      transform:`translate(${printX} ${d.y}) scale(${squash * grow} ${grow}) translate(${-printX} ${-d.y})` });
+    const label = el('text', { class:'barbell-plate-label', x:printX, y:d.y - labelSize * .06, 'font-stretch':'condensed',
+      'text-anchor':'middle', 'font-size':labelSize, 'font-weight':800, 'fill-opacity':.94,
       fill:colour.ink, 'data-side':side, 'data-stack-index':d.index, 'data-plate-value':d.plate.value,
       'data-plate-denomination':C.plateLabel(d.plate) });
-    label.textContent = C.trim(d.plate.value, 2);
+    if (theme === 'custom') {
+    label.textContent = d.plate.unit === solution.bar.unit ? String(d.plate.value) : C.plateLabel(d.plate);
     art.append(label);
+    } else {
+    label.textContent = String(d.plate.value);
+    const unit = el('text', { class:'barbell-plate-unit', x:printX, y:d.y + labelSize * .78,
+      'text-anchor':'middle', 'font-size':Math.round(labelSize * .64), 'font-weight':800, 'fill-opacity':.94, 'font-stretch':'condensed', 'letter-spacing':.4,
+      fill:colour.ink });
+    unit.textContent = d.plate.unit.toUpperCase();
+    print.append(label, unit);
+    // Account for both the SVG fit and the face-print transform. The exact
+    // screen text below remains readable when the physical stamp cannot.
+    const key = `${id}-print-${side}-${d.index}`;
+    print.id = key;
+    const minWidth = scene.width * 12 / (labelSize * squash * grow);
+    visibility.textContent += `@container plate-stage (width < ${minWidth}px) { #${key} { display: none; } }`;
+    art.append(print);
+    }
   }
   focusable.sort((a, b) => (a.side - b.side) || (a.index - b.index));
   for (const { group } of focusable) root.append(group);
@@ -195,8 +263,8 @@ function realisticBarbellSVG(solution, style, exploded = false) {
     label.textContent = solution.collarLb > 0 ? 'bar + collars' : 'bar only';
     root.append(label);
   }
-  return { svg, solution, bar:solution.bar, plateStyle:style, scene,
-    minimumLegibleWidth: Math.max(320, scene.width * .55), baseLabelSize: exploded ? 12 : 10 };
+  return { svg, solution, bar:solution.bar, plateStyle:style, plateTheme:theme, scene,
+    minimumLegibleWidth, baseLabelSize: exploded ? 14 : 10 };
 }
 
 // One responsive shell for every complete-bar presentation. Inline stages fit
@@ -215,36 +283,80 @@ export function barbellStage(rendered, {
   const inspection = emphasis === "expanded";
   // The inspection opens straight ahead, assembled; a tap explodes it.
   let exploded = false;
-  // The inspection shows the solid where WebGL2 exists; the sprite SVG then
-  // becomes the focusable, spoken layer over it (same plates, same order).
-  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { exploded }) : null;
+  const surface = uiText("div", "barbell-inspection-surface", "");
+  const captions = uiText("div", "barbell-disc-captions", "");
+  const discs = rendered.solution.perSide.flatMap(({ plate, count }) => Array.from({ length: count }, () => plate));
+  const labels = discs.map((plate, index) => {
+    const label = uiText("span", "barbell-disc-caption", `${plate.value} ${plate.unit}`);
+    label.dataset.stackIndex = String(index);
+    label.tabIndex = 0;
+    label.setAttribute("role", "img");
+    label.setAttribute("aria-label", `${plate.value} ${plate.unit} plate, ${index + 1} from inside, one side shown`);
+    captions.append(label);
+    return label;
+  });
+  const positionCaption = (index, x, y) => {
+    const label = labels[index], bounds = label.getBoundingClientRect();
+    const half = bounds.width / 2 + 2;
+    label.style.left = `clamp(${half}px, ${x}%, calc(100% - ${half}px))`;
+    label.style.top = `clamp(4px, ${y}%, calc(100% - ${bounds.height + 4}px))`;
+  };
+  const solid = inspection ? barbellGL(rendered.solution, rendered.plateStyle || "steel", { plateTheme: rendered.plateTheme || "custom",
+    exploded,
+    onProject: (positions, settled) => {
+      captions.hidden = !exploded || !settled;
+      for (const { index, x, y } of positions) positionCaption(index, x, y);
+    },
+  }) : null;
   const live = solid?.supported ? solid : null;
   stage.classList.toggle("solid", Boolean(live));
   const paint = () => {
-    const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded);
+    const drawing = realisticBarbellSVG(rendered.solution, rendered.plateStyle || "steel", exploded, rendered.plateTheme || "custom");
+    captions.hidden = !exploded || Boolean(live);
     if (live) {
-      drawing.svg.classList.add("barbell-a11y-layer");
-      track.replaceChildren(live.canvas, drawing.svg);
+      live.canvas.setAttribute("aria-hidden", "true");
+      surface.replaceChildren(live.canvas, captions);
+      const width = inspectorWidth(barbellLayout(rendered.solution, rendered.plateStyle || "steel", exploded ? 1 : 0, {}, rendered.plateTheme || "custom"), 0, exploded);
+      surface.style.minWidth = `${width}px`;
+      track.replaceChildren(surface);
       live.setExploded(exploded);
+    } else if (inspection) {
+      // The sprite fallback uses the same near-side composition. Its labels
+      // are screen text, so camera projection cannot shrink their type.
+      const scene = drawing.scene;
+      const near = scene.discs.filter(d => d.side < 0);
+      const left = Math.min(-scene.end * scene.axisX - 12, ...near.map(d => d.x - d.faceRadius - d.depth));
+      const right = -scene.shoulder * scene.axisX + (exploded ? 18 : 76);
+      const width = right - left;
+      drawing.svg.setAttribute("viewBox", `${scene.width / 2 + left} 0 ${width} ${scene.height}`);
+      for (const n of drawing.svg.querySelectorAll('[tabindex]')) n.removeAttribute('tabindex');
+      drawing.svg.setAttribute('aria-hidden', 'true');
+      for (const d of near) {
+        positionCaption(d.index, (d.x - left) / width * 100, 86);
+      }
+      const minimum = inspectorWidth(barbellLayout(rendered.solution, rendered.plateStyle || "steel", exploded ? 1 : 0, {}, rendered.plateTheme || "custom"), 0, exploded);
+      const captionSpan = Math.max(112, ...labels.map(label => label.getBoundingClientRect().width + 32));
+      surface.style.minWidth = `${exploded ? Math.max(minimum, discs.length * captionSpan + 32) : 0}px`;
+      surface.replaceChildren(drawing.svg, captions);
+      track.replaceChildren(surface);
+      track.style.setProperty("--barbell-natural-width", `${exploded ? width : 0}px`);
     } else {
       track.replaceChildren(drawing.svg);
     }
-    track.style.setProperty("--barbell-natural-width", `${exploded ? drawing.scene.width : 0}px`);
     stage.classList.toggle("exploded", exploded);
   };
   paint();
   stage.append(track);
+  if (!inspection) stage.append(barbellReadout(rendered.solution));
   if (inspection) {
     // One quiet line says which view this is and what a tap does; the same
     // control is the accessible toggle. Tapping the artwork toggles too.
-    const wording = () => live
-      ? (exploded ? "Exploded · tap to assemble" : "Assembled · tap to explode")
-      : (exploded ? "38° inspection · tap to collapse" : "Front view · tap to inspect");
+    const wording = () => exploded ? "Assemble stack" : "Inspect plates";
     const toggle = uiText("button", "btn ghost sm barbell-explode", wording());
     toggle.type = "button";
     toggle.setAttribute("aria-pressed", "false");
     toggle.setAttribute("aria-label", `${toggle.textContent}. Explode plates`);
-    const swipe = uiText("span", "sub", "Swipe across · inside → outside");
+    const swipe = uiText("span", "sub", "Scroll for more plates");
     swipe.hidden = true;
     const focusNote = uiText("span", "sub barbell-focus-note", "");
     focusNote.setAttribute("aria-hidden", "true");
@@ -254,44 +366,24 @@ export function barbellStage(rendered, {
       toggle.textContent = wording();
       toggle.setAttribute("aria-label", `${toggle.textContent}. ${exploded ? "Assemble bar" : "Explode plates"}`);
       toggle.setAttribute("aria-pressed", String(exploded));
-      swipe.hidden = !exploded || Boolean(live);
+      swipe.hidden = !exploded || track.scrollWidth <= track.clientWidth + 1;
     };
     toggle.addEventListener("click", flip);
     // A plate is focusable so its name can be read; activating it must not
     // flip the view under a screen-reader user.
-    track.addEventListener("click", (event) => { if (event.target.closest("[tabindex]")) return; flip(); });
-    // Keyboard users see which hidden plate holds focus over the solid.
+    let down = null;
+    track.addEventListener("pointerdown", event => { down = { x: event.clientX, y: event.clientY }; });
+    track.addEventListener("click", (event) => {
+      if (event.target.closest(".barbell-disc-caption")) return;
+      if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 8) { down = null; return; }
+      down = null;
+      flip();
+    });
+    // Keep the focused plate's description visible alongside the diagram.
     track.addEventListener("focusin", (event) => { focusNote.textContent = event.target.getAttribute?.("aria-label") || ""; });
     track.addEventListener("focusout", () => { focusNote.textContent = ""; });
     footer.append(toggle, swipe, focusNote);
-    if (live) {
-      // Backdrop and reset are the keyboard path for what drag, wheel, and
-      // pinch do by hand; the solid itself is not a control.
-      live.canvas.setAttribute("aria-hidden", "true");
-      const controls = uiText("div", "barbell-scene-controls", "");
-      const group = uiText("div", "barbell-backdrop", "");
-      group.setAttribute("role", "group");
-      group.setAttribute("aria-label", "Backdrop");
-      let current = "studio";
-      for (const [name, preset] of Object.entries(BACKDROPS)) {
-        const button = uiText("button", "btn ghost sm", preset.label);
-        button.type = "button";
-        button.dataset.backdrop = name;
-        button.setAttribute("aria-pressed", String(name === current));
-        button.addEventListener("click", () => {
-          current = name;
-          live.setBackdrop(name);
-          for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other.dataset.backdrop === name));
-        });
-        group.append(button);
-      }
-      const reset = uiText("button", "btn ghost sm barbell-reset-view", "Reset view");
-      reset.type = "button";
-      reset.setAttribute("aria-label", "Reset view. Returns the camera to the front view");
-      reset.addEventListener("click", () => live.reset());
-      controls.append(group, reset);
-      stage.append(controls);
-    }
+
   } else if (onExpand) {
     const button = uiText("button", "btn ghost sm barbell-expand", "Larger view ↗");
     button.type = "button";
@@ -311,14 +403,32 @@ export function barbellStage(rendered, {
     list.setAttribute("aria-label", "Plates per side, inside to outside");
     for (const count of rendered.solution.perSide) {
       const row = uiText("li", "", "");
-      row.append(plateBadgeSVG(count.plate, rendered.plateStyle || "steel"),
-        uiText("span", "mono", `${C.plateLabel(count.plate)} × ${count.count} per side`));
+      row.append(plateBadgeSVG(count.plate, rendered.plateStyle || "steel", { exact: true, plateTheme: rendered.plateTheme || "custom" }),
+        uiText("span", "mono", `${count.plate.value} ${count.plate.unit} × ${count.count} per side`));
       list.append(row);
     }
     if (!rendered.solution.perSide.length) list.append(uiText("li", "", rendered.solution.collarLb > 0 ? "Bar + collars" : "Bar only"));
     stage.append(list);
   }
+  stage.dispose = () => live?.dispose();
   return stage;
+}
+
+// Exact collar-outward order on both mirrored sleeves. SVG face stamps scale
+// with the physical bar; this companion text stays at a readable CSS size.
+export function barbellReadout(solution) {
+  const readout = uiText("div", "barbell-plate-readout", "");
+  if (!solution.perSide.length) return readout;
+  // The SVG already exposes each plate as a focusable, precisely named item.
+  readout.setAttribute("aria-hidden", "true");
+  readout.append(uiText("span", "barbell-plate-direction", "Each side · inside → outside"));
+  let index = 0;
+  for (const { plate, count } of solution.perSide) for (let n = 0; n < count; n++) {
+    const item = uiText("span", "barbell-plate-denomination", C.plateLabel(plate));
+    item.dataset.stackIndex = ++index;
+    readout.append(item);
+  }
+  return readout;
 }
 
 const uiText = (tag, className, value) => {
@@ -348,7 +458,7 @@ const summaryRow = (label, value, warning = false) => {
 // plate family so the rack is readable at a glance. `solution` is the exact
 // object handed to the renderer, so the numbers and steel can never drift
 // through a second calculation in the view. Mirrors native LoadoutSummaryView.
-export function loadoutSummary(requestedLb, solution, { compact = false, plateStyle = "steel" } = {}) {
+export function loadoutSummary(requestedLb, solution, { compact = false, plateStyle = "steel", plateTheme = "custom" } = {}) {
   const difference = requestedLb == null ? null : solution.totalLb - requestedLb;
   const sign = difference > .005 ? "+" : "";
   const summary = dom("div", `card load-summary${compact ? " compact" : ""}`);
@@ -386,8 +496,8 @@ export function loadoutSummary(requestedLb, solution, { compact = false, plateSt
     cell.setAttribute("role", "listitem");
     const text = dom("div", "loadout-cell-text");
     text.append(dom("strong", "mono", `${count.count * 2} × ${C.plateLabel(count.plate)}`),
-      dom("span", "sub", plateFamilyLabel(plateFamily(count.plate, plateStyle))));
-    cell.append(plateBadgeSVG(count.plate, plateStyle), text);
+      dom("span", "sub", plateFamilyLabel(plateThemeFamily(count.plate, plateTheme, plateStyle))));
+    cell.append(plateBadgeSVG(count.plate, plateStyle, { plateTheme }), text);
     cells.append(cell);
   }
   if (solution.collarLb > 0) {

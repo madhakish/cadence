@@ -112,7 +112,7 @@ for(let i=0;i<2;i++){
 assert.equal(p.cycleNumber,before+1);assert.equal(p.currentWeek,1);
 assert.deepEqual(T.tfhCurrentPosition(p,await db.Sessions.all()).completedCycles,[1]);
 const bundle=await db.exportBundle();
-assert.equal(bundle.schemaVersion,14);db.validateBackup(bundle);
+assert.equal(bundle.schemaVersion,15);db.validateBackup(bundle);
 await db.importBundle(bundle,{createCheckpoint:false});
 const restored=await db.Programs.byStableId(program.uuid);
 assert.deepEqual(restored.tfhPolicy,p.tfhPolicy);

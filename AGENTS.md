@@ -20,6 +20,22 @@ Cadence is a single-user, local-first training logbook with an iOS 17+ app and a
 vanilla-JavaScript PWA. There is no backend recovery source. `CadenceCore` owns
 Foundation-only deterministic logic; `web/app/js/core.js` mirrors it.
 
+## Product priority: iOS first
+
+- Madhakish is the only current user and uses the iOS app exclusively. Web has
+  zero users. Prioritize his actual training workflow.
+- iOS is the primary product and main goal. Lead design, implementation, visual
+  review, and validation with iOS. Keep web functional and shared domain logic
+  aligned, but do not let web polish or easier browser tooling displace iOS work.
+- Deliver an absolutely professional, high-end iOS experience: deliberate
+  interaction design, polished native layouts, premium graphics, and convincing
+  photorealistic equipment. Rudimentary geometry, placeholder imagery, and
+  shortcuts are not an acceptable finished visual result.
+- Judge visual completion in the actual iOS app on a simulator or device;
+  browser screenshots and web tests cannot establish native quality. Without
+  local Xcode, pursue available native CI/captures within the authorized scope
+  and report pending native checks rather than shifting the main effort to web.
+
 ## Rules that always apply
 
 - Never delete/reset/replace a store or tell a user to reinstall as a fix.

@@ -6,7 +6,7 @@ import CadenceCore
 @MainActor
 final class RestoreContentTests: XCTestCase {
     func testWeightOnlyRepairReachesRestoreWithoutChangingIdentity() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV13.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV14.self)
         let container = try ModelContainer(for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
         let context = container.mainContext
@@ -35,7 +35,8 @@ final class RestoreContentTests: XCTestCase {
         entries[0]["sets"] = sets; sessions[0]["exercises"] = entries; json["sessions"] = sessions
         let repaired = try JSONSerialization.data(withJSONObject: json)
         let shallow = try XCTUnwrap(ImportService.namedRestorePreview(repaired, context: context))
-        XCTAssertTrue(shallow.isNoOp, "The reproduction preserves the shallow preview's names and counts")
+        XCTAssertFalse(shallow.isNoOp, "A weight-only repair is named, not hidden behind equal counts")
+        XCTAssertEqual(shallow.sessions.map(\.status), [.changed])
         XCTAssertFalse(try ImportService.matchesCurrentData(repaired, context: context))
         XCTAssertEqual(set.weightLb, 100, "Preflight must not mutate stored data")
 

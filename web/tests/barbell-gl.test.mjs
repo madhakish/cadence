@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!doctype html><html><body></body></html>');
 globalThis.window = dom.window; globalThis.document = dom.window.document;
 const C = await import('../app/js/core.js');
-const { latheMesh, cylinderMesh, fitDistance, barbellGL, BACKDROPS } = await import('../app/js/barbell-gl.js');
+const { latheMesh, cylinderMesh, fitDistance, barbellGL, FIELD_OF_VIEW } = await import('../app/js/barbell-gl.js');
 const { plateProfile, barbellLayout } = await import('../app/js/barbell-inspector.js');
 
 const profile = plateProfile('bumper', 450, 60);
@@ -39,10 +39,9 @@ assert.ok(phone > wide, 'a narrower viewport needs a farther camera to fit the b
 assert.ok(phone > layout.extent, 'the eye sits outside the bar');
 const yawed = fitDistance(whole, 1280 / 300, 38), endOn = fitDistance(whole, 1280 / 300, 90);
 assert.ok(yawed > wide && yawed > layout.extent * Math.sin(38 * Math.PI / 180) + layout.maxRadius, 'a yawed bar backs the camera off by its reach toward the eye');
-assert.ok(endOn - layout.extent > layout.maxRadius * 1.7 / Math.tan(11 * Math.PI / 180) - 1e-9, 'looking down the bar, the near plate still fits the frame');
+assert.ok(endOn - layout.extent > layout.maxRadius * 1.7 / Math.tan(FIELD_OF_VIEW / 2 * Math.PI / 180) - 1e-9, 'looking down the bar, the near plate still fits the frame');
 
 const gl = barbellGL(solution, 'steel', { exploded: true });
 assert.equal(gl.supported, false, 'jsdom has no WebGL2, so the stage keeps the sprite SVG');
 assert.ok(gl.canvas instanceof dom.window.HTMLCanvasElement);
-assert.deepEqual(Object.keys(BACKDROPS), ['studio', 'dark', 'paper']);
 console.log('Barbell WebGL inspector: lathe meshes, camera fit, and no-WebGL fallback passed');

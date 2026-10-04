@@ -4,10 +4,12 @@ Rules that must not silently change. Each was written because the opposite
 behaviour shipped and cost something real — a fabricated milestone, a stranded
 schedule, a workout that timed itself.
 
-This file is the readable specification. It is also **machine-checked**:
-`.github/scripts/check-invariants.mjs` verifies that every rule below is
-asserted by at least one test on every platform it applies to, and that no
-test cites a rule that does not exist here. It runs in `npm test` and in CI.
+This file is the readable specification. Its source citations are
+**machine-checked**: `.github/scripts/check-invariants.mjs` verifies that each
+verifiable rule ID appears in the scanned test sources for its platforms and
+that those sources cite no unknown rule. It runs in `npm test` and CI, but does
+not prove that an assertion exists, executes, or checks the stated behavior.
+Required executed-test evidence is described in [CI acceptance](../CI-ACCEPTANCE.md).
 
 ## How to use it
 
@@ -32,10 +34,10 @@ listing the fix commits with draft entries. Register the rule or reply why it
 is not one (a one-off, a typo, a build fix); the comment never blocks a merge.
 
 `platforms` values are `core` (CadenceCore + `web/app/js/core.js` parity),
-`web` (JS runtime/UI), and `native` (SwiftUI). Native UI rules cannot be
-asserted in this workspace and are marked `unverifiable` — they are documented
-here so a reviewer can check them by hand, and are excluded from the coverage
-gate rather than being silently absent.
+`web` (JS runtime/UI), and `native` (SwiftUI). Rules marked `unverifiable` are
+excluded from this source-citation check and still require explicit review or
+execution evidence. Native UI execution belongs to the separate XCTest gates;
+this scanner does not establish their coverage.
 
 ---
 
@@ -95,6 +97,17 @@ sets at the suggested physical load must not create a false below-plan failure.
 This deliberately replaces the former denomination-twin rule, which invented
 performed pounds and inflated progression. Existing historical records cannot
 be reconstructed from today's inventory; do not silently rewrite them.
+
+### INV-PLATE-LABELS-PRESERVE-INPUT
+*platforms: core*
+
+Plate labels retain the stored denomination's precision and unit. A loadout
+summary preserves the supplied collar-outward order, including reverse-mode
+input; formatting never sorts an already resolved stack.
+
+> A reverse-mode bar drawn as 45, 10, 25, 2.5 lb was described as 45, 25, 10,
+> 2.5 lb on web. A custom 1.125 kg plate was printed as 1.13 kg. Both made the
+> loading instructions disagree with the authoritative plate data.
 
 ### INV-COMP-IS-VOLUME
 *platforms: core*
@@ -181,6 +194,28 @@ and its carried weight leads the set label.
 > 60 lb ruck and a stroll around the block recorded identically. The pack is
 > the training variable — progressing it is the entire point of rucking — and
 > barbell-sized 2.5 lb steps are the wrong instrument for loading one.
+
+### INV-CARRY-LOGS-DISTANCE
+*platforms: core, web*
+
+A loaded carry — Farmer, Suitcase, Front-rack, Overhead — logs **sets of
+distance** with a **per-hand** load. A new carry set starts at the previous
+set's distance, or **40 yd** when it is the first, stored in the existing
+`distanceMiles` (yards ÷ 1760) and entered and shown in yards. The load stays
+per implement with the movement's implement count, and no duration branch
+zeroes it. A distance carry adds **nothing to lifting tonnage** — like a ruck,
+its distance keeps it out of the load × reps total, where 50 lb for 40 yd would
+count like eight five-rep sets. Carries are compared only with each other, by
+per-hand load × yards × implements × sides: a distance carry earns heaviest-load
+and volume records and never a scheme or rep PR.
+Which movements carry is a named registry, not the library row's type, and a
+carry set already holding reps and no distance stays a rep set, visible and
+editable.
+
+> Carries were dumbbell sets × reps: a first farmer walk opened at 5 lb × 5
+> reps, the hero printed "5 lb · 2.3 kg" with no "each", and the only distance
+> field was the conditioning sheet's miles, where 40 yd reads "0.02 mi". The
+> training variables — load in each hand and ground covered — had nowhere to go.
 
 ### INV-ANATOMY-EXPLICIT
 *platforms: web*

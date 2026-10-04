@@ -7,7 +7,7 @@ import { assertProgramEquipmentAllowed } from "../program-equipment.js";
 import { tfhCurrentPosition, tfhPrescription, tfhSynchronize, tfhPractice } from "../tfh.js";
 import { BODY_SITES, CATEGORIES, watchNote, COPY } from "../constants.js";
 import { Sessions, Exercises, Tracks, Gyms, Milestones, Programs, Settings, CoachingDecisions, Checkins, iso, runAll, sessionBelongsToProgram , Intervals, intervalSnapshots } from "../db.js";
-import { barbellSVG, barbellStage, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
+import { barbellSVG, barbellStage, barbellReadout, dumbbellSVG, loadoutSummary, mixedEquipmentNote, prescriptionPlateDetails } from "../barbell.js";
 import { effectiveAccessoryPercent, coachingReport } from "../coaching-adapter.js";
 import * as ProgrammingDefaults from "../programming-defaults.js";
 import { exerciseDetail, exercisePickerList } from "./settings.js";
@@ -222,7 +222,46 @@ export async function openSession(id) {
     ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
     : null;
   const workoutName = sessionDayName || session.programTag?.programName || "Workout";
-  const save = () => Sessions.save(session);
+  // Logger edits redraw optimistically, then persist. Writes are serialized
+  // so a later save cannot race an earlier failed one, and every write saves
+  // the whole session. persist() rejects for the few callers that undo their
+  // own fields. commit() owns failure: when the failed write is the last one
+  // queued, it reloads the durable session from IndexedDB, redraws, says the
+  // change was not saved and rejects, so the screen never shows work that a
+  // reload would lose (#261). A failed write with a later one queued is
+  // superseded: that write carries this change along with the newer edits.
+  let saving = Promise.resolve();
+  let queued = 0;
+  let discarded = false;
+  let lastBody = null;
+  const persist = () => {
+    queued += 1;
+    const write = saving.catch(() => {})
+      .then(() => (discarded ? undefined : Sessions.save(session)))
+      .finally(() => { queued -= 1; });
+    saving = write;
+    return write;
+  };
+  const reload = async () => {
+    const stored = await Sessions.get(session.id);
+    if (!stored || discarded) return;
+    for (const key of Object.keys(session)) delete session[key];
+    Object.assign(session, stored);
+    gymState.value = await Gyms.resolve(session.gymId, session.gymName);
+    currentSE = null;
+    if (lastBody) renderBody(lastBody);
+  };
+  // The rollback joins the chain too: a write queued after it waits until
+  // memory is the reloaded durable state, so memory and store agree.
+  const commit = () => (saving = persist().catch(async (error) => {
+    console.error("Workout change was not saved", error);
+    if (queued > 0) return;
+    try { await reload(); } catch (reloadError) { console.error("Reloading the saved workout failed", reloadError); }
+    ui.toast(`Couldn't save — your unsaved changes were undone. ${error?.message || ""}`.trim());
+    throw error;
+  }));
+  // Fire-and-forget form for the redraw-then-save call sites.
+  const save = () => { commit().catch(() => {}); };
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
   // days and slotless extra work are different exposures.
@@ -445,8 +484,9 @@ export async function openSession(id) {
   }
 
   function renderBody(body) {
+    lastBody = body;
     ui.clear(body);
-    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>Sessions.save(session)));
+    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>commit().then(()=>true,()=>false)));
     session.exercises.sort((a, b) => a.order - b.order);
     const current = currentEntry();
     const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
@@ -545,23 +585,31 @@ export async function openSession(id) {
   // pounds first, kilograms after — stated once, above the set rows. The load
   // is the set's own recorded/prescribed value, not a re-solve. Mirrors
   // native CurrentSetHero.
-  const currentSetHero = (ex, set, phaseSets) => {
+  const currentSetHero = (ex, set, phaseSets, exerciseName) => {
     const ordinal = phaseSets.indexOf(set) + 1;
     const position = `${set.isWarmup ? "Warmup" : "Working set"} ${ordinal} of ${phaseSets.length}`;
     const basis = set.loadBasis || ex?.loadBasis || C.inferredLoadBasis(ex?.type);
+    const carryYards = C.carryYards(exerciseName, set.distanceMiles);
     const load = ui.h("div", { class: "current-set-load", "aria-label": set.weightLb > 0
-      ? `Set load ${C.both(set.weightLb)}${C.loadBasisSuffix(basis)}` : "Bodyweight" });
+      ? `Set load ${C.heroLoadLabel(set.weightLb, basis)}` : "Bodyweight" });
     if (set.weightLb > 0) {
       load.append(ui.h("span", { class: "load-primary load-numeral mono", text: C.trim(set.weightLb) }), ui.h("span", { class: "unit", text: " lb " }),
         ui.h("span", { class: "load-secondary mono", text: C.trim(C.kgFromLb(set.weightLb)) }), ui.h("span", { class: "unit", text: " kg " }));
+      // The basis on the number itself: "50 lb · 22.7 kg each". Without it a
+      // per-hand load reads as the total in both hands.
+      const suffix = C.loadBasisSuffix(basis).trim();
+      if (suffix) load.append(ui.h("span", { class: "unit", text: suffix }));
     } else {
       load.append(ui.h("span", { class: "load-primary load-numeral mono", text: "BW" }));
     }
     return ui.h("div", { class: "current-set-hero", "aria-label": position },
       ui.h("span", { class: "eyebrow accent", text: `${position} ` }),
       ui.h("div", { class: "current-set-reps" },
-        ui.h("span", { class: "count mono", text: String(set.reps) }),
-        ui.h("span", { class: "unit", text: set.isPerSide ? " reps / side" : " reps" }),
+        ...(carryYards !== null
+          ? [ui.h("span", { class: "count mono", text: C.trim(carryYards) }),
+            ui.h("span", { class: "unit", text: set.isPerSide ? " yd / side" : " yd" })]
+          : [ui.h("span", { class: "count mono", text: String(set.reps) }),
+            ui.h("span", { class: "unit", text: set.isPerSide ? " reps / side" : " reps" })]),
         set.prescriptionBlock === "amrap" ? ui.h("span", { class: "pill accent", text: "AMRAP" }) : null),
       load,
       ui.h("span", { class: "sub", text: basis === "totalBar" ? "Set load · bar included" : `Set load · ${C.loadBasisLabel(basis)}` }));
@@ -602,7 +650,7 @@ export async function openSession(id) {
     const currentSet = se.sets[C.currentSetIndex(se.sets)];
     if (emphasized && workSets.length) card.append(setTrack(workSets, currentSet));
     if (emphasized && currentSet && !(ex && (ex.type === "conditioning" || ex.type === "timed"))) {
-      card.append(currentSetHero(ex, currentSet, se.sets.filter((set) => !!set.isWarmup === !!currentSet.isWarmup)));
+      card.append(currentSetHero(ex, currentSet, se.sets.filter((set) => !!set.isWarmup === !!currentSet.isWarmup), se.exerciseName));
     }
     const last = lastTimeLine(se);
     if (last) card.append(ui.h("div", { class: "sub", style: { margin: "0 0 6px" }, text: last }));
@@ -726,6 +774,8 @@ export async function openSession(id) {
     // rep-based conditioning (burpees, type bodyweight) keeps the lifting row.
     const isCardio = ex && ex.type === "conditioning";
     const isTimed = ex && ex.type === "timed";
+    // [INV-CARRY-LOGS-DISTANCE] A distance carry reads "50 lb each × 40 yd".
+    const carryYards = C.carryYards(se.exerciseName, s.distanceMiles);
     const wt = isCardio
       ? ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editCardioSet(se, s, body) },
           ui.h("span", { class: "wt mono", text: C.cardioSetLabel(s.distanceMiles, s.durationSeconds, s.inclinePercent, s.weightLb, s.flights) }),
@@ -736,7 +786,8 @@ export async function openSession(id) {
           ui.h("span", { class: "sub", text: " hold time" }))
         : ui.h("button", { class: "btn ghost", style: { padding: "4px 8px", minHeight: "40px" }, onClick: () => editSet(se, s, body) },
           ui.h("span", { class: "wt mono" + (s.isWarmup ? " muted" : ""), text: s.weightLb === 0 ? "BW" : `${C.trim(u === "kg" ? C.kgFromLb(s.weightLb) : s.weightLb)} ${u}${C.loadBasisSuffix(s.loadBasis)}` }),
-          ui.h("span", { class: "sub mono", text: ` × ${s.reps}${s.isPerSide ? "/side" : ""}` }));
+          ui.h("span", { class: "sub mono", text: ` × ${carryYards !== null
+            ? C.carryDistanceLabel(carryYards, s.isPerSide) : `${s.reps}${s.isPerSide ? "/side" : ""}`}` }));
     const state = s.status === "completed" ? "COMPLETED"
       : s.status === "skipped" ? "SKIPPED"
         : isCurrent ? "NOW" : s.isWarmup ? "WARMUP" : "UPCOMING";
@@ -755,7 +806,7 @@ export async function openSession(id) {
     }
     if (s.autoregReason) tags.append(ui.h("span", { class: "pill warn", text: `↓ ${s.autoregReason}` }));
     if (s.bodyFlagSite) tags.append(ui.h("span", { class: "pill hard", text: "⚡︎" }));
-    if (!isCardio && !isTimed && Number.isFinite(s.plannedWeightLb) && Number.isFinite(s.plannedReps)
+    if (!isCardio && !isTimed && carryYards === null && Number.isFinite(s.plannedWeightLb) && Number.isFinite(s.plannedReps)
         && (Math.abs(s.plannedWeightLb - s.weightLb) > 0.001 || s.plannedReps !== s.reps)) {
       tags.append(ui.h("span", { class: "pill", text: `planned ${ui.fmtWeight(s.plannedWeightLb)}×${s.plannedReps}` }));
     }
@@ -813,7 +864,7 @@ export async function openSession(id) {
             onSave: async (seconds) => {
               const previousDuration = s.durationSeconds, previousStatus = s.status;
               s.durationSeconds = seconds; s.status = "completed";
-              try { await save(); }
+              try { await persist(); }
               catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
               focusAfterVerdict(se, s.status);
               const restToArm = C.restAfterCompleting({ previous: previousStatus, status: s.status, isWarmup: !!s.isWarmup,
@@ -837,11 +888,12 @@ export async function openSession(id) {
     if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
+      const plateTheme = gymState.value?.plateTheme || "custom";
       const solution = plateSolutionForSet(s, selectedBar, gymState.value, ex);
       // Presentation by surface (the current set's stage vs a set row);
       // emphasis by state. State never changes geometry.
       const rendered = barbellSVG(solution, isCurrent ? "full" : "compact", plateStyle,
-        { emphasis: isCurrent ? "current" : "muted" });
+        { emphasis: isCurrent ? "current" : "muted", plateTheme });
       const requestedLb = s.targetWeightLb ?? se.targetWeightLb ?? s.weightLb;
       const wrap = ui.h("div", { class: `barbell-wrap${isCurrent ? " current-loadout" : ""}` });
       if (isCurrent) {
@@ -851,17 +903,18 @@ export async function openSession(id) {
         wrap.append(barbellStage(rendered, {
           caption: "Exact mirrored stack · counts are per side", emphasis: "session",
           onExpand: () => {
-            ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, build: (screen) => {
-              const expanded = barbellSVG(solution, "full", plateStyle);
-              screen.append(barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" }),
-                loadoutSummary(requestedLb, solution, { plateStyle }));
+            let inspectionStage;
+            ui.pushScreen({ title: `${se.exerciseName} · loaded bar`, onClose: () => inspectionStage?.dispose?.(), build: (screen) => {
+              const expanded = barbellSVG(solution, "full", plateStyle, { plateTheme });
+              inspectionStage = barbellStage(expanded, { caption: "Exact mirrored stack · counts are per side", emphasis: "expanded" });
+              screen.append(inspectionStage, loadoutSummary(requestedLb, solution, { plateStyle, plateTheme }));
               const mixed = mixedEquipmentNote(solution); if (mixed) screen.append(mixed);
             } });
           },
-        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle }));
+        }), loadoutSummary(requestedLb, solution, { compact: true, plateStyle, plateTheme }));
         const mixed = mixedEquipmentNote(solution); if (mixed) wrap.append(mixed);
       } else {
-        wrap.append(rendered.svg);
+        wrap.append(rendered.svg, barbellReadout(solution));
       }
       if (solution.isOffTarget) {
         const t = u === "kg" ? C.kgFromLb(solution.totalLb) : solution.totalLb;
@@ -949,8 +1002,13 @@ export async function openSession(id) {
     const firstSetDefaultLb = ex && ex.type === "barbell"
       ? Math.max(baseDefaultLb, C.barLb(C.barById(se.barId || gymState.value?.defaultBarId)))
       : baseDefaultLb;
+    // [INV-CARRY-LOGS-DISTANCE] A distance carry starts at the previous set's
+    // distance, or the default when first; a previous set logged as reps keeps
+    // the entry on reps. Mirrors native startingCarryMiles.
+    const carryMiles = !C.logsCarryDistance(se.exerciseName) ? null
+      : (!last ? C.milesFromYards(C.CARRY_DEFAULT_YARDS) : (last.distanceMiles > 0 ? last.distanceMiles : null));
     const w = durationBased ? carryLb : (last ? last.weightLb : (se.plannedWeightLb ?? firstSetDefaultLb));
-    const r = durationBased ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
+    const r = durationBased || carryMiles !== null ? 1 : (last ? last.reps : (se.plannedReps ?? 5));
     const inheritedLoad = last && C.LOAD_BASES.includes(last.loadBasis)
       ? { loadBasis: last.loadBasis, implementCount: last.implementCount }
       : loadOptions(ex);
@@ -971,6 +1029,7 @@ export async function openSession(id) {
       set.inclinePercent = last.inclinePercent ?? null;
     }
     if (durationBased) set.durationSeconds = durationSeconds;
+    if (carryMiles !== null) set.distanceMiles = carryMiles;
     se.sets.push(set);
     syncSetPlan(se);
   }
@@ -1028,7 +1087,17 @@ export async function openSession(id) {
         c.append(ui.field("Weight (0 = bodyweight)", wInput));
         c.append(ui.field("Unit", ui.seg([{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }], unit, (u) => { unit = u; })));
         let reps = s.reps;
-        c.append(ui.field("Reps", ui.stepper(reps, { min: 0, max: 100, onChange: (v) => { reps = v; } })));
+        // [INV-CARRY-LOGS-DISTANCE] Captured once: a distance carry edits
+        // yards (stored as miles); a carry logged as reps keeps its reps.
+        const carryAtOpen = C.carryYards(se.exerciseName, s.distanceMiles);
+        let yards = carryAtOpen;
+        if (carryAtOpen !== null) {
+          c.append(ui.field(s.isPerSide ? "Distance (yd / side)" : "Distance (yd)", ui.stepper(yards, {
+            min: C.CARRY_YARDS_STEP, max: 2000, step: C.CARRY_YARDS_STEP,
+            format: (v) => C.carryDistanceLabel(v), onChange: (v) => { yards = v; } })));
+        } else {
+          c.append(ui.field("Reps", ui.stepper(reps, { min: 0, max: 100, onChange: (v) => { reps = v; } })));
+        }
         let warm = s.isWarmup, per = s.isPerSide, site = s.bodyFlagSite;
         let stopped = (s.flags || []).includes("stopped early");
         let applyWeightToRemaining = false;
@@ -1037,8 +1106,9 @@ export async function openSession(id) {
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Per side" }), ui.toggle(per, (v) => { per = v; }, "Load entered per side")));
         c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Stopped early" }), ui.toggle(stopped, (v) => { stopped = v; }, "Stopped early")));
         if (!s.isWarmup && se.sets.some((candidate) => candidate !== s && !candidate.isWarmup && candidate.status === "planned")) {
-          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply reps to remaining planned sets" }),
-            ui.toggle(applyRepsToRemaining, (v) => { applyRepsToRemaining = v; }, "Apply reps to remaining planned sets")));
+          const repsLabel = carryAtOpen !== null ? "Apply distance to remaining planned sets" : "Apply reps to remaining planned sets";
+          c.append(ui.h("div", { class: "row" }, ui.h("span", { text: repsLabel }),
+            ui.toggle(applyRepsToRemaining, (v) => { applyRepsToRemaining = v; }, repsLabel)));
           c.append(ui.h("div", { class: "row" }, ui.h("span", { text: "Apply weight to remaining planned sets" }),
             ui.toggle(applyWeightToRemaining, (v) => { applyWeightToRemaining = v; }, "Apply weight to remaining planned sets")));
         }
@@ -1055,9 +1125,15 @@ export async function openSession(id) {
             if (planned > 0 && weightLb > 0 && Math.abs(weightLb - planned) > 6
                 && !window.confirm(`This differs from the planned load by ${C.trim(Math.abs(weightLb - planned))} lb. Confirm the plates and use it?`)) return;
             s.weightLb = weightLb; s.enteredUnit = unit; s.reps = reps;
+            if (carryAtOpen !== null) s.distanceMiles = C.milesFromYards(yards);
             const remaining = se.sets.filter((set) => set !== s && !set.isWarmup && set.status === "planned");
             if (applyWeightToRemaining && !warm) for (const target of remaining) { target.weightLb = weightLb; target.enteredUnit = unit; }
-            if (applyRepsToRemaining && !warm) for (const target of remaining) target.reps = reps;
+            if (applyRepsToRemaining && !warm) {
+              for (const target of remaining) {
+                if (carryAtOpen === null) target.reps = reps;
+                else if (C.carryYards(se.exerciseName, target.distanceMiles) !== null) target.distanceMiles = s.distanceMiles;
+              }
+            }
             s.isWarmup = warm; s.isPerSide = per;
             s.flags = C.normalizedSetFlags(C.setQuality(s.flags), stopped, C.setRIR(s.flags));
             s.bodyFlagSite = site; s.bodyFlagNote = site ? (noteInput.value || null) : null;
@@ -1295,6 +1371,9 @@ export async function openSession(id) {
         : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
+          // A queued write must not recreate the deleted record.
+          discarded = true;
+          await saving.catch(() => {});
           await Sessions.del(session.id); // Sessions.del drops the clock record
           rest.stop();
           screen.close();
@@ -1390,6 +1469,7 @@ async function completeSessionInner(session) {
       weightLb: set.weightLb, reps: set.reps, isPerSide: !!set.isPerSide,
       loadBasis: C.LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : C.resolvedLoadBasis(definition),
       implementCount: set.implementCount || C.resolvedImplementCount(definition),
+      distanceYards: C.carryYards(se.exerciseName, set.distanceMiles),
     });
     const working = completedSets.map(sample);
     if (!working.length) continue;
@@ -1407,7 +1487,8 @@ async function completeSessionInner(session) {
       for (const pe of ps.exercises) {
         if (pe.exerciseName !== se.exerciseName) continue;
         const w = pe.sets.filter((x) => !x.isWarmup && x.status === "completed").map(sample)
-          .filter((set) => set.loadBasis === working[0].loadBasis);
+          .filter((set) => set.loadBasis === working[0].loadBasis
+            && (set.distanceYards > 0) === working.some((sample) => sample.distanceYards > 0));
         if (!w.length) continue;
         historySets.push(...w);
         historyVolumes.push(C.prVolume(w));
@@ -1421,8 +1502,12 @@ async function completeSessionInner(session) {
 
     const top = working.reduce((b, s) => (!b || s.weightLb > b.weightLb ? s : b), null);
     const topLabel = top.loadBasis === "bodyweight" ? `${top.reps} reps`
-      : `${ui.fmtWeight(top.weightLb)}${C.loadBasisSuffix(top.loadBasis)} × ${top.reps}`;
-    lines.push({ exerciseName: se.exerciseName, topSetLabel: topLabel, volumeLb: C.prVolume(working) });
+      : `${ui.fmtWeight(top.weightLb)}${C.loadBasisSuffix(top.loadBasis)} × ${top.distanceYards > 0
+        ? C.carryDistanceLabel(top.distanceYards, top.isPerSide) : top.reps}`;
+    // [INV-CARRY-LOGS-DISTANCE] A carry's load × yards is not tonnage; its
+    // line states "50 lb each × 40 yd" and carries no volume figure.
+    lines.push({ exerciseName: se.exerciseName, topSetLabel: topLabel,
+      volumeLb: C.prVolume(working.filter((set) => !(set.distanceYards > 0))) });
   }
 
   const heldStandaloneTracks = [];
@@ -1876,6 +1961,10 @@ async function advanceProgram(session, milestones) {
     if (!completed.length) continue;
     const exerciseType = exerciseByName.get(acc.exerciseName)?.type;
     if (exerciseType === "conditioning") continue;
+    // [INV-CARRY-LOGS-DISTANCE] A distance carry's "reps" are a placeholder,
+    // so a rep window cannot grade it; the slot holds until carries get a
+    // programmed distance target. Mirrors SessionCompletion.
+    if (completed.some((set) => C.carryYards(acc.exerciseName, set.distanceMiles) !== null)) continue;
     // A temporary red-readiness cut deliberately holds accessory progression.
     if ((se.plannedSets ?? acc.sets) < acc.sets) continue;
     if (exerciseType === "timed") {
@@ -2409,7 +2498,12 @@ export async function createSessionFromProgramDay(program, day) {
     // ProgramAccessory.prescribedReps.
     // The target clamped into the window this slot actually runs on — a
     // bodyweight identity has no load step, so its window top is advisory.
-    const accReps = C.repWindow(acc.minReps, acc.maxReps, acc.currentReps,
+    // [INV-CARRY-LOGS-DISTANCE] A carry slot keeps its per-hand load and is
+    // built as sets of the default distance: slots hold no distance target
+    // yet, and a rep target means nothing for a walk. Mirrors ProgramSession.
+    const carryMiles = !isTimed && C.logsCarryDistance(acc.exerciseName)
+      ? C.milesFromYards(C.CARRY_DEFAULT_YARDS) : null;
+    const accReps = carryMiles !== null ? 1 : C.repWindow(acc.minReps, acc.maxReps, acc.currentReps,
       C.hasLoadStep(acc.incrementLb, ex)).current;
     const sets = [];
     for (let i = 0; i < effectiveSets; i += 1) {
@@ -2422,6 +2516,7 @@ export async function createSessionFromProgramDay(program, day) {
         ...loadOptions(ex),
       });
       if (isTimed) set.durationSeconds = acc.targetSeconds || 30;
+      if (carryMiles !== null) set.distanceMiles = carryMiles;
       sets.push(set);
     }
     exercises.push({ order: order++, exerciseName: acc.exerciseName, notes: "", phase: null,
@@ -2562,6 +2657,7 @@ function prSamplesFor(session, exerciseName, exerciseByName) {
         weightLb: set.weightLb, reps: set.reps, isPerSide: !!set.isPerSide,
         loadBasis: C.LOAD_BASES.includes(set.loadBasis) ? set.loadBasis : C.resolvedLoadBasis(definition),
         implementCount: set.implementCount || C.resolvedImplementCount(definition),
+        distanceYards: C.carryYards(exerciseName, set.distanceMiles),
       });
     }
   }
@@ -2596,7 +2692,8 @@ export async function rebuildMilestones(exerciseNames) {
       const historySets = [], historyVolumes = [], historySchemes = new Set();
       for (const past of prior) {
         const w = prSamplesFor(past, name, exerciseByName)
-          .filter((set) => set.loadBasis === working[0].loadBasis);
+          .filter((set) => set.loadBasis === working[0].loadBasis
+            && (set.distanceYards > 0) === working.some((sample) => sample.distanceYards > 0));
         if (!w.length) continue;
         historySets.push(...w);
         historyVolumes.push(C.prVolume(w));

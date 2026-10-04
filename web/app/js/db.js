@@ -6,10 +6,11 @@ import { clearClockRecord, clearAnyClockRecord } from "./workout-clock.js";
 import { clearGymTagDay } from "./gym-tag.js";
 import { SEED } from "./seed.js";
 import { BODY_SITES, normalizeBodySite } from "./constants.js";
+import { PLATE_THEME_IDS, isPlateThemeID, inferredPlateTheme } from "./plate-theme.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 9;
-export const BACKUP_SCHEMA_VERSION = 14;
+const DB_VERSION = 10;
+export const BACKUP_SCHEMA_VERSION = 15;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -53,6 +54,8 @@ function open() {
       // Older upgraders already rewrite these stores. Do not race their
       // cursor writes with a second pass holding pre-normalized documents.
       if (event.oldVersion === 8) migrateToV9(req.transaction);
+      // No older upgrader rewrites gyms, so every pre-V10 store takes this pass.
+      if (event.oldVersion < 10) migrateToV10(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -87,6 +90,23 @@ function migrateToV9(transaction) {
       cursor.continue();
     };
   }
+}
+
+// V10 (#55): each gym records its plate theme. A gym that predates themes
+// takes the one its enabled inventory implies (single-unit → that unit's
+// plainest real set, mixed or empty → custom), exactly once, in the upgrade
+// transaction. Mirrors native Seeder.inferLegacyGymPlateThemes.
+function migrateToV10(transaction) {
+  transaction.objectStore("gyms").openCursor().onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (!cursor) return;
+    const gym = cursor.value;
+    if (!isPlateThemeID(gym.plateTheme)) {
+      const units = (gym.plateToggles || []).filter((t) => t.enabled).map((t) => t.unit);
+      cursor.update({ ...gym, plateTheme: inferredPlateTheme(units) });
+    }
+    cursor.continue();
+  };
 }
 
 function migrateToV4(transaction) {
@@ -298,6 +318,7 @@ const normalizeGym = (g) => ({
   id: isPortableUUID(g.id) ? g.id : stableID(`gym:${g.name}`),
   collarWeightLb: Number.isFinite(g.collarWeightLb) ? Math.max(0, g.collarWeightLb) : 0,
   loadingPolicy: C.LOADING_POLICIES.includes(g.loadingPolicy) ? g.loadingPolicy : "closest",
+  plateTheme: isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom",
 });
 const hasPortableProgramSlots = (program) => (program.days || []).every((day) =>
   [...(day.lifts || []), ...(day.accessories || [])].every((slot) => isPortableUUID(slot.id)));
@@ -536,6 +557,34 @@ export const Programs = {
       return Promise.all([reqP(programRequest), reqP(decisionRequest)]);
     });
   },
+  // Activation is exclusive, so every changed flag lands in ONE transaction:
+  // a failed write aborts all of them instead of leaving no program active
+  // (or two). Request callbacks, not awaits, keep the transaction alive
+  // between the read and the writes. Mirrors native ProgramActivationService.
+  setActive: (id) => runAll(["programs"], "readwrite", (os) => new Promise((resolve, reject) => {
+    const store = os("programs");
+    const read = store.getAll();
+    read.onerror = () => reject(read.error);
+    read.onsuccess = () => {
+      const writes = [];
+      try {
+        if (!read.result.some((program) => program.id === id)) throw new Error("Program not found");
+        for (const program of read.result) {
+          const want = program.id === id;
+          if (program.isActive === want) continue;
+          const next = { ...program, isActive: want };
+          C.tfhValidateProgram(next);
+          writes.push(reqP(store.put(normalizeProgram(next))));
+        }
+        Promise.all(writes).then(resolve, reject);
+      } catch (error) {
+        // The abort fails every already queued put; consume those so a
+        // synchronous write error cannot surface as an unhandled rejection.
+        for (const write of writes) write.catch(() => {});
+        reject(error);
+      }
+    };
+  })),
   del: (id) => del("programs", id),
   async active() { const all = await Programs.all(); return all.find((p) => p.isActive) || all[0] || null; },
   async byStableId(id) { const all = await Programs.all(); return all.find((p) => p.uuid === id || p.id === id) || null; },
@@ -555,8 +604,10 @@ export function workingVolume(sessionExercise, exercise = null) {
   // cardio set whose library entry is gone, so restored history behaves.
   // Mirrors native SessionExercise.workingVolumeLb.
   if (exercise?.type === "conditioning") return 0;
+  // [INV-CARRY-LOGS-DISTANCE] A distance carry is excluded like a ruck: its
+  // load × yards is compared only with other carries, never summed as tonnage.
   return sessionExercise.sets.filter((s) => !s.isWarmup && s.status === "completed")
-    .filter((s) => !(s.distanceMiles > 0 || s.flights > 0 || s.durationSeconds > 0))
+    .filter(C.countsTowardTonnage)
     .reduce((sum, set) => sum + (C.loadVolume(set) ?? 0), 0);
 }
 // Session→program linkage, spelled once. The name fallback exists ONLY for
@@ -916,7 +967,7 @@ export async function exportBundle() {
     })),
     tracks, gyms: gyms.map(normalizeGym),
     exercises: exercises.map((exercise) => ({ ...exercise,
-      loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.resolvedImplementCount(exercise),
+      loadBasis: C.resolvedLoadBasis(exercise), implementCount: C.backupImplementCount(exercise),
       watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite) })),
     settings: settingsOut,
     coachingDecisions: coachingDecisions.map((decision) => ({
@@ -1040,6 +1091,7 @@ export const BACKUP_ENUMS = {
   coachingActions: ["accepted", "deferred", "dismissed", "overridden"],
   milestoneKinds: ["heaviestSet", "volumePR", "firstScheme", "repPR", "programNote"],
   loadBases: C.LOAD_BASES, loadingPolicies: C.LOADING_POLICIES,
+  plateThemes: PLATE_THEME_IDS,
 };
 
 // Validate the entire payload before the first read or write. IndexedDB will
@@ -1315,6 +1367,7 @@ export function validateBackup(bundle) {
     textValue(gym.name, `${path}.name`, true);
     numberValue(gym.collarWeightLb, `${path}.collarWeightLb`, { min: 0, max: 20 });
     enumValue(gym.loadingPolicy, BACKUP_ENUMS.loadingPolicies, `${path}.loadingPolicy`);
+    enumValue(gym.plateTheme, BACKUP_ENUMS.plateThemes, `${path}.plateTheme`, schemaVersion >= 15);
     each(array(gym, "plateToggles", `${path}.plateToggles`), `${path}.plateToggles`, (plate, platePath) => {
       numberValue(plate.value, `${platePath}.value`, { required: true, min: Number.MIN_VALUE });
       enumValue(plate.unit, BACKUP_ENUMS.units, `${platePath}.unit`, schemaVersion >= 1);
@@ -1410,13 +1463,16 @@ const trackSignature = (t) => [
 
 const gymSignature = (g) => [
   boolFlag(g.isDefault), strOrEmpty(g.defaultBarId), numOrZero(g.collarWeightLb),
-  strOrEmpty(g.loadingPolicy), strOrEmpty(g.barcodeLabel),
+  // A missing/unknown theme restores as custom, so it compares as custom.
+  strOrEmpty(g.loadingPolicy), isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom", strOrEmpty(g.barcodeLabel),
 ].join("");
 
 // Sessions and programs have no shallow signature covering every field (a
 // session's sets and a program's slot contents are themselves nested
 // structures) — the shared BackupContract explicitly asks for a
 // collection-appropriate shallow comparison here, not a deep recursive diff.
+// A session's performed set facts are the exception: they are what the
+// lifter edits, so they join the signature as a compact digest.
 // The v12 activity object is the first user-entered session-level fact
 // outside `exercises`, so it joins the shallow signature: an edit to RPE or
 // cords on one device must not preview as "unchanged" on the other
@@ -1431,10 +1487,18 @@ const tfhSignature = s => s.tfhPolicyId == null ? "" : JSON.stringify(stableTFH(
   anchors:(s.exercises || []).map(e=>e.tfhAnchor ?? null),
   benchmarks:(s.exercises || []).map(e=>(e.sets || []).map(x=>x.tfhBenchmark ?? null)),
 }));
+// Performed set facts, in order. Without them a same-id session whose reps
+// changed previewed as "unchanged" while restore overwrote the set. Missing
+// values take the defaults restore itself applies, so an untouched session
+// still previews as unchanged. Mirrors native ImportService.setDigest.
+const setDigest = (s) => (s.exercises || []).map((e) => (e.sets || []).map((x) => [
+  numOrZero(x.weightLb), numOrZero(x.reps), x.status || (s.isCompleted !== false ? "completed" : "planned"),
+  x.isWarmup ? 1 : 0, x.durationSeconds ?? "", x.distanceMiles ?? "",
+].join(",")).join(";")).join("|");
 const sessionSignature = (s) => [
   strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
   s.activity ? JSON.stringify(portableActivity(s.activity)) : "",
-  tfhSignature(s),
+  tfhSignature(s), setDigest(s),
 ].join("");
 
 const programSignature = (p) => [
@@ -1678,6 +1742,8 @@ export async function importBundle(bundle, { createCheckpoint = true } = {}) {
   if (bundle.gyms) writes.set("gyms", bundle.gyms.map((g) => ({
     ...g,
     barcodeImage: isInlineImage(g.barcodeImage) ? g.barcodeImage : null,
+    // Pre-v15 bundles carry no theme: restore as custom, never re-infer.
+    plateTheme: isPlateThemeID(g.plateTheme) ? g.plateTheme : "custom",
   })));
   if (bundle.exercises) writes.set("exercises", bundle.exercises.map((exercise) => normalizeExercise({
     ...exercise, watchSite: normalizeBodySite(exercise.watchSite), gateSite: normalizeBodySite(exercise.gateSite),

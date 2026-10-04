@@ -78,9 +78,11 @@ Never defer a required migration to a follow-up PR.
 specification of rules that must not silently change. Each one exists because
 the opposite behaviour shipped and cost something real.
 
-It is machine-checked. Tag an assertion with the rule ID and
-`.github/scripts/check-invariants.mjs` will verify that every rule is asserted
-on every platform it claims:
+Its source citations are machine-checked. Tag an assertion with the rule ID;
+`.github/scripts/check-invariants.mjs` checks that each verifiable rule is
+cited in the scanned test sources for its platforms. A citation alone does not
+prove an assertion exists or executes. Required execution evidence is defined
+in [CI acceptance](docs/CI-ACCEPTANCE.md):
 
 ```js
 ok(scheme === "1×5", "[INV-SCHEME-PERFORMED] a top set plus a fatigue set is one five");

@@ -127,6 +127,17 @@ lockstep with CadenceCore):
 cd web && npm ci && npm test
 ```
 
+Required browser acceptance (real IndexedDB and offline/update/restore flows):
+
+```bash
+cd web
+npx --no-install playwright install chromium webkit
+npm run test:browser
+```
+
+See [CI acceptance evidence](docs/CI-ACCEPTANCE.md) for required journeys,
+failure artifacts, and the remaining feature coverage plan.
+
 Notes:
 - CI always runs core/web checks on GitHub-hosted macOS, runs parallel native builds only
   when needed, and reserves full shipped-store migration reconstruction for

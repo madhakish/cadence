@@ -30,6 +30,7 @@ struct PlateCalculatorView: View {
         case reverse = "On the bar"
     }
 
+    private var plateTheme: PlateThemeID { gym?.plateTheme ?? .custom }
     private var gym: Gym? {
         gyms.first { $0.name == selectedGymName } ?? gyms.first { $0.isDefault } ?? gyms.first
     }
@@ -163,6 +164,7 @@ struct PlateCalculatorView: View {
                     solution: solution,
                     unit: targetUnit,
                     plateStyle: plateStyle,
+                    plateTheme: plateTheme,
                     onExpand: { showExpandedBar = true }
                 )
             } header: {
@@ -170,7 +172,7 @@ struct PlateCalculatorView: View {
             }
 
             Section {
-                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout, plateStyle: plateStyle)
+                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme)
                 if let mixed = mixedUnitExplanation(solution.loadout) {
                     Label(mixed, systemImage: "scalemass")
                         .font(.callout)
@@ -210,6 +212,7 @@ struct PlateCalculatorView: View {
                 solution: reverseSolution,
                 unit: .lb,
                 plateStyle: plateStyle,
+                plateTheme: plateTheme,
                 onExpand: { showExpandedBar = true }
             )
         } header: {
@@ -217,7 +220,7 @@ struct PlateCalculatorView: View {
         }
 
         Section {
-            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout, plateStyle: plateStyle)
+            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout, plateStyle: plateStyle, plateTheme: plateTheme)
             if let mixed = mixedUnitExplanation(reverseLoadout) {
                 Label(mixed, systemImage: "scalemass")
                     .font(.callout)
@@ -234,7 +237,7 @@ struct PlateCalculatorView: View {
                     set: { setReverseCount($0, for: plate) }
                 ), in: 0...12) {
                     HStack {
-                        PlateFaceBadge(plate: plate, style: plateStyle)
+                        PlateFaceBadge(plateTheme: plateTheme, plate: plate, style: plateStyle)
                         Text(plate.label)
                             .foregroundStyle(plate.unit == .kg ? Theme.accent : .primary)
                         Spacer()
@@ -390,9 +393,9 @@ struct PlateCalculatorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let displayedSolution {
-                        BarbellInspectionView(solution: displayedSolution, plateStyle: plateStyle)
+                        BarbellInspectionView(solution: displayedSolution, plateStyle: plateStyle, plateTheme: plateTheme)
                         .accessibilityLabel("Expanded loaded bar diagram")
-                        LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout, plateStyle: plateStyle)
+                        LoadoutSummaryView(requestedLb: requested, loadout: displayedSolution.loadout, plateStyle: plateStyle, plateTheme: plateTheme)
                             .padding(.horizontal)
 
                     }

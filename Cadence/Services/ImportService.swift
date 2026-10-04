@@ -164,7 +164,7 @@ enum ImportService {
     }
     private struct GymDTO: Decodable {
         var id: String?; var name: String?; var isDefault: Bool?; var defaultBarId: String?
-        var collarWeightLb: Double?; var loadingPolicy: String?
+        var collarWeightLb: Double?; var loadingPolicy: String?; var plateTheme: String?
         var plateToggles: [PlateToggleDTO]?; var barcodeImage: String?; var barcodeLabel: String?
     }
     private struct PlateToggleDTO: Decodable { var value: Double?; var unit: String?; var enabled: Bool? }
@@ -588,6 +588,8 @@ enum ImportService {
             _ = try requiredText(gym.name, "gyms[\(i)].name")
             try finite(gym.collarWeightLb, "gyms[\(i)].collarWeightLb", min: 0, max: 20)
             try known(gym.loadingPolicy, Set(LoadingPolicy.allCases.map(\.rawValue)), "gyms[\(i)].loadingPolicy")
+            try known(gym.plateTheme, Set(PlateThemeID.allCases.map(\.rawValue)), "gyms[\(i)].plateTheme",
+                      required: schemaVersion >= 15)
             for (pi, plate) in (gym.plateToggles ?? []).enumerated() {
                 try finite(plate.value, "gyms[\(i)].plateToggles[\(pi)].value", required: true, min: Double.leastNonzeroMagnitude)
                 _ = try requiredText(plate.unit, "gyms[\(i)].plateToggles[\(pi)].unit")
@@ -913,13 +915,13 @@ enum ImportService {
         let incomingGyms = (bundle.gyms ?? []).map { g in
             BackupContract.NamedEntity(id: g.id ?? "", name: trimmed(g.name), signature: gymSignature(
                 isDefault: g.isDefault, defaultBarId: g.defaultBarId, collarWeightLb: g.collarWeightLb,
-                loadingPolicy: g.loadingPolicy, barcodeLabel: g.barcodeLabel))
+                loadingPolicy: g.loadingPolicy, plateTheme: g.plateTheme, barcodeLabel: g.barcodeLabel))
         }
         let currentGyms: [BackupContract.NamedEntity] = bundle.gyms == nil ? [] :
             try context.fetch(FetchDescriptor<Gym>()).map { g in
                 BackupContract.NamedEntity(id: g.id, name: g.name, signature: gymSignature(
                     isDefault: g.isDefault, defaultBarId: g.defaultBarID, collarWeightLb: g.collarWeightLb,
-                    loadingPolicy: g.loadingPolicyRaw, barcodeLabel: g.barcodeLabel))
+                    loadingPolicy: g.loadingPolicyRaw, plateTheme: g.plateThemeRaw, barcodeLabel: g.barcodeLabel))
             }
 
         // A session id that isn't a valid UUID can never match a current
@@ -937,9 +939,17 @@ enum ImportService {
                 cordVolume: activity?.cordVolume)
             let tfh = try tfhSignature(policyId: s.tfhPolicyId, context: s.tfhContext, excluded: s.tfhExcludedFromProgression,
                 anchors: (s.exercises ?? []).map(\.tfhAnchor), benchmarks: (s.exercises ?? []).map { ($0.sets ?? []).map(\.tfhBenchmark) })
+            let completed = s.isCompleted ?? true
+            let sets = setDigest((s.exercises ?? []).map { ($0.sets ?? []).map { x in
+                SetFacts(weightLb: x.weightLb ?? 0, reps: x.reps ?? 0,
+                         status: (x.status.flatMap(SetStatus.init(rawValue:))
+                                  ?? (schemaVersion < 2 && completed ? .completed : .planned)).rawValue,
+                         isWarmup: x.isWarmup ?? false,
+                         durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles)
+            } })
             let signature = sessionSignature(
                 date: s.date, programId: s.programTag?.programId,
-                exerciseCount: (s.exercises ?? []).count, activity: activitySig) + tfh
+                exerciseCount: (s.exercises ?? []).count, activity: activitySig) + tfh + sets
             return BackupContract.NamedEntity(id: id, name: name, signature: signature)
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
@@ -952,9 +962,13 @@ enum ImportService {
                 let tfh = try tfhSignature(policyId: session.tfhPolicyID, context: session.tfhContext, excluded: session.tfhExcludedFromProgression,
                     anchors: session.orderedExercises.map { try TFHProgramService.decode(TFHAnchor.self, $0.tfhAnchorData) },
                     benchmarks: session.orderedExercises.map { e in try e.orderedSets.map { try TFHProgramService.decode(TFHBenchmarkResult.self, $0.tfhBenchmarkData) } })
+                let sets = setDigest(session.orderedExercises.map { $0.orderedSets.map { x in
+                    SetFacts(weightLb: x.weightLb, reps: x.reps, status: x.status.rawValue, isWarmup: x.isWarmup,
+                             durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles)
+                } })
                 let signature = sessionSignature(
                     date: session.date, programId: session.programID,
-                    exerciseCount: session.exercises.count, activity: activitySig) + tfh
+                    exerciseCount: session.exercises.count, activity: activitySig) + tfh + sets
                 return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: signature)
             }
 
@@ -1009,6 +1023,25 @@ enum ImportService {
                                        anchors: anchors, benchmarks: benchmarks))
     }
 
+    /// Performed set facts, in order. Without them a same-id session whose
+    /// reps changed previewed as "unchanged" while restore overwrote the set.
+    /// The incoming side resolves missing values exactly as `load` will, so
+    /// an untouched session still previews as unchanged. Mirrors web db.js
+    /// setDigest.
+    private struct SetFacts {
+        var weightLb: Double; var reps: Int; var status: String; var isWarmup: Bool
+        var durationSeconds: Int?; var distanceMiles: Double?
+    }
+    private static func setDigest(_ exercises: [[SetFacts]]) -> String {
+        "\u{1F}" + exercises.map { sets in
+            sets.map { x in
+                [String(x.weightLb), String(x.reps), x.status, x.isWarmup ? "1" : "0",
+                 x.durationSeconds.map { String($0) } ?? "", x.distanceMiles.map { String($0) } ?? ""]
+                    .joined(separator: ",")
+            }.joined(separator: ";")
+        }.joined(separator: "|")
+    }
+
     private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int, activity: String) -> String {
         [date.map { ISO8601DateFormatter().string(from: $0) } ?? "", programId ?? "", String(exerciseCount), activity]
             .joined(separator: "\u{1F}")
@@ -1055,10 +1088,12 @@ enum ImportService {
 
     private static func gymSignature(
         isDefault: Bool?, defaultBarId: String?, collarWeightLb: Double?,
-        loadingPolicy: String?, barcodeLabel: String?
+        loadingPolicy: String?, plateTheme: String?, barcodeLabel: String?
     ) -> String {
-        [(isDefault ?? false) ? "1" : "0", defaultBarId ?? "", String(collarWeightLb ?? 0),
-         loadingPolicy ?? "", barcodeLabel ?? ""].joined(separator: "\u{1F}")
+        // A missing/unknown theme restores as custom, so it compares as custom.
+        let theme = (plateTheme.flatMap(PlateThemeID.init(rawValue:)) ?? .custom).rawValue
+        return [(isDefault ?? false) ? "1" : "0", defaultBarId ?? "", String(collarWeightLb ?? 0),
+                loadingPolicy ?? "", theme, barcodeLabel ?? ""].joined(separator: "\u{1F}")
     }
 
     // MARK: - Makers
@@ -1154,6 +1189,8 @@ enum ImportService {
         if let id = g.id { gym.id = id }
         gym.collarWeightLb = g.collarWeightLb ?? 0
         gym.loadingPolicy = g.loadingPolicy.flatMap(LoadingPolicy.init(rawValue:)) ?? .closest
+        // Pre-v15 bundles carry no theme: restore as custom, never re-infer.
+        gym.plateTheme = g.plateTheme.flatMap(PlateThemeID.init(rawValue:)) ?? .custom
         gym.plateToggles = (g.plateToggles ?? []).map {
             PlateToggle(plate: Plate(value: $0.value ?? 0, unit: WeightUnit(rawValue: $0.unit ?? "lb") ?? .lb), enabled: $0.enabled ?? true)
         }

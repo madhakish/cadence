@@ -38,10 +38,12 @@ private extension PlateColour {
 /// view owns the large number that an edge-on plate cannot physically carry.
 /// Decorative: every use pairs it with a readable denomination label.
 struct PlateFaceBadge: View {
+    var plateTheme: PlateThemeID = .custom
     let plate: Plate
     let style: PlateVisualStyle
+    var exactDenomination = false
 
-    private var colour: PlateColour { PlatePalette.colour(for: plate.colorToken(for: style)) }
+    private var colour: PlateColour { PlateTheme.colour(plate, theme: plateTheme, style: style) }
 
     var body: some View {
         let foreground = colour.inkColor
@@ -54,7 +56,7 @@ struct PlateFaceBadge: View {
                 .stroke(foreground.opacity(0.34), lineWidth: 1)
                 .padding(7)
             VStack(spacing: -2) {
-                Text(Weight.trim(plate.value, decimals: 2))
+                Text(plate.denomination)
                     .font(.system(size: 15, weight: .heavy, design: .rounded))
                 Text(plate.unit.rawValue)
                     .font(.system(size: 9, weight: .bold, design: .rounded))
@@ -71,23 +73,36 @@ struct PlateFaceBadge: View {
 /// stage); `emphasis` is the state and changes only opacity — never geometry,
 /// order, or labels.
 struct BarbellView: View {
-    enum Presentation: Equatable { case compactSide, fullBar }
+    enum Presentation: Equatable { case compactSide, fullBar, inspectionSide }
     enum Emphasis: Equatable { case current, standard, muted }
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
+    var plateTheme: PlateThemeID = .custom
     var presentation: Presentation = .compactSide
     var exploded = false
     var emphasis: Emphasis = .standard
+    var showsReadout = true
+    @ScaledMetric(relativeTo: .subheadline) private var inspectionCaptionSize: CGFloat = 14
 
-    static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle) -> CGFloat {
-        CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false).width * 0.55))
+    static func minimumLegibleWidth(for loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID = .custom) -> CGFloat {
+        CGFloat(max(320, BarbellScene(loadout: loadout, style: style, exploded: false, theme: theme).width * 1.2))
     }
 
     var body: some View {
-        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
-        Canvas { context, size in
-            let scale = min(size.width / scene.width, size.height / scene.height)
-            context.translateBy(x: size.width / 2, y: size.height / 2)
+        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded, theme: plateTheme)
+        let look = PlateTheme.description(plateTheme)
+        let artwork = Canvas { context, size in
+            let inspection = presentation == .inspectionSide
+            let near = inspection ? scene.discs.filter { $0.side < 0 } : []
+            let minX = min(-scene.end * scene.axisX, near.map { $0.x - $0.faceRadius - $0.depth / 2 }.min() ?? 0) - 24
+            let maxX = -scene.shoulder * scene.axisX + 100
+            let minY = near.map { $0.y - $0.radius }.min() ?? -50
+            let maxY = near.map { $0.y + $0.radius }.max() ?? 50
+            let width = inspection ? maxX - minX : scene.width
+            let height = inspection ? maxY - minY + (exploded ? 70 : 30) : scene.height
+            let scale = min(size.width / width, size.height / height)
+            context.translateBy(x: size.width / 2 - (inspection ? (minX + maxX) / 2 * scale : 0),
+                                y: size.height / 2 - (inspection ? (minY + maxY) / 2 * scale + (exploded ? 16 : 0) : 0))
             context.scaleBy(x: scale, y: scale)
             func point(_ position: Double) -> CGPoint {
                 CGPoint(x: position * scene.axisX, y: position * scene.axisY)
@@ -125,12 +140,20 @@ struct BarbellView: View {
             }
             for disc in scene.discs.sorted(by: { $0.x > $1.x }) {
                 let token = disc.plate.colorToken(for: plateStyle)
-                let colour = PlatePalette.colour(for: token)
-                let family = PlateGeometry.family(disc.plate, style: plateStyle)
-                let known = PlateSprites.plates["\(family):\(disc.plate.id)"].map { "plate-\($0)-\(angle)" }
-                // An unknown shape borrows the family's first sprite; geometry still scales it.
-                let name = known.flatMap { PlateSprites.sprites[$0] != nil ? $0 : nil }
-                    ?? PlateSprites.sprites.keys.sorted().first { $0.hasPrefix("plate-\(family)-") && $0.hasSuffix("-\(angle)") }
+                let colour = PlateTheme.colour(disc.plate, theme: plateTheme, style: plateStyle)
+                let family = PlateTheme.family(disc.plate, theme: plateTheme, style: plateStyle)
+                let geometry = PlateTheme.geometry(disc.plate, theme: plateTheme, style: plateStyle)
+                let shape = PlateSprites.shapes.first {
+                    $0.family == family && abs($0.diameter - geometry.diameter) < 0.01
+                        && abs($0.thickness - geometry.thickness) < 0.01
+                }?.key ?? PlateSprites.plates["\(family):\(disc.plate.id)"]
+                let known = shape.map { "plate-\($0)-\(angle)" }
+                // An unknown shape borrows the family's first sprite, and an
+                // unknown family the steel one; geometry still scales it.
+                func first(_ family: String) -> String? {
+                    PlateSprites.sprites.keys.sorted().first { $0.hasPrefix("plate-\(family)-") && $0.hasSuffix("-\(angle)") }
+                }
+                let name = known.flatMap { PlateSprites.sprites[$0] != nil ? $0 : nil } ?? first(family) ?? first("steel")
                 guard let name, case let .plate(_, _, _, spriteSize, faceCenter, faceRadius, hubRadius)? = PlateSprites.sprites[name] else { continue }
                 // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
                 let x = disc.x - disc.depth / 2
@@ -138,7 +161,9 @@ struct BarbellView: View {
                 let frame = CGRect(x: x - faceCenter.x * k, y: disc.y - faceCenter.y * k,
                                    width: spriteSize.width * k, height: spriteSize.height * k)
                 let image = context.resolve(Image(name))
-                let m = PlateFaceTint(token: token, style: plateStyle).matrix.map(Float.init)
+                let tint = plateTheme == .custom ? PlateFaceTint(token: token, style: plateStyle)
+                    : PlateFaceTint(fill: colour.fill, style: plateStyle)
+                let m = tint.matrix.map(Float.init)
                 var matrix = ColorMatrix()
                 (matrix.r1, matrix.r2, matrix.r3, matrix.r4, matrix.r5) = (m[0], m[1], m[2], m[3], m[4])
                 (matrix.g1, matrix.g2, matrix.g3, matrix.g4, matrix.g5) = (m[5], m[6], m[7], m[8], m[9])
@@ -154,17 +179,73 @@ struct BarbellView: View {
                     untinted.clip(to: Path(ellipseIn: hub))
                     untinted.draw(image, in: frame)
                 }
-                let label = Text(Weight.trim(disc.plate.value, decimals: 2))
-                    .font(.system(size: exploded ? 14 : 10, weight: .heavy))
-                    .foregroundColor(colour.inkColor)
-                context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+                // Theme bands are drawn over the face; other details are in the sprite.
+                let mm = disc.radius / (PlateTheme.geometry(disc.plate, theme: plateTheme, style: plateStyle).diameter / 2)
+                func ring(radius: Double, width: Double, colour: UInt32) {
+                    let rx = disc.faceRadius * radius / disc.radius
+                    context.stroke(Path(ellipseIn: CGRect(x: x - rx, y: disc.y - radius, width: rx * 2, height: radius * 2)),
+                                   with: .color(Color(hex: colour)), lineWidth: width)
+                }
+                if look.details.contains("colourBand"), let band = PlateTheme.band(disc.plate, theme: plateTheme) {
+                    let width = max(6, 0.34 * PlateTheme.geometry(disc.plate, theme: plateTheme, style: plateStyle).thickness) * mm
+                    ring(radius: disc.radius - width / 2, width: width, colour: band)
+                }
+                if look.details.contains("hubRing") {
+                    ring(radius: disc.radius * hubRadius + 2 * mm, width: 4 * mm, colour: colour.ink)
+                }
+                if plateTheme == .custom {
+                    if scale * (exploded ? 14 : 10) >= 12 {
+                        let label = Text(disc.plate.unit == solution.loadout.bar.unit
+                                     ? disc.plate.denomination : disc.plate.label)
+                            .font(.system(size: exploded ? 14 : 10, weight: .heavy))
+                            .foregroundColor(colour.inkColor)
+                        context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+                    }
+                } else {
+                // The denomination is printed on the face beside the hub, value
+                // over unit, scaled with the plate (the value is ~22% of its
+                // radius) and foreshortened with the face, like the approved
+                // plate-loading mockups. Mirrors barbell.js.
+                    let printSize: CGFloat = exploded ? 14 : 10
+                    let grow = disc.radius * 0.22 / printSize
+                    let squash = max(0.35, disc.faceRadius / disc.radius)
+                    if scale * printSize * grow * squash >= 12 {
+                    var print = context
+                // Centred in the band between the sprite's hub insert and the rim.
+                print.translateBy(x: x + disc.faceRadius * (hubRadius + 0.92) / 2, y: disc.y)
+                print.scaleBy(x: squash * grow, y: grow)
+                let ink = colour.inkColor.opacity(0.94)
+                let value = Text(disc.plate.denomination)
+                    .font(.system(size: printSize, weight: .heavy).width(.condensed))
+                    .foregroundColor(ink)
+                let unit = Text(disc.plate.unit.rawValue.uppercased())
+                    .font(.system(size: (printSize * 0.64).rounded(), weight: .heavy).width(.condensed))
+                    .tracking(0.4)
+                    .foregroundColor(ink)
+                print.draw(value, at: CGPoint(x: 0, y: -printSize * 0.4))
+                print.draw(unit, at: CGPoint(x: 0, y: printSize * 0.52))
+                    }
+                }
+                if inspection && exploded && disc.side < 0 {
+                    // The caption follows Dynamic Type and stays readable as a
+                    // long stack scrolls instead of shrinking to fit.
+                    let caption = Text(inspectionPlateLabel(disc.plate))
+                        .font(.system(size: inspectionCaptionSize / scale, weight: .semibold).monospacedDigit())
+                        .foregroundColor(.primary)
+                    context.draw(caption, at: CGPoint(x: x, y: disc.y + disc.radius + 18 / scale))
+                }
             }
             if solution.loadout.collarLb > 0,
                case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
                 placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - span / 2), to: point(-scene.collar + span / 2))
             }
         }
-        .frame(height: presentation == .compactSide ? 84 : nil)
+        VStack(alignment: .leading, spacing: 4) {
+            artwork.frame(height: presentation == .compactSide ? 84 : presentation == .fullBar ? 170 : nil)
+            if showsReadout && presentation != .inspectionSide && !solution.loadout.perSide.isEmpty {
+                PlateStackReadout(loadout: solution.loadout)
+            }
+        }
         .opacity(emphasis == .muted ? 0.85 : 1)
         .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
         .accessibilityChildren { Self.plateChildren(scene: scene, loadout: solution.loadout) }
@@ -174,10 +255,12 @@ struct BarbellView: View {
     /// the bar-only or collar note — the same order web's focusable plate
     /// groups take. Shared with the 3D inspector.
     @ViewBuilder
-    static func plateChildren(scene: BarbellScene, loadout: Loadout) -> some View {
+    static func plateChildren(scene: BarbellScene, loadout: Loadout, exactDenominations: Bool = false) -> some View {
         ForEach([-1, 1], id: \.self) { side in
             ForEach(scene.discs.filter { $0.side == side }.sorted { $0.index < $1.index }, id: \.index) { disc in
-                Text(disc.accessibilityLabel)
+                Text(exactDenominations
+                         ? "\(inspectionPlateLabel(disc.plate)) plate, \(disc.index + 1) from inside, \(side < 0 ? "left" : "right") side"
+                         : disc.accessibilityLabel)
                     .accessibilityIdentifier("barbell-plate-\(side < 0 ? "left" : "right")-\(disc.index)")
             }
         }
@@ -189,19 +272,48 @@ struct BarbellView: View {
     }
 }
 
+/// A screen-size denomination for every position on each mirrored sleeve.
+/// The edge-on artwork is a load-order map, and cannot fit full-size text on
+/// the physical face at phone width. This readout never scales with the map.
+private struct PlateStackReadout: View {
+    let loadout: Loadout
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Text("Each side · inside → outside")
+                    .foregroundStyle(.secondary)
+                ForEach(Array(loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }.enumerated()), id: \.offset) { index, plate in
+                    Text(plate.label)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+                        .accessibilityLabel("\(plate.label) plate, \(index + 1) from inside, each side")
+                }
+            }
+            .font(.subheadline)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .accessibilityIdentifier("barbell-plate-readout")
+        .accessibilityHidden(true)
+    }
+}
+
 /// Always offers inspection, even when a typical stack fits the phone.
 struct BarbellStageView: View {
     let solution: PlateSolution
     let unit: WeightUnit
     var plateStyle: PlateVisualStyle = .steel
+    var plateTheme: PlateThemeID = .custom
     var caption = "Mirrored stack · counts are per side"
     var onExpand: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let onExpand {
-                BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 170)
+                BarbellView(solution: solution, plateStyle: plateStyle, plateTheme: plateTheme, presentation: .fullBar)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onExpand)
                 HStack {
@@ -219,8 +331,7 @@ struct BarbellStageView: View {
                     .accessibilityIdentifier("expand-loaded-bar")
                 }
             } else {
-                BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar)
-                    .frame(height: 170)
+                BarbellView(solution: solution, plateStyle: plateStyle, plateTheme: plateTheme, presentation: .fullBar)
                 Text(caption).font(.caption).foregroundStyle(.secondary)
             }
             if abs(solution.deviationLb) > 0.01 {
@@ -236,87 +347,54 @@ struct BarbellStageView: View {
 /// Shared by calculator, workout, and contextual exercise sheets.
 struct BarbellInspectionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var captionSize: CGFloat = 14
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
+    var plateTheme: PlateThemeID = .custom
     @State private var exploded = false
-    @State private var camera = BarbellInspector.Camera.initial(exploded: false)
-    @State private var backdrop: BarbellBackdrop = .studio
-    @State private var resetToken = 0
-    @State private var dragBase: BarbellInspector.Camera?
-    @State private var zoomBase: BarbellInspector.Camera?
     private let solid = BarbellSceneView.isSupported
 
     var body: some View {
-        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded)
+        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded, theme: plateTheme)
+        let layout = BarbellInspector.layout(loadout: solution.loadout, style: plateStyle, explode: exploded ? 1 : 0, theme: plateTheme)
         VStack(alignment: .leading, spacing: 12) {
-            Group {
-                if solid {
-                    // The solid: drag orbits, pinch zooms, double tap resets, a
-                    // single tap explodes or assembles like the sprite view.
-                    BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, exploded: exploded,
-                                     backdrop: backdrop, camera: camera, resetToken: resetToken, reduceMotion: reduceMotion)
-                        .frame(height: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
-                        .contentShape(Rectangle())
-                        .simultaneousGesture(orbitGesture)
-                        .simultaneousGesture(zoomGesture)
-                        .onTapGesture(count: 2) { resetView() }
-                        .onTapGesture { toggle() }
-                } else {
-                    GeometryReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            BarbellView(solution: solution, plateStyle: plateStyle, presentation: .fullBar, exploded: exploded)
-                                .frame(width: exploded ? max(proxy.size.width, scene.width) : proxy.size.width,
-                                       height: exploded ? scene.height : 230)
-                                .contentShape(Rectangle())
-                                .onTapGesture { toggle() }
+            GeometryReader { proxy in
+                let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
+                let width = exploded ? max(proxy.size.width, CGFloat(minimum) * max(1, captionSize / 14)) : proxy.size.width
+                ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
+                    Group {
+                        if solid {
+                            BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
+                                             exploded: exploded, reduceMotion: reduceMotion)
+                        } else {
+                            BarbellView(solution: solution, plateStyle: plateStyle, plateTheme: plateTheme, presentation: .inspectionSide, exploded: exploded)
                         }
                     }
-                    .frame(height: exploded ? scene.height + 20 : 250)
+                    .frame(width: width, height: 300)
+                    .contentShape(Rectangle())
+                    .onTapGesture { toggle() }
                 }
+                .scrollDisabled(!exploded || width <= proxy.size.width)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
             }
+            .frame(height: 300)
             .accessibilityIdentifier("barbell-inspection-artwork")
             .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
-            .accessibilityHint(solid ? "Drag to rotate, pinch to zoom, double tap to reset the view" : "")
-            .accessibilityChildren { BarbellView.plateChildren(scene: scene, loadout: solution.loadout) }
-            // One quiet line says which view this is and what a tap does; the
-            // same control is the accessible toggle.
-            HStack {
-                Button(exploded ? (solid ? "Exploded · tap to assemble" : "38° inspection · tap to collapse")
-                                : (solid ? "Assembled · tap to explode" : "Front view · tap to inspect")) { toggle() }
-                    .buttonStyle(.plain)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(minHeight: 44)
-                    .accessibilityLabel(exploded ? "Assemble bar" : "Explode plates")
-                    .accessibilityValue(exploded ? "Exploded" : "Assembled")
-                    .accessibilityIdentifier("barbell-explode-toggle")
-                Spacer()
-                if exploded && !solid {
-                    Text("Swipe across · inside → outside").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            if solid {
-                // Backdrop and reset are the keyboard/VoiceOver path for what
-                // drag and pinch do by hand.
-                HStack(spacing: 12) {
-                    Picker("Backdrop", selection: $backdrop) {
-                        ForEach(BarbellBackdrop.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("barbell-backdrop")
-                    Button("Reset view") { resetView() }
-                        .font(.caption.weight(.semibold))
-                        .frame(minHeight: 44)
-                        .accessibilityHint("Returns the camera to the front view")
-                        .accessibilityIdentifier("barbell-reset-view")
-                }
-            }
+            .accessibilityHint(exploded ? "One sleeve shown; both sides are mirrored. Tap to assemble." : "One sleeve shown; both sides are mirrored. Tap to inspect each plate.")
+            .accessibilityChildren { BarbellView.plateChildren(scene: scene, loadout: solution.loadout, exactDenominations: true) }
+            Button(exploded ? "Angled inspection · tap to assemble" : "Front view · tap to inspect") { toggle() }
+                .buttonStyle(.plain)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 44)
+                .accessibilityLabel(exploded ? "Assemble bar" : "Explode plates")
+                .accessibilityValue(exploded ? "Exploded" : "Assembled")
+                .accessibilityIdentifier("barbell-explode-toggle")
             Text("Plates per side").font(.headline)
             ForEach(Array(solution.loadout.perSide.enumerated()), id: \.offset) { _, count in
                 HStack(spacing: 12) {
-                    PlateFaceBadge(plate: count.plate, style: plateStyle)
-                    Text(count.plate.label).font(.body.monospacedDigit())
+                    PlateFaceBadge(plateTheme: plateTheme, plate: count.plate, style: plateStyle, exactDenomination: true)
+                    Text(inspectionPlateLabel(count.plate)).font(.body.monospacedDigit())
                     Spacer()
                     Text("× \(count.count)").font(.body.bold().monospacedDigit())
                 }
@@ -333,41 +411,8 @@ struct BarbellInspectionView: View {
         .padding(.horizontal)
     }
 
-    /// Straight ahead and whole-bar when assembled; the 35° blow-up on the near
-    /// stack when exploded. The solid animates the cut itself.
     private func toggle() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) {
-            exploded.toggle()
-            camera = BarbellInspector.Camera.initial(exploded: exploded)
-        }
-    }
-
-    private func resetView() {
-        camera = BarbellInspector.Camera.initial(exploded: exploded)
-        resetToken += 1
-    }
-
-    /// Horizontal drag turns the bar, vertical drag raises the eye; the shared
-    /// model wraps yaw and clamps pitch so the bar never leaves the frame.
-    private var orbitGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                let base = dragBase ?? camera
-                dragBase = base
-                camera = base.orbiting(yaw: Double(value.translation.width) * 0.35,
-                                       pitch: Double(-value.translation.height) * 0.3)
-            }
-            .onEnded { _ in dragBase = nil }
-    }
-
-    private var zoomGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                let base = zoomBase ?? camera
-                zoomBase = base
-                camera = base.zoomed(by: Double(value.magnification))
-            }
-            .onEnded { _ in zoomBase = nil }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Theme.shortMotion)) { exploded.toggle() }
     }
 }
 
@@ -381,6 +426,7 @@ struct LoadoutSummaryView: View {
     let requestedLb: Double?
     let loadout: Loadout
     var plateStyle: PlateVisualStyle = .steel
+    var plateTheme: PlateThemeID = .custom
     /// The achieved total keeps its display proportion and follows Dynamic Type.
     @ScaledMetric(relativeTo: .largeTitle) private var totalSize: CGFloat = 40
 
@@ -407,7 +453,7 @@ struct LoadoutSummaryView: View {
             Cell(id: count.plate.id,
                  plate: count.plate,
                  count: "\(count.count * 2) × \(count.plate.label)",
-                 kind: PlateGeometry.familyLabel(PlateGeometry.family(count.plate, style: plateStyle)))
+                 kind: PlateGeometry.familyLabel(PlateTheme.family(count.plate, theme: plateTheme, style: plateStyle)))
         }
         if loadout.collarLb > 0 {
             result.append(Cell(id: "collars", plate: nil, count: "2 collars", kind: "Outermost"))
@@ -472,7 +518,7 @@ struct LoadoutSummaryView: View {
             if !cells.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
                     ForEach(cells) { cell in
-                        LoadoutCell(cell: cell, style: plateStyle)
+                        LoadoutCell(cell: cell, style: plateStyle, theme: plateTheme)
                     }
                 }
             }
@@ -491,19 +537,19 @@ struct LoadoutSummaryView: View {
     private struct LoadoutCell: View {
         let cell: Cell
         let style: PlateVisualStyle
+        let theme: PlateThemeID
 
         var body: some View {
             HStack(spacing: 8) {
                 if let plate = cell.plate {
-                    PlateFaceBadge(plate: plate, style: style)
+                    PlateFaceBadge(plateTheme: theme, plate: plate, style: style)
                         .scaleEffect(0.5)
                         .frame(width: 26, height: 26)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cell.count)
                         .font(.callout.bold().monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(cell.kind)
                         .font(.caption)
                         .foregroundStyle(.secondary)

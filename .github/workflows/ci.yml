@@ -102,7 +102,7 @@ jobs:
           bash .github/scripts/test-cancel-stale-pr-runs.sh
           bash .github/scripts/test-classify-ci-paths.sh
           bash .github/scripts/test-ci-topology.sh
-          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs
+          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs
           bash .github/scripts/test-fastlane-phases.sh
           bash .github/scripts/test-verify-native-jobs.sh
       - name: Classify changed paths
@@ -166,7 +166,7 @@ jobs:
     name: Web tests (parity + smoke)
     needs: changes
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     outputs:
       simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}
       store-build-required: ${{ steps.release-plan.outputs.store-build-required }}
@@ -189,6 +189,20 @@ jobs:
       - name: Web parity, migration, and smoke tests
         working-directory: web
         run: npm test
+      - name: Install pinned Chromium and WebKit browsers
+        working-directory: web
+        run: npx --no-install playwright install chromium webkit
+      - name: Required browser feature acceptance
+        working-directory: web
+        run: npm run test:browser
+      - name: Retain browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cadence-browser-acceptance-${{ github.sha }}
+          path: web/test-results/
+          retention-days: 14
+          if-no-files-found: warn
       - name: Install pinned release parser
         working-directory: .github/release
         run: npm ci
@@ -308,7 +322,7 @@ jobs:
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
-      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -705,7 +719,7 @@ jobs:
           IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
           CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
         run: bash .github/scripts/verify-release-artifact.sh
-      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -723,7 +737,19 @@ jobs:
   deploy-web:
     name: Deploy site + web app (Pages)
     needs: [changes, web-tests, app-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
+    # Evaluate the Pages gate even when an app-build dependency was skipped
+    # (the unsigned device build is PR-only, so it is skipped on every main
+    # push). Without always(), GitHub propagates that transitive skip and
+    # deploy-web never runs on main. The aggregate app-build job is the source
+    # of truth for native CI health, exactly as for the release job above.
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.web-tests.result == 'success' &&
+      needs.app-build.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.web == 'true'
     runs-on: macos-latest
     timeout-minutes: 10
     concurrency:
