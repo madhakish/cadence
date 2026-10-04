@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { startServer } from './server.mjs';
 
 const openLibrary = async (page) => {
@@ -80,5 +81,19 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     const detail = page.getByRole('dialog', { name: 'Back Squat', exact: true });
     await expect(detail).toBeVisible();
     await expect(detail.locator('.exercise-info-hero h2')).toHaveText('Back Squat');
+    // Match the comparison capture's populated, fractional-height mobile layout.
+    const fixture = JSON.parse(await readFile(new URL('../../../docs/design-pass/proof/review-c320/native-fixture.json', import.meta.url)));
+    await page.evaluate(async (data) => {
+      const db = await import('./js/db.js'); const ui = await import('./js/ui.js');
+      db.validateBackup(data); await db.importBundle(data);
+      ui.prefs.unitDisplay = data.settings.unitDisplay; ui.applyTheme(data.settings.theme);
+      (await import('./js/views/settings.js')).exerciseLibrary(await db.Exercises.all());
+    }, fixture);
+    const categories = page.locator('#overlays > .overlay').last().locator('.library-group > summary');
+    await expect(categories).toHaveCount(3);
+    await categories.last().evaluate((row) => row.scrollIntoView({ block: 'center' }));
+    await expect.poll(() => categories.evaluateAll((rows) => rows.map((row) => {
+      const r = row.getBoundingClientRect(); return r.top >= 64 && r.bottom <= innerHeight;
+    }))).toEqual([true, true, true]);
   } finally { releaseImages(); await slow.close(); await server.close(); }
 });

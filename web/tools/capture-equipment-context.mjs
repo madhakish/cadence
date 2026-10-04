@@ -44,7 +44,8 @@ try {
       captures.push({ surface, width, height, file, imageCount: await page.locator('.equipment-context').count() });
     };
     await expect(top().locator('.library-group > summary')).toHaveCount(3);
-    await top().locator('.library-group > summary').last().scrollIntoViewIfNeeded();
+    // Keep fractional row bounds away from the viewport edge; scrolling rounds to CSS pixels.
+    await top().locator('.library-group > summary').last().evaluate((row) => row.scrollIntoView({ block: 'center' }));
     await expect.poll(() => top().locator('.library-group > summary').evaluateAll((rows) => rows.every((row) => {
       const r = row.getBoundingClientRect(); return r.top >= 64 && r.bottom <= innerHeight;
     }))).toBe(true);
