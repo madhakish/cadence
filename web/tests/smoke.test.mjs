@@ -5884,5 +5884,43 @@ await withCleanup(async (keep) => {
   ok(otherAfter === otherBefore, "a scoped rebuild never touches records it does not own");
 })();
 
+// ---- a failed logger write never shows work that a reload would lose ----
+// Status taps redrew "completed" and fired an unawaited save; a rejected
+// IndexedDB put left the screen saying completed while the store said planned.
+await withCleanup(async (keep) => {
+  const sid = keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(new Date()), isCompleted: false, notes: "Synthetic save-failure fixture",
+    exercises: [{ exerciseName: "Back Squat", order: 0,
+      sets: [{ weightLb: 135, reps: 5, status: "planned", isWarmup: false, order: 0 }] }],
+  }));
+  document.getElementById("toast").textContent = "";
+  await session.openSession(sid); await tick();
+  const logger = () => [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const statusButton = () => logger().querySelector('.setrow button[aria-label^="Set status:"]');
+  const realSave = db.Sessions.save;
+  let rejected = 0;
+  db.Sessions.save = async (...args) => {
+    rejected += 1;
+    throw new DOMException("Simulated quota", "QuotaExceededError");
+  };
+  try {
+    statusButton().click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("Couldn't save"));
+  } finally { db.Sessions.save = realSave; }
+  ok(rejected === 1, "the status tap attempted exactly one write");
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "planned", "the store still says planned");
+  ok(statusButton().getAttribute("aria-label") === "Set status: planned",
+    "the screen rolls back to the durable state instead of showing a completed set");
+  ok(document.getElementById("toast").textContent.includes("your last change was undone"),
+    "the lifter is told the change was not saved");
+
+  statusButton().click();
+  for (let i = 0; i < 5 && (await db.Sessions.get(sid)).exercises[0].sets[0].status !== "completed"; i += 1) await tick();
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "completed"
+    && statusButton().getAttribute("aria-label") === "Set status: completed",
+    "a retry after the failure persists and shows the completed set");
+  document.getElementById("overlays").replaceChildren();
+})();
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

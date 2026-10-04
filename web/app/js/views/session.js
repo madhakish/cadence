@@ -222,7 +222,34 @@ export async function openSession(id) {
     ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
     : null;
   const workoutName = sessionDayName || session.programTag?.programName || "Workout";
-  const save = () => Sessions.save(session);
+  // Logger edits redraw optimistically, then persist. Writes are serialized
+  // so a later save cannot race an earlier failed one. persist() rejects for
+  // the few callers that undo their own fields; save() is the fire-and-forget
+  // form: on failure it reloads the last durable session from IndexedDB,
+  // redraws, and says the change was not saved, so the screen never shows
+  // work that a reload would lose (#261).
+  let saving = Promise.resolve();
+  let lastBody = null;
+  const persist = () => {
+    const write = saving.catch(() => {}).then(() => Sessions.save(session));
+    saving = write;
+    return write;
+  };
+  // The rollback joins the chain too: a write queued behind a failed one waits
+  // until memory is the reloaded durable state, so memory and store agree.
+  const save = () => (saving = persist().catch(async (error) => {
+    console.error("Workout change was not saved", error);
+    try {
+      const stored = await Sessions.get(session.id);
+      if (stored) {
+        for (const key of Object.keys(session)) delete session[key];
+        Object.assign(session, stored);
+        currentSE = null;
+        if (lastBody) renderBody(lastBody);
+      }
+    } catch (reloadError) { console.error("Reloading the saved workout failed", reloadError); }
+    ui.toast(`Couldn't save — your last change was undone. ${error?.message || ""}`.trim());
+  }));
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
   // days and slotless extra work are different exposures.
@@ -445,6 +472,7 @@ export async function openSession(id) {
   }
 
   function renderBody(body) {
+    lastBody = body;
     ui.clear(body);
     if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>Sessions.save(session)));
     session.exercises.sort((a, b) => a.order - b.order);
@@ -824,7 +852,7 @@ export async function openSession(id) {
             onSave: async (seconds) => {
               const previousDuration = s.durationSeconds, previousStatus = s.status;
               s.durationSeconds = seconds; s.status = "completed";
-              try { await save(); }
+              try { await persist(); }
               catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
               focusAfterVerdict(se, s.status);
               const restToArm = C.restAfterCompleting({ previous: previousStatus, status: s.status, isWarmup: !!s.isWarmup,
