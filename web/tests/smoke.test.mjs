@@ -1947,6 +1947,19 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(diffPreview.programs.some((d) => d.status === "changed" && d.id === changedProgram.id),
     `a program with a different slot count (was ${originalSlotCount}) previews as changed`);
 
+  // Same id, same date, same exercise count: only a performed set value
+  // differs. Restore overwrites that set, so the preview must name the session
+  // as changed instead of "unchanged" while the rest stay unchanged.
+  const repsEdited = structuredClone(parsed);
+  const editedSession = repsEdited.sessions.find((s) => s.exercises?.some((e) => e.sets?.length));
+  const editedSet = editedSession.exercises.find((e) => e.sets?.length).sets[0];
+  editedSet.reps = (editedSet.reps || 0) + 1;
+  const repsPreview = await db.namedRestorePreview(repsEdited);
+  ok(repsPreview.sessions.some((d) => d.id === editedSession.id && d.status === "changed"),
+    "a reps-only edit to a resident session previews as changed");
+  ok(repsPreview.sessions.filter((d) => d.status !== "unchanged").length === 1,
+    "the set digest leaves every untouched session unchanged");
+
   // A bundle that keeps the `programs` key but empties it wholesale-replaces
   // the store with nothing — every current program previews as removed.
   const emptied = { ...structuredClone(parsed), programs: [] };
@@ -5658,6 +5671,71 @@ await withCleanup(async (keep) => {
 })();
 
 
+// ---- activation is one transaction: a failed write changes nothing ----
+// It used to save each program's flag separately, so a failure on the second
+// write left A durably inactive and B never activated: no active program.
+await withCleanup(async (keep) => {
+  const settingsView = await import("../app/js/views/settings.js");
+  const mk = async (name, isActive) => keep(db.Programs, await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive,
+    days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+  }));
+  const parked = [];
+  for (const other of await db.Programs.all()) {
+    if (other.isActive) { parked.push(other.id); other.isActive = false; await db.Programs.save(other); }
+  }
+  try {
+    const aId = await mk("Atomic Activation A", true);
+    const bId = await mk("Atomic Activation B", false);
+    const flags = async () => Object.fromEntries((await db.Programs.all())
+      .filter((p) => p.id === aId || p.id === bId).map((p) => [p.id, p.isActive]));
+    const realPut = IDBObjectStore.prototype.put;
+    const stale = await db.Programs.get(await mk("Deleted Activation Target", false));
+    await db.Programs.del(stale.id);
+    const beforeMissing = JSON.stringify(await db.Programs.all());
+    for (const [label, activate] of [
+      ["unknown", () => db.Programs.setActive(-1)],
+      ["deleted", () => settingsView.activateProgram(stale)],
+    ]) {
+      let missingPuts = 0, missingError = null;
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === "programs") missingPuts++;
+        return realPut.apply(this, args);
+      };
+      try { await activate(); }
+      catch (error) { missingError = error; }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      ok(missingError?.message === "Program not found", `${label} activation target rejects`);
+      ok(missingPuts === 0, `${label} activation target queues no program writes`);
+      ok(JSON.stringify(await db.Programs.all()) === beforeMissing,
+        `${label} activation target preserves every stored program`);
+    }
+    ok(stale.isActive === false, "failed activation does not mark the deleted UI target active");
+    let puts = 0;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === "programs" && ++puts === 2) throw new DOMException("Simulated quota", "QuotaExceededError");
+      return realPut.apply(this, args);
+    };
+    let failed = null;
+    try { await settingsView.activateProgram(await db.Programs.get(bId)); }
+    catch (error) { failed = error; }
+    finally { IDBObjectStore.prototype.put = realPut; }
+    ok(failed?.name === "QuotaExceededError", "the injected second write failure reaches the caller");
+    const after = await flags();
+    ok(after[aId] === true && after[bId] === false,
+      "a failed activation leaves the original active program untouched, never none");
+    await settingsView.activateProgram(await db.Programs.get(bId));
+    const done = await flags();
+    ok(done[aId] === false && done[bId] === true
+      && (await db.Programs.all()).filter((p) => p.isActive).length === 1,
+      "a successful activation is exclusive");
+  } finally {
+    for (const id of parked) { const p = await db.Programs.get(id); if (p) { p.isActive = true; await db.Programs.save(p); } }
+  }
+})();
+
+
 // ---- Stage 4 UI: the switcher is reachable from Today (epic #155) ----
 await withCleanup(async (keep) => {
   const home = await import("../app/js/views/home.js");
@@ -5883,6 +5961,104 @@ await withCleanup(async (keep) => {
   const otherAfter = (await db.Milestones.all()).filter((m) => m.exerciseName !== "Good Morning").length;
   ok(otherAfter === otherBefore, "a scoped rebuild never touches records it does not own");
 })();
+
+// ---- a failed logger write never shows work that a reload would lose ----
+// Status taps redrew "completed" and fired an unawaited save; a rejected
+// IndexedDB put left the screen saying completed while the store said planned.
+await withCleanup(async (keep) => {
+  const sid = keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(new Date()), isCompleted: false, notes: "Synthetic save-failure fixture",
+    exercises: [{ exerciseName: "Back Squat", order: 0,
+      sets: [{ weightLb: 135, reps: 5, status: "planned", isWarmup: false, order: 0 }] }],
+  }));
+  document.getElementById("toast").textContent = "";
+  await session.openSession(sid); await tick();
+  const logger = () => [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const statusButton = () => logger().querySelector('.setrow button[aria-label^="Set status:"]');
+  const realSave = db.Sessions.save;
+  let rejected = 0;
+  db.Sessions.save = async (...args) => {
+    rejected += 1;
+    throw new DOMException("Simulated quota", "QuotaExceededError");
+  };
+  try {
+    statusButton().click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("Couldn't save"));
+  } finally { db.Sessions.save = realSave; }
+  ok(rejected === 1, "the status tap attempted exactly one write");
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "planned", "the store still says planned");
+  ok(statusButton().getAttribute("aria-label") === "Set status: planned",
+    "the screen rolls back to the durable state instead of showing a completed set");
+  ok(document.getElementById("toast").textContent.includes("your unsaved changes were undone"),
+    "the lifter is told the change was not saved");
+
+  statusButton().click();
+  for (let i = 0; i < 5 && (await db.Sessions.get(sid)).exercises[0].sets[0].status !== "completed"; i += 1) await tick();
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "completed"
+    && statusButton().getAttribute("aria-label") === "Set status: completed",
+    "a retry after the failure persists and shows the completed set");
+
+  // Every write saves the whole session, so a failed write with a newer edit
+  // queued behind it is superseded, not rolled back over that edit.
+  const notes = () => logger().querySelector(".session-support textarea");
+  const type = (value) => { notes().value = value; notes().dispatchEvent(new window.Event("input")); };
+  document.getElementById("toast").textContent = "";
+  let failNext = true;
+  db.Sessions.save = async (...args) => {
+    if (failNext) { failNext = false; throw new DOMException("Simulated quota", "QuotaExceededError"); }
+    return realSave(...args);
+  };
+  try {
+    type("a"); type("ab");
+    for (let i = 0; i < 10 && (await db.Sessions.get(sid)).notes !== "ab"; i += 1) await tick();
+  } finally { db.Sessions.save = realSave; }
+  ok((await db.Sessions.get(sid)).notes === "ab" && notes().value === "ab"
+    && !document.getElementById("toast").textContent.includes("Couldn't save"),
+    "a queued edit behind a failed write is saved, not overwritten by a rollback");
+
+  // A rejected gym switch restores the gym the equipment math resolves.
+  const gymSelect = () => logger().querySelector(".session-support select");
+  const durableGym = gymSelect().value;
+  const otherGym = [...gymSelect().options].find((o) => o.value !== durableGym)?.value;
+  ok(otherGym != null, "the fixture offers a second gym");
+  db.Sessions.save = async () => { throw new DOMException("Simulated quota", "QuotaExceededError"); };
+  try {
+    document.getElementById("toast").textContent = "";
+    gymSelect().value = otherGym; gymSelect().dispatchEvent(new window.Event("change"));
+    await waitFor(() => document.getElementById("toast").textContent.includes("Couldn't save"));
+  } finally { db.Sessions.save = realSave; }
+  ok(gymSelect().value === durableGym, "the redraw resolves the durable gym, not the rejected one");
+
+  // Discard waits for queued writes so none can recreate the deleted record.
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  db.Sessions.save = async (...args) => { await gate; return realSave(...args); };
+  try {
+    type("abc"); type("abcd");
+    logger().querySelector('button[aria-label="Discard this session without banking it"]').click();
+    await tick();
+    [...document.querySelectorAll("#overlays button")].find((b) => b.textContent === "Discard session").click();
+    await tick();
+    release();
+    for (let i = 0; i < 10 && document.querySelector("#overlays .overlay"); i += 1) await tick();
+  } finally { db.Sessions.save = realSave; }
+  await tick();
+  ok(await db.Sessions.get(sid) == null, "a discarded session is not recreated by a queued write");
+  document.getElementById("overlays").replaceChildren();
+})();
+
+// TFH evidence actions report success only after the write is durable.
+{
+  const { tfhEvidence } = await import("../app/js/views/tfh.js");
+  document.getElementById("toast").textContent = "";
+  const fixture = { exercises: [{ exerciseName: "Back Squat",
+    sets: [{ status: "completed", isWarmup: false, flags: [] }] }] };
+  const box = tfhEvidence(fixture, async () => false);
+  [...box.querySelectorAll("button")].find((b) => b.textContent.includes("felt clean")).click();
+  await tick();
+  ok(!document.getElementById("toast").textContent.includes("Set quality recorded"),
+    "a failed TFH write shows no success toast");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

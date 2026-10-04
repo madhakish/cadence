@@ -475,8 +475,7 @@ export async function assertNoForeignOpenSession(targetId) {
 
 export async function activateProgram(p) {
   await assertNoForeignOpenSession(p.uuid || p.id);
-  const all = await Programs.all();
-  for (const x of all) { const want = x.id === p.id; if (x.isActive !== want) { x.isActive = want; await Programs.save(x); } }
+  await Programs.setActive(p.id);
   p.isActive = true;
 }
 

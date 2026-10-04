@@ -943,9 +943,17 @@ enum ImportService {
                 cordVolume: activity?.cordVolume)
             let tfh = try tfhSignature(policyId: s.tfhPolicyId, context: s.tfhContext, excluded: s.tfhExcludedFromProgression,
                 anchors: (s.exercises ?? []).map(\.tfhAnchor), benchmarks: (s.exercises ?? []).map { ($0.sets ?? []).map(\.tfhBenchmark) })
+            let completed = s.isCompleted ?? true
+            let sets = setDigest((s.exercises ?? []).map { ($0.sets ?? []).map { x in
+                SetFacts(weightLb: x.weightLb ?? 0, reps: x.reps ?? 0,
+                         status: (x.status.flatMap(SetStatus.init(rawValue:))
+                                  ?? (schemaVersion < 2 && completed ? .completed : .planned)).rawValue,
+                         isWarmup: x.isWarmup ?? false,
+                         durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles)
+            } })
             let signature = sessionSignature(
                 date: s.date, programId: s.programTag?.programId,
-                exerciseCount: (s.exercises ?? []).count, activity: activitySig) + tfh
+                exerciseCount: (s.exercises ?? []).count, activity: activitySig) + tfh + sets
             return BackupContract.NamedEntity(id: id, name: name, signature: signature)
         }
         let currentSessions: [BackupContract.NamedEntity] = bundle.sessions == nil ? [] :
@@ -958,9 +966,13 @@ enum ImportService {
                 let tfh = try tfhSignature(policyId: session.tfhPolicyID, context: session.tfhContext, excluded: session.tfhExcludedFromProgression,
                     anchors: session.orderedExercises.map { try TFHProgramService.decode(TFHAnchor.self, $0.tfhAnchorData) },
                     benchmarks: session.orderedExercises.map { e in try e.orderedSets.map { try TFHProgramService.decode(TFHBenchmarkResult.self, $0.tfhBenchmarkData) } })
+                let sets = setDigest(session.orderedExercises.map { $0.orderedSets.map { x in
+                    SetFacts(weightLb: x.weightLb, reps: x.reps, status: x.status.rawValue, isWarmup: x.isWarmup,
+                             durationSeconds: x.durationSeconds, distanceMiles: x.distanceMiles)
+                } })
                 let signature = sessionSignature(
                     date: session.date, programId: session.programID,
-                    exerciseCount: session.exercises.count, activity: activitySig) + tfh
+                    exerciseCount: session.exercises.count, activity: activitySig) + tfh + sets
                 return BackupContract.NamedEntity(id: session.id, name: isoSessionName(session.date), signature: signature)
             }
 
@@ -1013,6 +1025,25 @@ enum ImportService {
         guard policyId != nil || anchors.contains(where: { $0 != nil }) else { return "" }
         return try tfhJSON(TFHSignature(policyId: policyId, context: context, excluded: excluded,
                                        anchors: anchors, benchmarks: benchmarks))
+    }
+
+    /// Performed set facts, in order. Without them a same-id session whose
+    /// reps changed previewed as "unchanged" while restore overwrote the set.
+    /// The incoming side resolves missing values exactly as `load` will, so
+    /// an untouched session still previews as unchanged. Mirrors web db.js
+    /// setDigest.
+    private struct SetFacts {
+        var weightLb: Double; var reps: Int; var status: String; var isWarmup: Bool
+        var durationSeconds: Int?; var distanceMiles: Double?
+    }
+    private static func setDigest(_ exercises: [[SetFacts]]) -> String {
+        "\u{1F}" + exercises.map { sets in
+            sets.map { x in
+                [String(x.weightLb), String(x.reps), x.status, x.isWarmup ? "1" : "0",
+                 x.durationSeconds.map { String($0) } ?? "", x.distanceMiles.map { String($0) } ?? ""]
+                    .joined(separator: ",")
+            }.joined(separator: ";")
+        }.joined(separator: "|")
     }
 
     private static func sessionSignature(date: Date?, programId: String?, exerciseCount: Int, activity: String) -> String {

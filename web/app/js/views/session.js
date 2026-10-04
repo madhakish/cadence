@@ -222,7 +222,46 @@ export async function openSession(id) {
     ? sessionProgram?.days?.find((day) => day.order === session.programTag.dayIndex)?.name
     : null;
   const workoutName = sessionDayName || session.programTag?.programName || "Workout";
-  const save = () => Sessions.save(session);
+  // Logger edits redraw optimistically, then persist. Writes are serialized
+  // so a later save cannot race an earlier failed one, and every write saves
+  // the whole session. persist() rejects for the few callers that undo their
+  // own fields. commit() owns failure: when the failed write is the last one
+  // queued, it reloads the durable session from IndexedDB, redraws, says the
+  // change was not saved and rejects, so the screen never shows work that a
+  // reload would lose (#261). A failed write with a later one queued is
+  // superseded: that write carries this change along with the newer edits.
+  let saving = Promise.resolve();
+  let queued = 0;
+  let discarded = false;
+  let lastBody = null;
+  const persist = () => {
+    queued += 1;
+    const write = saving.catch(() => {})
+      .then(() => (discarded ? undefined : Sessions.save(session)))
+      .finally(() => { queued -= 1; });
+    saving = write;
+    return write;
+  };
+  const reload = async () => {
+    const stored = await Sessions.get(session.id);
+    if (!stored || discarded) return;
+    for (const key of Object.keys(session)) delete session[key];
+    Object.assign(session, stored);
+    gymState.value = await Gyms.resolve(session.gymId, session.gymName);
+    currentSE = null;
+    if (lastBody) renderBody(lastBody);
+  };
+  // The rollback joins the chain too: a write queued after it waits until
+  // memory is the reloaded durable state, so memory and store agree.
+  const commit = () => (saving = persist().catch(async (error) => {
+    console.error("Workout change was not saved", error);
+    if (queued > 0) return;
+    try { await reload(); } catch (reloadError) { console.error("Reloading the saved workout failed", reloadError); }
+    ui.toast(`Couldn't save — your unsaved changes were undone. ${error?.message || ""}`.trim());
+    throw error;
+  }));
+  // Fire-and-forget form for the redraw-then-save call sites.
+  const save = () => { commit().catch(() => {}); };
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
   // days and slotless extra work are different exposures.
@@ -445,8 +484,9 @@ export async function openSession(id) {
   }
 
   function renderBody(body) {
+    lastBody = body;
     ui.clear(body);
-    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>Sessions.save(session)));
+    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>commit().then(()=>true,()=>false)));
     session.exercises.sort((a, b) => a.order - b.order);
     const current = currentEntry();
     const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
@@ -824,7 +864,7 @@ export async function openSession(id) {
             onSave: async (seconds) => {
               const previousDuration = s.durationSeconds, previousStatus = s.status;
               s.durationSeconds = seconds; s.status = "completed";
-              try { await save(); }
+              try { await persist(); }
               catch (error) { s.durationSeconds = previousDuration; s.status = previousStatus; throw error; }
               focusAfterVerdict(se, s.status);
               const restToArm = C.restAfterCompleting({ previous: previousStatus, status: s.status, isWarmup: !!s.isWarmup,
@@ -1331,6 +1371,9 @@ export async function openSession(id) {
         : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
+          // A queued write must not recreate the deleted record.
+          discarded = true;
+          await saving.catch(() => {});
           await Sessions.del(session.id); // Sessions.del drops the clock record
           rest.stop();
           screen.close();

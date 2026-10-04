@@ -197,6 +197,13 @@ assert_job_contains deploy "runs-on: macos-latest"
 workflow=".github/workflows/visual-proof.yml"
 assert_job_contains capture "runs-on: macos-latest"
 
+# A merge made with the workflow token starts no push run, so auto-merge must
+# never be enabled with it (#299).
+workflow=".github/workflows/auto-merge.yml"
+assert_job_contains enable 'GH_TOKEN: ${{ env.AUTO_MERGE_TOKEN }}'
+assert_job_not_contains enable 'github.token'
+assert_workflow_contains "permissions: {}"
+
 # Reject self-hosted selectors and expressions that could route work to them.
 for workflow in .github/workflows/*.yml; do
   if grep '^[[:space:]]*runs-on:' "$workflow" | grep -Ev '^[[:space:]]*runs-on: (ubuntu-latest|macos-latest)$'; then

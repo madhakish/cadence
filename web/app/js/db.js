@@ -583,6 +583,34 @@ export const Programs = {
       return Promise.all([reqP(programRequest), reqP(decisionRequest)]);
     });
   },
+  // Activation is exclusive, so every changed flag lands in ONE transaction:
+  // a failed write aborts all of them instead of leaving no program active
+  // (or two). Request callbacks, not awaits, keep the transaction alive
+  // between the read and the writes. Mirrors native ProgramActivationService.
+  setActive: (id) => runAll(["programs"], "readwrite", (os) => new Promise((resolve, reject) => {
+    const store = os("programs");
+    const read = store.getAll();
+    read.onerror = () => reject(read.error);
+    read.onsuccess = () => {
+      const writes = [];
+      try {
+        if (!read.result.some((program) => program.id === id)) throw new Error("Program not found");
+        for (const program of read.result) {
+          const want = program.id === id;
+          if (program.isActive === want) continue;
+          const next = { ...program, isActive: want };
+          C.tfhValidateProgram(next);
+          writes.push(reqP(store.put(normalizeProgram(next))));
+        }
+        Promise.all(writes).then(resolve, reject);
+      } catch (error) {
+        // The abort fails every already queued put; consume those so a
+        // synchronous write error cannot surface as an unhandled rejection.
+        for (const write of writes) write.catch(() => {});
+        reject(error);
+      }
+    };
+  })),
   del: (id) => del("programs", id),
   async active() { const all = await Programs.all(); return all.find((p) => p.isActive) || all[0] || null; },
   async byStableId(id) { const all = await Programs.all(); return all.find((p) => p.uuid === id || p.id === id) || null; },
@@ -1472,6 +1500,8 @@ const gymSignature = (g) => [
 // session's sets and a program's slot contents are themselves nested
 // structures) — the shared BackupContract explicitly asks for a
 // collection-appropriate shallow comparison here, not a deep recursive diff.
+// A session's performed set facts are the exception: they are what the
+// lifter edits, so they join the signature as a compact digest.
 // The v12 activity object is the first user-entered session-level fact
 // outside `exercises`, so it joins the shallow signature: an edit to RPE or
 // cords on one device must not preview as "unchanged" on the other
@@ -1486,10 +1516,18 @@ const tfhSignature = s => s.tfhPolicyId == null ? "" : JSON.stringify(stableTFH(
   anchors:(s.exercises || []).map(e=>e.tfhAnchor ?? null),
   benchmarks:(s.exercises || []).map(e=>(e.sets || []).map(x=>x.tfhBenchmark ?? null)),
 }));
+// Performed set facts, in order. Without them a same-id session whose reps
+// changed previewed as "unchanged" while restore overwrote the set. Missing
+// values take the defaults restore itself applies, so an untouched session
+// still previews as unchanged. Mirrors native ImportService.setDigest.
+const setDigest = (s) => (s.exercises || []).map((e) => (e.sets || []).map((x) => [
+  numOrZero(x.weightLb), numOrZero(x.reps), x.status || (s.isCompleted !== false ? "completed" : "planned"),
+  x.isWarmup ? 1 : 0, x.durationSeconds ?? "", x.distanceMiles ?? "",
+].join(",")).join(";")).join("|");
 const sessionSignature = (s) => [
   strOrEmpty(s.date), strOrEmpty(s.programTag?.programId), numOrZero((s.exercises || []).length),
   s.activity ? JSON.stringify(portableActivity(s.activity)) : "",
-  tfhSignature(s),
+  tfhSignature(s), setDigest(s),
 ].join("");
 
 const programSignature = (p) => [

@@ -197,7 +197,8 @@ test('[WEB-RESTORE-CONTENT] same counts with different reps require confirmation
   changed.sessions[0].exercises[0].sets[0].reps += 2;
   await chooseBackup(page, changed);
   const confirmation = page.getByRole('dialog', { name: 'Restore this backup?', exact: true });
-  await expect(confirmation).toContainText('Recorded values or settings differ');
+  // The preview's set digest names the session whose reps changed.
+  await expect(confirmation).toContainText('(changed)');
   await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
   expect(portableContent(await downloadBackup(page))).toEqual(portableContent(original));
