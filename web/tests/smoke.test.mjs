@@ -5658,6 +5658,71 @@ await withCleanup(async (keep) => {
 })();
 
 
+// ---- activation is one transaction: a failed write changes nothing ----
+// It used to save each program's flag separately, so a failure on the second
+// write left A durably inactive and B never activated: no active program.
+await withCleanup(async (keep) => {
+  const settingsView = await import("../app/js/views/settings.js");
+  const mk = async (name, isActive) => keep(db.Programs, await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive,
+    days: [{ name: "Pull", order: 0, lifts: [cyc("Deadlift", "main", 235, 320)], accessories: [] }],
+  }));
+  const parked = [];
+  for (const other of await db.Programs.all()) {
+    if (other.isActive) { parked.push(other.id); other.isActive = false; await db.Programs.save(other); }
+  }
+  try {
+    const aId = await mk("Atomic Activation A", true);
+    const bId = await mk("Atomic Activation B", false);
+    const flags = async () => Object.fromEntries((await db.Programs.all())
+      .filter((p) => p.id === aId || p.id === bId).map((p) => [p.id, p.isActive]));
+    const realPut = IDBObjectStore.prototype.put;
+    const stale = await db.Programs.get(await mk("Deleted Activation Target", false));
+    await db.Programs.del(stale.id);
+    const beforeMissing = JSON.stringify(await db.Programs.all());
+    for (const [label, activate] of [
+      ["unknown", () => db.Programs.setActive(-1)],
+      ["deleted", () => settingsView.activateProgram(stale)],
+    ]) {
+      let missingPuts = 0, missingError = null;
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === "programs") missingPuts++;
+        return realPut.apply(this, args);
+      };
+      try { await activate(); }
+      catch (error) { missingError = error; }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      ok(missingError?.message === "Program not found", `${label} activation target rejects`);
+      ok(missingPuts === 0, `${label} activation target queues no program writes`);
+      ok(JSON.stringify(await db.Programs.all()) === beforeMissing,
+        `${label} activation target preserves every stored program`);
+    }
+    ok(stale.isActive === false, "failed activation does not mark the deleted UI target active");
+    let puts = 0;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === "programs" && ++puts === 2) throw new DOMException("Simulated quota", "QuotaExceededError");
+      return realPut.apply(this, args);
+    };
+    let failed = null;
+    try { await settingsView.activateProgram(await db.Programs.get(bId)); }
+    catch (error) { failed = error; }
+    finally { IDBObjectStore.prototype.put = realPut; }
+    ok(failed?.name === "QuotaExceededError", "the injected second write failure reaches the caller");
+    const after = await flags();
+    ok(after[aId] === true && after[bId] === false,
+      "a failed activation leaves the original active program untouched, never none");
+    await settingsView.activateProgram(await db.Programs.get(bId));
+    const done = await flags();
+    ok(done[aId] === false && done[bId] === true
+      && (await db.Programs.all()).filter((p) => p.isActive).length === 1,
+      "a successful activation is exclusive");
+  } finally {
+    for (const id of parked) { const p = await db.Programs.get(id); if (p) { p.isActive = true; await db.Programs.save(p); } }
+  }
+})();
+
+
 // ---- Stage 4 UI: the switcher is reachable from Today (epic #155) ----
 await withCleanup(async (keep) => {
   const home = await import("../app/js/views/home.js");

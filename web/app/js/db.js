@@ -557,6 +557,34 @@ export const Programs = {
       return Promise.all([reqP(programRequest), reqP(decisionRequest)]);
     });
   },
+  // Activation is exclusive, so every changed flag lands in ONE transaction:
+  // a failed write aborts all of them instead of leaving no program active
+  // (or two). Request callbacks, not awaits, keep the transaction alive
+  // between the read and the writes. Mirrors native ProgramActivationService.
+  setActive: (id) => runAll(["programs"], "readwrite", (os) => new Promise((resolve, reject) => {
+    const store = os("programs");
+    const read = store.getAll();
+    read.onerror = () => reject(read.error);
+    read.onsuccess = () => {
+      const writes = [];
+      try {
+        if (!read.result.some((program) => program.id === id)) throw new Error("Program not found");
+        for (const program of read.result) {
+          const want = program.id === id;
+          if (program.isActive === want) continue;
+          const next = { ...program, isActive: want };
+          C.tfhValidateProgram(next);
+          writes.push(reqP(store.put(normalizeProgram(next))));
+        }
+        Promise.all(writes).then(resolve, reject);
+      } catch (error) {
+        // The abort fails every already queued put; consume those so a
+        // synchronous write error cannot surface as an unhandled rejection.
+        for (const write of writes) write.catch(() => {});
+        reject(error);
+      }
+    };
+  })),
   del: (id) => del("programs", id),
   async active() { const all = await Programs.all(); return all.find((p) => p.isActive) || all[0] || null; },
   async byStableId(id) { const all = await Programs.all(); return all.find((p) => p.uuid === id || p.id === id) || null; },
