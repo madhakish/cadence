@@ -1,6 +1,7 @@
 // Presentation-only reference profiles. Never written into exercise/gym data.
 import * as C from "./core.js";
 import { plateThemeGeometry } from "./plate-theme.js";
+import { barDimensions } from "./barbell-inspector.js";
 
 // The one spoken name for a plate on the bar, on both clients. Mirrors
 // CadenceCore BarbellScene.Disc.accessibilityLabel.
@@ -91,10 +92,11 @@ export const plateTintApply = (matrix, l) => [0, 5, 10].map((i) => Math.min(1, m
 export function barbellScene(solution, style = 'steel', exploded = false, geometry = {}, theme = 'custom') {
   const angle = (exploded ? 38 : 18) * Math.PI / 180;
   const axisX = Math.cos(angle), axisY = -Math.sin(angle) * .24, faceScale = Math.sin(angle);
-  const shoulder = (solution.bar.unit === 'kg' ? solution.bar.value === 15 : solution.bar.value === 35) ? 145 : 165;
+  const bar = barDimensions(solution.bar), mm = .36;
+  const shoulder = bar.shaftHalfLength * mm;
   const plates = solution.perSide.flatMap(c => Array.from({ length: Math.max(0, c.count) }, () => c.plate));
   const discs = [];
-  let cursor = shoulder + 8;
+  let cursor = bar.shoulderEnd * mm;
   let previousFaceRadius = 0;
   plates.forEach((plate, index) => {
     const shape = geometry[`${plate.value}-${plate.unit}`] || plateThemeGeometry(plate, theme, style);
@@ -107,12 +109,13 @@ export function barbellScene(solution, style = 'steel', exploded = false, geomet
       discs.push({ plate, side, index, x: center * axisX, y: center * axisY,
         radius, faceRadius, depth: depth * axisX, theme });
     }
-    cursor += depth + (exploded ? 0 : 2);
+    cursor += depth;
     previousFaceRadius = faceRadius;
   });
-  const collar = cursor + 8, end = Math.max(shoulder + 150, collar + 28);
-  const width = Math.max(end * axisX + 25, ...discs.map(d => Math.abs(d.x) + d.faceRadius + d.depth)) * 2 + 24;
+  const collarLength = solution.collarLb > 0 ? bar.collarLength * mm : 0;
+  const collar = cursor + collarLength / 2, end = (bar.shaftHalfLength + bar.sleeveLength) * mm;
+  const width = Math.max(Math.max(end, collar + collarLength / 2) * axisX + 25, ...discs.map(d => Math.abs(d.x) + d.faceRadius + d.depth)) * 2 + 24;
   const height = Math.max(110, ...discs.map(d => Math.abs(d.y) + d.radius)) * 2 + 40;
   discs.sort((a, b) => a.x - b.x);
-  return { discs, width, height, shoulder, end, collar, axisX, axisY, faceScale };
+  return { discs, width, height, shoulder, end, collar, collarLength, axisX, axisY, faceScale };
 }

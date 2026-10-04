@@ -1,0 +1,35 @@
+{
+  "provenance": "docs/design-pass/EQUIPMENT-CONTEXT.md",
+  "assets": [
+    {
+      "category": "Main",
+      "file": "main.png",
+      "native": "Cadence/Assets.xcassets/TrainingContextMain.imageset/main.png",
+      "width": 768,
+      "height": 512,
+      "bytes": 227515,
+      "sha256": "37ee2cffe5d44bee3d33a8c1837db5ebf5afcb9799070b2a2e75a28c61912413",
+      "sourceSHA256": "721569eee2de60ac7d7e9c36a722b4cb1de6b985acea33a36563f9a6821ff576"
+    },
+    {
+      "category": "Accessory",
+      "file": "accessory.png",
+      "native": "Cadence/Assets.xcassets/TrainingContextAccessory.imageset/accessory.png",
+      "width": 768,
+      "height": 512,
+      "bytes": 445560,
+      "sha256": "d3af6edf2877a88efdefcab8080956325ee9850e489baeabb71048c210647aea",
+      "sourceSHA256": "7e92683d0e3c41d4fbf06804d7156e005dd665d4a7a1bbebbf213a54d25423b1"
+    },
+    {
+      "category": "Conditioning",
+      "file": "conditioning.png",
+      "native": "Cadence/Assets.xcassets/TrainingContextConditioning.imageset/conditioning.png",
+      "width": 768,
+      "height": 512,
+      "bytes": 280369,
+      "sha256": "bd5138e0618af62cb3fa7cf3b3a4f0b3b8cf5438cb0d6d584410128a6c4704e6",
+      "sourceSHA256": "98fc4b9e0cd989b5bb4a471f139e45e55d480b8ad9533ef8dd806faff1231828"
+    }
+  ]
+}

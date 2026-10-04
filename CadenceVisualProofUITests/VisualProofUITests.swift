@@ -32,6 +32,14 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["CURRENT SET · NEXT ACTION"].waitForExistence(timeout: 3))
         capture("after-03-current-session-iphone")
+        let inspect = app.buttons["expand-loaded-bar"].firstMatch
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 220)
+        for _ in 0..<5 where !visible.contains(inspect.frame) { app.swipeUp() }
+        XCTAssertTrue(inspect.isHittable)
+        XCTAssertTrue(visible.contains(inspect.frame))
+        capture("after-03b-current-set-plates-iphone")
     }
 
     func test03ExercisePaneAndPreservedAnatomy() {
@@ -49,6 +57,13 @@ final class VisualProofUITests: XCTestCase {
         openDisclosure("Previous performance & programming")
         XCTAssertTrue(app.staticTexts["Last done"].waitForExistence(timeout: 3))
         openDisclosure("Muscles & relationship")
+        for rotation in 1...4 {
+            let reps = element("cycle-plan-reps-\(rotation)")
+            XCTAssertTrue(reps.waitForExistence(timeout: 3))
+            XCTAssertGreaterThanOrEqual(reps.frame.minX, 0)
+            XCTAssertLessThanOrEqual(reps.frame.maxX, app.windows.firstMatch.frame.maxX,
+                                     "Expanded programming prescriptions must fit the phone width")
+        }
         capture("after-04b-exercise-pane-tiers-open-iphone")
         for _ in 0..<6 where !prescription.isHittable { app.swipeDown() }
         XCTAssertEqual(prescription.frame.origin.y, tierOne.origin.y, accuracy: 1,
@@ -91,7 +106,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
         let toggle = app.buttons["barbell-explode-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
-        XCTAssertEqual(toggle.value as? String, "Assembled", "the inspection opens straight ahead, assembled")
+        assertInspectorState("Assembled", button: toggle)
         // The calculator beneath this sheet has its own accessible bar.
         // The artwork is the SceneKit solid where Metal is available and the
         // sprite scroll view otherwise; both expose the same plate children.
@@ -103,12 +118,12 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(artwork.staticTexts["barbell-plate-right-0"].exists)
         capture("barbell-assembled-iphone")
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Exploded")
+        assertInspectorState("Exploded", button: toggle)
         capture("barbell-exploded-iphone")
         XCTAssertFalse(app.buttons["barbell-reset-view"].exists, "inspection has exactly two authored views")
         XCTAssertFalse(app.segmentedControls["barbell-backdrop"].exists)
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Assembled")
+        assertInspectorState("Assembled", button: toggle)
 
         app.navigationBars["Loaded bar"].buttons["Done"].tap()
         let equipment = app.buttons["Equipment & loading"]
@@ -121,7 +136,7 @@ final class VisualProofUITests: XCTestCase {
         inspect.tap()
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Exploded")
+        assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
     }
 
@@ -235,6 +250,41 @@ final class VisualProofUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
         capture("after-09-settings-iphone")
+        openDisclosure("Rest & training behavior")
+        let duration = app.buttons["Squat & deadlift mains"]
+        XCTAssertTrue(duration.waitForExistence(timeout: 3))
+        // Bring the whole row below navigation chrome before tapping it;
+        // isHittable alone can be true for a partially obscured list row.
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 220)
+        for _ in 0..<10 where !visible.contains(duration.frame) {
+            // Full-screen swipes bounce this short row across the viewport
+            // in a plain List. Pan by about 130 points to land it in the cut.
+            let above = duration.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(visible.contains(duration.frame))
+        capture("after-settings-rest-iphone")
+        duration.tap()
+        XCTAssertTrue(app.textFields["Hours"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Minutes"].exists)
+        XCTAssertTrue(app.textFields["Seconds"].exists)
+        capture("after-duration-picker-iphone")
+        app.navigationBars.buttons["Cancel"].firstMatch.tap()
+
+        let sound = app.switches["Completion sound"]
+        for _ in 0..<10 where !visible.contains(sound.frame) {
+            let above = sound.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(sound.isHittable)
+        XCTAssertTrue(visible.contains(sound.frame), "The complete audio switch must be clear of the tab bar")
+        capture("after-settings-audio-iphone")
 
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(element("history-screen").waitForExistence(timeout: 5))
@@ -301,6 +351,13 @@ final class VisualProofUITests: XCTestCase {
     /// Every issue on a surface is collected and reported together, so one
     /// run names the whole list instead of the first unlabeled control (#61).
     func test12AccessibilityAudit() throws {
+        // Captures pin one text size for comparisons. The audit must be able
+        // to vary the system preference, so remove that override for this test.
+        app.terminate()
+        let category = try XCTUnwrap(app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName"))
+        app.launchArguments.removeSubrange(category...(category + 1))
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         continueAfterFailure = true
         try auditSurface("today")
 
@@ -337,8 +394,8 @@ final class VisualProofUITests: XCTestCase {
         //   progress bar, plain containers) are not tap targets;
         // - clipping is left out because SwiftUI Labels audit as clipped
         //   while the captures show them intact;
-        // - Dynamic Type findings are reported as advisories, not failures:
-        //   the fixed-size numerals and eyebrows are a tracked follow-up.
+        // - Dynamic Type findings remain raw advisories, except plate-target;
+        //   neither a passing audit nor screenshots establish full AA.
         let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
         let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
         let types: XCUIAccessibilityAuditType = [
@@ -425,13 +482,26 @@ final class VisualProofUITests: XCTestCase {
             target.tap()
             target.typeText("139")
             let done = app.buttons["plate-target-done"]
-            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            XCTAssertTrue(done.waitForExistence(timeout: 6))
             done.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
 
             let units = app.segmentedControls["plate-target-unit"]
-            for _ in 0..<4 where !units.isHittable { app.swipeUp() }
-            XCTAssertTrue(target.isHittable)
+            let window = app.windows.firstMatch.frame
+            let top = app.navigationBars["Plates"].frame.maxY
+            let inputViewport = CGRect(x: window.minX, y: top, width: window.width,
+                                       height: window.maxY - top - 34)
+            let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
+            revealRootListRows([inputRow], viewport: inputViewport)
+            // The plain List pins the scrolled section's header over the top
+            // of this row at accessibility sizes, and the frame check above
+            // cannot see that. Nudge the row back below the header, then wait.
+            for _ in 0..<2 where !target.isHittable {
+                scrollRootList(by: 80, viewport: inputViewport)
+            }
+            let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
+            XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
+                           "the target must be tappable once the keyboard has closed; field \(target.frame), row \(inputRow.frame), viewport \(inputViewport)")
             XCTAssertTrue(units.buttons["lb"].isHittable)
             XCTAssertTrue(units.buttons["kg"].isHittable)
             XCTAssertTrue(app.windows.firstMatch.frame.contains(target.frame))
@@ -466,6 +536,15 @@ final class VisualProofUITests: XCTestCase {
         text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
+    private func assertInspectorState(_ expected: String, button: XCUIElement) {
+        // Wait for the actual accessible state after one tap; no second tap
+        // or test retry can mask a non-working toggle.
+        let state = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expected), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [state], timeout: 3), .completed,
+                       "Inspector must reach \(expected) after one action")
+        XCTAssertEqual(button.value as? String, expected)
+    }
+
     /// #55: the loaded-bar inspection under each shipped plate theme. The
     /// proof seed reads `--plate-theme=<id>` and puts it on the fixture gym,
     /// so every relaunch shows the same 139 lb target in a different theme:
@@ -496,22 +575,287 @@ final class VisualProofUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars["Loaded bar"].waitForExistence(timeout: 5))
             let toggle = app.buttons["barbell-explode-toggle"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+            assertInspectorState("Assembled", button: toggle)
             capture("after-15-theme-\(theme)-assembled-iphone")
             toggle.tap()
-            XCTAssertTrue(app.buttons["barbell-explode-toggle"].waitForExistence(timeout: 3))
+            assertInspectorState("Exploded", button: toggle)
             capture("after-15-theme-\(theme)-exploded-iphone")
             app.buttons["Done"].tap()
         }
+    }
+
+    func test16FavoritesInLibraryAndSessionPicker() {
+        openExerciseLibrary()
+        XCTAssertTrue(element("exercise-search").waitForExistence(timeout: 3))
+        XCTAssertTrue(element("exercise-search").isHittable, "Search must be visible on arrival, without a pull-down gesture")
+        capture("favorites-01-library-empty-iphone")
+        openDisclosure("Main")
+        capture("favorites-library-category-iphone")
+        openDisclosure("Main")
+
+        let search = element("exercise-search")
+        for _ in 0..<3 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap(); search.typeText("Back Squat")
+        let submitSearch = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submitSearch.waitForExistence(timeout: 5))
+        submitSearch.tap()
+        let add = app.buttons["Add Back Squat to Favorites"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let remove = app.buttons["Remove Back Squat from Favorites"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(remove.value as? String, "Favorite")
+        capture("favorites-02-library-filtered-iphone")
+        XCTAssertTrue(app.navigationBars["Library"].exists, "Starring must not open or select the lift")
+
+        let movement = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movement'")).firstMatch
+        for _ in 0..<4 where !movement.isHittable { app.swipeDown() }
+        XCTAssertTrue(movement.isHittable); movement.tap()
+        app.buttons["Squat"].firstMatch.tap()
+        let equipment = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Equipment'")).firstMatch
+        equipment.tap(); app.buttons["barbell"].firstMatch.tap()
+        capture("favorites-library-composed-iphone")
+        equipment.tap(); app.buttons["dumbbell"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'No exercises match.'"))
+            .firstMatch.waitForExistence(timeout: 3))
+        capture("favorites-library-no-results-iphone")
+        app.buttons["Clear filters"].firstMatch.tap()
+
+        let cancelSearch = app.buttons["Cancel"].firstMatch
+        if cancelSearch.exists { cancelSearch.tap() }
+        capture("favorites-03-library-starred-iphone")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Today"].tap()
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let addExercise = app.buttons["Add exercise"]
+        for _ in 0..<14 where !addExercise.isHittable { app.swipeUp() }
+        XCTAssertTrue(addExercise.waitForExistence(timeout: 3))
+        addExercise.tap()
+        XCTAssertTrue(app.navigationBars["Add exercise"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element("exercise-search").waitForExistence(timeout: 3))
+        XCTAssertTrue(element("exercise-search").isHittable, "The shared picker must also open with visible search")
+        let pickerFavorite = app.buttons["Remove Back Squat from Favorites"].firstMatch
+        XCTAssertTrue(pickerFavorite.waitForExistence(timeout: 5), "The same saved shortcut appears in the session picker")
+        capture("favorites-04-session-picker-iphone")
+        let select = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Back Squat' AND NOT label CONTAINS 'settings'")).firstMatch
+        XCTAssertTrue(select.exists)
+        select.tap()
+        XCTAssertTrue(app.navigationBars["Add exercise"].waitForNonExistence(timeout: 5))
     }
 
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
     }
 
+    /// The root List ends above the opaque 72 pt calculator band. XCTest
+    /// can report a row below that band as hittable; use its whole frame.
+    private var rootListViewport: CGRect {
+        let window = app.windows.firstMatch.frame
+        let top = app.navigationBars.firstMatch.frame.maxY
+        let bottom = app.tabBars.firstMatch.frame.minY - 72
+        return CGRect(x: window.minX, y: top, width: window.width, height: bottom - top)
+    }
+
+    private func revealRootListRows(_ rows: [XCUIElement], viewport suppliedViewport: CGRect? = nil) {
+        // SwiftUI List creates cells lazily. Reach the last requested row
+        // before measuring the union, then move by the actual overflow.
+        for _ in 0..<20 where !rows.allSatisfy({ $0.exists }) {
+            scrollRootList(by: -100, viewport: suppliedViewport)
+        }
+        XCTAssertTrue(rows.allSatisfy { $0.exists }, "All requested rows exist")
+        for _ in 0..<20 {
+            let frame = rows.dropFirst().reduce(rows[0].frame) { $0.union($1.frame) }
+            let viewport = suppliedViewport ?? rootListViewport
+            if viewport.contains(frame) { break }
+            XCTAssertLessThanOrEqual(frame.height, viewport.height,
+                                     "The complete requested content must fit above the calculator band")
+            let delta = frame.minY < viewport.minY
+                ? viewport.minY - frame.minY + 4
+                : viewport.maxY - frame.maxY - 4
+            // A drag shorter than the pan threshold becomes a Menu tap.
+            let distance = max(64, min(80, abs(delta)))
+            scrollRootList(by: delta < 0 ? -distance : distance, viewport: suppliedViewport)
+        }
+        for row in rows {
+            let viewport = suppliedViewport ?? rootListViewport
+            XCTAssertTrue(viewport.contains(row.frame),
+                          "Complete row \(row.label) \(row.frame) must fit in \(viewport)")
+        }
+    }
+
+    private func scrollRootList(by delta: CGFloat, viewport suppliedViewport: CGRect? = nil) {
+        let viewport = suppliedViewport ?? rootListViewport
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
+        let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY + delta))
+        start.press(forDuration: 0.01, thenDragTo: end)
+    }
+
+    private func openExerciseLibrary() {
+        app.tabBars.buttons["Settings"].tap()
+        let programming = app.staticTexts["Programming & library"]
+        revealRootListRows([programming])
+        programming.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let library = app.buttons["Exercise library"]
+        revealRootListRows([library])
+        XCTAssertTrue(library.isHittable)
+        library.tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+    }
+
+    func test17FavoritesAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        openExerciseLibrary()
+        let search = element("exercise-search")
+        for _ in 0..<4 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.isHittable)
+        search.tap(); search.typeText("Back Squat")
+        let submitSearch = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submitSearch.waitForExistence(timeout: 5))
+        submitSearch.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Submitting search must leave the results unobstructed")
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(search.frame))
+        capture("favorites-accessibility-search-iphone")
+        for (id, value) in [("exercise-movement-filter", "All movements"),
+                            ("exercise-equipment-filter", "All equipment")] {
+            let filter = app.buttons[id]
+            XCTAssertTrue(filter.waitForExistence(timeout: 3))
+            XCTAssertEqual(filter.value as? String, value)
+            revealRootListRows([filter])
+            XCTAssertTrue(filter.isHittable)
+            capture("favorites-accessibility-\(id)-iphone")
+        }
+        let star = app.buttons["Add Back Squat to Favorites"].firstMatch
+        revealRootListRows([star])
+        XCTAssertTrue(star.isHittable)
+        XCTAssertGreaterThanOrEqual(star.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(star.frame.height, 44)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(star.frame))
+        star.tap()
+        XCTAssertTrue(app.buttons["Remove Back Squat from Favorites"].firstMatch.waitForExistence(timeout: 5))
+        // A reachable star alone does not prove the lift name/metadata are
+        // clear of navigation chrome. Retain the entire favorite row.
+        let favorite = app.cells.containing(.button, identifier: "Remove Back Squat from Favorites").firstMatch
+        XCTAssertTrue(favorite.waitForExistence(timeout: 3))
+        revealRootListRows([favorite])
+        capture("favorites-accessibility-iphone")
+    }
+
+    func test18DP1CalculatorStates() {
+        CalculatorProofCases.run(in: self)
+        // Light single-disc loads expose shaft/sleeve and bore alignment that
+        // a tall stack can hide. Use only the synthetic pound-denominated rack.
+        for (target, plate) in [("95", "25 lb"), ("115", "35 lb")] {
+            app.terminate()
+            app.launchArguments = ["--visual-proof", "--plate-proof=lb-exact",
+                "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.buttons["Plate calculator"].tap()
+            let field = app.textFields["plate-target"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap(); field.typeText(target)
+            app.buttons["plate-target-done"].tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+            let window = app.windows.firstMatch.frame
+            let top = app.navigationBars["Plates"].frame.maxY
+            let viewport = CGRect(x: window.minX, y: top, width: window.width,
+                                  height: window.maxY - top - 34)
+            let stage = app.cells.containing(.button, identifier: "expand-loaded-bar").firstMatch
+            revealRootListRows([stage], viewport: viewport)
+            for side in ["left", "right"] {
+                let disc = element("barbell-plate-\(side)-0")
+                XCTAssertTrue(disc.waitForExistence(timeout: 3))
+                XCTAssertTrue(disc.label.contains(plate), "The visible plate must match the solved denomination")
+                XCTAssertFalse(element("barbell-plate-\(side)-1").exists)
+            }
+            capture("after-calculator-single-\(plate.replacingOccurrences(of: " ", with: "-"))-iphone")
+        }
+    }
+
+    func test20EquipmentContextAndEmptyStates() {
+        app.terminate()
+        app.launchArguments += ["--equipment-empty-proof"]
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        app.tabBars.buttons["Program"].tap()
+        XCTAssertTrue(app.staticTexts["No program"].waitForExistence(timeout: 5))
+        revealRootListRows([app.cells.containing(.staticText, identifier: "No program").firstMatch])
+        capture("equipment-program-empty-iphone")
+
+        openExerciseLibrary()
+        let categories = ["Main", "Accessory", "Conditioning"].map {
+            app.cells.containing(.staticText, identifier: $0).firstMatch
+        }
+        revealRootListRows(categories)
+        capture("equipment-categories-iphone")
+
+        let search = element("exercise-search")
+        for _ in 0..<8 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.isHittable)
+        search.tap(); search.typeText("Synthetic unlogged accessory")
+        let submit = app.buttons["exercise-search-done"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
+        let lift = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Synthetic unlogged accessory'")).firstMatch
+        revealRootListRows([lift])
+        XCTAssertTrue(lift.isHittable); lift.tap()
+        XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 5))
+        let programming = app.staticTexts["Previous performance & programming"]
+        revealRootListRows([programming])
+        programming.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let empty = app.staticTexts["No sessions yet."]
+        let emptyRow = app.cells.containing(.staticText, identifier: "No sessions yet.").firstMatch
+        revealRootListRows([emptyRow])
+        XCTAssertTrue(empty.isHittable)
+        capture("equipment-exercise-empty-iphone")
+    }
+
+    /// App palettes are distinct from the ten equipment themes. Retain both
+    /// the primary task index and load-entry canvas under every saved palette.
+    func test19AppThemeCanvases() {
+        for (theme, label) in [("carbon", "Foundry"), ("memento", "Heritage Gold"),
+                               ("titanium", "Titanium"), ("slate", "Slate"), ("system", "System")] {
+            app.terminate()
+            app.launchArguments.removeAll { $0.hasPrefix("--app-theme=") }
+            app.launchArguments.append("--app-theme=\(theme)")
+            app.launch()
+            XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            app.tabBars.buttons["Settings"].tap()
+            XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts[label].firstMatch.waitForExistence(timeout: 3))
+            capture("after-19-app-theme-\(theme)-settings-iphone")
+            app.buttons["Plate calculator"].tap()
+            let target = app.textFields["plate-target"]
+            XCTAssertTrue(target.waitForExistence(timeout: 5))
+            target.tap()
+            target.typeText("139")
+            let done = app.buttons["plate-target-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            done.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+            capture("after-19-app-theme-\(theme)-calculator-iphone")
+        }
+    }
+
     private func capture(_ name: String) {
+        // XCTest can finish a tap before a disclosure's painted transition.
+        // The earlier proof caught ghosted rows; settle only the screenshot,
+        // beyond the 260 ms authored cut and the platform navigation animation.
+        Thread.sleep(forTimeInterval: 0.6)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        let frame = app.windows.firstMatch.frame
+        let geometry = XCTAttachment(string: "window: \(frame.width) x \(frame.height) pt\nlaunchArguments: \(app.launchArguments.joined(separator: " "))")
+        geometry.name = "\(name)-geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
     }
 }

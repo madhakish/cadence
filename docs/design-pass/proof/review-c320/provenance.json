@@ -1,0 +1,86 @@
+{
+  "run": 36925176699,
+  "candidateJob": 110582083506,
+  "artifact": 11195931098,
+  "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+  "phase": "pre-equipment-art",
+  "captures": [
+    {
+      "file": "after-settings-audio-iphone.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "nativeWindowPt": [
+        402,
+        874
+      ],
+      "width": 1206,
+      "height": 2622,
+      "bytes": 314255,
+      "sha256": "a0aace012eaad93c3de374b2f78df54dd4cb0efc1914a895ce9ecbbf6c433ef0",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()"
+    },
+    {
+      "file": "favorites-accessibility-search-iphone.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "nativeWindowPt": [
+        402,
+        874
+      ],
+      "width": 1206,
+      "height": 2622,
+      "bytes": 268540,
+      "sha256": "e7a5d31945eb199b3c90164edaa75397a9db75003c7f656066b5d4c554cc8092",
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()"
+    },
+    {
+      "file": "favorites-accessibility-iphone.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "nativeWindowPt": [
+        402,
+        874
+      ],
+      "width": 1206,
+      "height": 2622,
+      "bytes": 320148,
+      "sha256": "995a767f23cc3f6d228039cda96030762c1faf5e7ff32cd14b9b018c500bf0cb",
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()"
+    },
+    {
+      "file": "favorites-library-category-iphone.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "nativeWindowPt": [
+        402,
+        874
+      ],
+      "width": 1206,
+      "height": 2622,
+      "bytes": 224501,
+      "sha256": "94d2a12c4de37731a471225ec7970738d43382f32cf5bddcf2f23620b5e3dad5",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()"
+    },
+    {
+      "file": "after-web-session-picker-390.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "width": 390,
+      "height": 844,
+      "bytes": 43481,
+      "sha256": "1e2f9b35710f89d678f9301d24e64007ea4599e873c93de78393782d7a4dc55e"
+    },
+    {
+      "file": "after-web-exercise-anatomy-390.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "width": 390,
+      "height": 844,
+      "bytes": 95558,
+      "sha256": "6a053dbeb97d922563e827b2dc4f5626442de57280b1c75c0e698a01beea8069"
+    },
+    {
+      "file": "after-web-settings-rest-390.png",
+      "sourceSHA": "c3200e6dd24a9ee983294699789d0e22b3ed939e",
+      "width": 390,
+      "height": 844,
+      "bytes": 56824,
+      "sha256": "994c2cd71c4dda5283086a9b792812cf81059a673e7b0f6d527fce35368c427c"
+    }
+  ],
+  "inspection": "All seven listed original PNGs inspected, 2026-10-01. Retained byte-for-byte; no resampling or annotations. Other captures from this run are not claimed inspected."
+}

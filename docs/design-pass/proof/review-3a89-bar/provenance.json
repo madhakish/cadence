@@ -1,0 +1,47 @@
+{
+  "sourceCommit": "3a89d9c9a20e219fcc97695c23d2e80114e5d5e8",
+  "workflowRun": 36936687220,
+  "job": 110619431701,
+  "artifact": 11199323450,
+  "viewportPoints": [
+    402,
+    874
+  ],
+  "device": "iPhone 17 Pro",
+  "results": "16 of 18 native scenarios passed; maximum-text calculator input and category proof failed.",
+  "inspection": "Original preview and calculator show the shortened grip and oversized fixed stage. Original assembled/exploded inspector photos were inspected separately; an outer change plate can be hidden in an assembled stack, while the exploded labels and exact per-side list expose it. These are before-correction pixels. No claim about new renderer pixels or printed-face AA. All fixtures are synthetic.",
+  "files": [
+    {
+      "file": "barbell-workout-preview-iphone.png",
+      "exportedFileName": "AF39C271-ACEB-4C7E-A916-7055F410A529.png",
+      "suggestedHumanReadableName": "barbell-workout-preview-iphone_0_4797EFA1-F28F-42F0-8454-E19A147A8EF0.png",
+      "test": "VisualProofUITests/test09WorkoutPreviewInspection()",
+      "sha256": "47102a032be7b2319d36df04be040b309e0f5d63afac2dd97c3cdfbe8f7298d4",
+      "directlyInspected": true
+    },
+    {
+      "file": "after-07-plate-calculator-iphone.png",
+      "exportedFileName": "43B02CF5-EA4F-43BF-945D-114D296DD422.png",
+      "suggestedHumanReadableName": "after-07-plate-calculator-iphone_0_B7111E22-8667-45A6-9387-84FB0238A2CF.png",
+      "test": "VisualProofUITests/test04PlateCalculatorHero()",
+      "sha256": "b44326ad616b33f5476aff3f3ab6d06665b4fcc522ecb148ed447f3a52f188fd",
+      "directlyInspected": true
+    },
+    {
+      "file": "barbell-assembled-iphone.png",
+      "exportedFileName": "35E9C7C9-BA77-40E4-AF26-2E031D5E4A5F.png",
+      "suggestedHumanReadableName": "barbell-assembled-iphone_0_9E560ACC-9802-4C9B-B614-142FAE7527C9.png",
+      "test": "VisualProofUITests/test04PlateCalculatorHero()",
+      "sha256": "3099d24df0de5f997fc797438910a6ca84bc9457627bc38c215264da9c34f021",
+      "directlyInspected": true
+    },
+    {
+      "file": "barbell-exploded-iphone.png",
+      "exportedFileName": "61745450-DFB5-4F73-8481-47108C9241C1.png",
+      "suggestedHumanReadableName": "barbell-exploded-iphone_0_5A1C693B-2123-4E6E-AC1A-D75BDCB1EA8A.png",
+      "test": "VisualProofUITests/test04PlateCalculatorHero()",
+      "sha256": "e649b5828dc135c840d5cddd8525cc10b2fb931955f2387aba302a0834bd476c",
+      "directlyInspected": true
+    }
+  ]
+}

@@ -46,6 +46,8 @@ struct HistoryView: View {
                 case .milestones: milestoneList
                 }
             }
+            .listStyle(.plain)
+            .themeListBackground()
             .accessibilityIdentifier("history-screen")
             .navigationTitle("History")
             .plateCalculatorClearance()

@@ -52,7 +52,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section {
                     DisclosureGroup(isExpanded: expanded("gym")) {
                         ForEach(gyms) { gym in
@@ -322,6 +322,7 @@ struct SettingsView: View {
                 }
         }
         .listStyle(.plain)
+        .themeListBackground()
         .accessibilityIdentifier("settings-screen")
         .plateCalculatorClearance()
         .saveChangesOnDisappear(context, operation: "Saving settings")

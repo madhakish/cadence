@@ -1,5 +1,7 @@
 # Visual build candidate — 7 September 2026
 
+**Historical implementation record (7 September 2026).** Current compiled/rendered evidence and the remaining acceptance gates are in [FINAL-VERIFICATION.md](FINAL-VERIFICATION.md) and [BEFORE-AFTER.md](BEFORE-AFTER.md). Status statements below belong to that earlier checkpoint.
+
 **Status: ready for independent review at the owner's request; the full visual brief is not finished.**
 
 This candidate combines the Foundry/Heritage Gold/Titanium and screen work
@@ -61,7 +63,7 @@ policy and explicitly prohibited alternate routes around that action.
 No local-server, tunnel, alternate browser, or fabricated screenshot was used.
 Actual new web/iPhone screen captures are **not available for this candidate**.
 
-- [Historical iPhone before/after pairs](BEFORE-AFTER.md) name their original commits and are not evidence for this head.
+- [Historical iPhone before/after pairs](BEFORE-AFTER-2026-09-05.md) name their original commits and are not evidence for this head.
 - [Approved anatomy before/after registration renders](anatomy-registration/README.md) show production masks against the exact art; they are not full app screenshots.
 - [Material decisions](DECISIONS.md) distinguish the prior pass from this integration.
 

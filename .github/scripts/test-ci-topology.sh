@@ -114,6 +114,8 @@ assert_job_contains simulator-build "timeout-minutes: 20"
 assert_job_contains device-build "timeout-minutes: 20"
 assert_job_contains store-build "timeout-minutes: 45"
 assert_job_contains migration-tests "timeout-minutes: 45"
+assert_job_contains migration-tests "ref: 20058600ec2947c1a4f13a855d3b922ae80e1709"
+assert_job_contains migration-tests 'TEST_RUNNER_CADENCE_V14_STORE_DIR:'
 
 # Preserve the stable aggregate check and route its policy through the
 # scenario-tested executable gate. The portable suites are direct dependencies

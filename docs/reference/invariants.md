@@ -41,6 +41,21 @@ this scanner does not establish their coverage.
 
 ---
 
+## Exercise discovery
+
+### INV-FAVORITE-FAILED-SAVE
+*platforms: native, web*
+
+A favorite is a saved exercise preference. A failed write must leave both the
+bound exercise and its visible star at the previous value, report the failure,
+and permit another attempt. Rollback alone is not evidence that the held
+SwiftData object was restored.
+
+> The read-only native store regression left the bound exercise starred after
+> a failed save and rollback. The athlete saw a shortcut that would disappear
+> on reopen. Native restores the previous value explicitly; web commits before
+> publishing the new preference.
+
 ## Prescription and loading
 
 ### INV-LOCK-SCREEN-SET-IDENTITY

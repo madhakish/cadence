@@ -1,5 +1,7 @@
 # Design-pass audit
 
+**Historical DP-1/PR #188 audit.** The maps and decisions below describe that original pass. Current proof, pipeline and acceptance status are in [FINAL-VERIFICATION.md](FINAL-VERIFICATION.md) and [BEFORE-AFTER.md](BEFORE-AFTER.md); the newer workflow also captures the exact original application.
+
 Scope: issues #177–#187, implemented as one cohesive pass because the shared
 plate renderer, live exercise hierarchy, and proof fixture have to agree in one
 tree. iPhone is the primary surface; web follows the same information and data

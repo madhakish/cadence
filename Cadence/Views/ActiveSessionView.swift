@@ -153,6 +153,7 @@ struct ActiveSessionView: View {
             }
         }
         .listStyle(.plain)
+        .themeListBackground()
         .accessibilityIdentifier("active-session-screen")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SessionBottomBar(

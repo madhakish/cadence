@@ -50,9 +50,13 @@ public enum BarbellInspector {
         bar.unit == .kg ? bar.value == 15 : bar.value == 35
     }
 
+    public static func barDimensions(for bar: Bar) -> BarDimensions {
+        isWomensBar(bar) ? BarDimensions.womens : BarDimensions.mens
+    }
+
     public static func layout(loadout: Loadout, style: PlateVisualStyle, explode: Double,
                               geometry: [String: PlateGeometry] = [:], theme: PlateThemeID = .custom) -> Layout {
-        let bar = isWomensBar(loadout.bar) ? BarDimensions.womens : BarDimensions.mens
+        let bar = barDimensions(for: loadout.bar)
         let plates = loadout.perSide.flatMap { count in Array(repeating: count.plate, count: max(0, count.count)) }
         let shapes = plates.map { geometry[$0.id] ?? PlateTheme.geometry($0, theme: theme, style: style) }
         let maxRadius = shapes.reduce(bar.collarRadius) { max($0, $1.diameter / 2) }

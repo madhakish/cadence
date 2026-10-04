@@ -1,0 +1,4260 @@
+{
+  "runID": "36811839554",
+  "sources": {
+    "before": {
+      "applicationSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "runID": "36811839554",
+      "fixtureSchema": 12
+    },
+    "after": {
+      "applicationSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "runID": "36811839554",
+      "fixtureSchema": 16
+    }
+  },
+  "counts": {
+    "before-native": 14,
+    "before-web": 28,
+    "after-native": 78,
+    "after-web": 66
+  },
+  "note": "Original application PNG bytes; names normalized from XCTest metadata. Synthetic fixtures only. No resized, composited or regenerated proof.",
+  "files": [
+    {
+      "file": "after/after-01-home-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test01HomeAndAdHocWork()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "52CEB343-F6C9-4885-AA6C-DA5442F97220.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-01-home-iphone_0_0E31983B-2F13-4DC9-ABD2-E4AFC6B98F7A.png",
+        "timestamp": 1790827053.193
+      },
+      "sha256": "3dd8d7715fa6dfa6db3c7e805daef439e32ea463e5bb6cc41dac6b1a7f9d7527",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-02-ad-hoc-work-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test01HomeAndAdHocWork()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "A85177A2-FE27-44B4-91A9-315119F89DAD.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-02-ad-hoc-work-iphone_0_522ABFD8-F9D9-41AE-9672-61BA3A69FFC5.png",
+        "timestamp": 1790827075.752
+      },
+      "sha256": "a6af9bea0877160590e235a189af9989e10278654dcf916684e3e73c2e7eac13",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-03-current-session-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test02CurrentSessionAndExactPlateStack()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "1113B0A8-8055-4FF4-8C1E-94BBCF204C13.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-03-current-session-iphone_0_6B76E54E-99AE-4310-8169-410DE17FAA02.png",
+        "timestamp": 1790827105.437
+      },
+      "sha256": "353266d950963e5bbb12e3157df1243a5e8c281b7a51ac19a73cecd99c140ab7",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-03b-current-set-plates-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test02CurrentSessionAndExactPlateStack()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "AC12CD60-FAD3-43F6-868E-66EBAD42EEA3.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-03b-current-set-plates-iphone_0_C80097CF-9E5F-4387-A85B-CE8B33FD8D74.png",
+        "timestamp": 1790827114.515
+      },
+      "sha256": "51daa85f2408e3fab6db3d82d8ede057a937ebe25b63806d8fb8a1777fc991da",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-04-exercise-pane-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test03ExercisePaneAndPreservedAnatomy()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "B617D8FA-9ED0-48C0-85E9-3ACAF1CFBE1A.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-04-exercise-pane-iphone_0_8E96BCD8-47DB-40A8-A325-632B7EE24398.png",
+        "timestamp": 1790827131.483
+      },
+      "sha256": "67cc753a4c27704f6ccacb498cce688eb8fe6f6d10fbbf3f647c4b0154691ab3",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-04b-exercise-pane-tiers-open-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test03ExercisePaneAndPreservedAnatomy()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "3512729F-75F4-4E53-961D-D3E4A8AE5263.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-04b-exercise-pane-tiers-open-iphone_0_2960A4B0-68A5-4B25-905B-0C6E0C9CC77B.png",
+        "timestamp": 1790827159.958
+      },
+      "sha256": "bf888998591199e13f07cb90b56abc4a3fc3c89434ba91dee8e637a4e112293a",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-05-anatomy-unselected-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test03ExercisePaneAndPreservedAnatomy()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "17ACFD86-2823-4A5B-B4B1-ACF85D21B43D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-05-anatomy-unselected-iphone_0_9640C446-D5FB-44FF-8DB2-80D0846000DF.png",
+        "timestamp": 1790827182.718
+      },
+      "sha256": "f3420e4f7a9cdc853b56db95e0d4199b7d33748ef2209eac3746c260fc1b3c9a",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-06-anatomy-selected-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test03ExercisePaneAndPreservedAnatomy()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "3063646B-14DA-43C7-A93D-73DF688DF29E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-06-anatomy-selected-iphone_0_7B42F2BF-5455-4199-877C-3F6D2D345E26.png",
+        "timestamp": 1790827187.237
+      },
+      "sha256": "9a509ae00c0349f6f005f691f73175d7ba7157d3fb6cf82516f1915b3dbdb68b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-07-plate-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test04PlateCalculatorHero()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "00F328F9-491A-4092-973E-02DD3D843F58.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-07-plate-calculator-iphone_0_D58AB7F3-7133-4415-B771-4CBC4908BA6A.png",
+        "timestamp": 1790827226.631
+      },
+      "sha256": "94162fd25217d9618ec512a8e392d80bd91b25f09f9c9494412df6f7162ef281",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-09-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "3BAF796D-BAF3-4E53-A6CA-C5FC81B3A3F2.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-09-settings-iphone_0_D6926345-3016-43E8-8BEF-B199E66273F4.png",
+        "timestamp": 1790827281.763
+      },
+      "sha256": "271e1b3ee17321241bddc671b18c313e88e46d688b091a7e60b624cdafaf21d9",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-10-history-ad-hoc-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "AC9177C8-DC01-408C-94F7-BE15A2564F00.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-10-history-ad-hoc-iphone_0_4AACF98D-7964-47E2-A562-F68FE0CAD7EC.png",
+        "timestamp": 1790827311.869
+      },
+      "sha256": "e645a1092424fe5f58bd85a15e0c6d8d610b45769a01b420ab327b00f964a854",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-body-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "73CBA6A1-A6AE-4A06-AE27-FD0355E5E768.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-body-end-clears-plate-button-iphone_0_89F07C2C-6C75-4E10-B0B2-2BDAE86BE285.png",
+        "timestamp": 1790827413.728
+      },
+      "sha256": "3d01665e1f88136e6a35d207fac31632f3ad94a2c3929aec0740779d8be67953",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-history-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "5E81FD6D-4555-4DE9-818E-88A26133CCC6.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-history-end-clears-plate-button-iphone_0_FA9EE1A2-E798-4A97-801F-EFD8B6377C20.png",
+        "timestamp": 1790827369.476
+      },
+      "sha256": "2bc2a9e5c3943fd7deaeb86bf4b7c0592998e764af600395705c73cbb07d9142",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-program-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "9BB402A0-D7F4-4907-87B1-BFA5A1391F98.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-program-end-clears-plate-button-iphone_0_838B1CE8-61CB-4B6A-BF84-A94E392E71C6.png",
+        "timestamp": 1790827392.638
+      },
+      "sha256": "38b2aebfe00c29c424dc9c17361d6f9bc42863254d113b80985307542cb817ad",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-session-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "A2AEDDCC-09F2-42E4-91D8-4C20FBFE4D1F.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-session-end-clears-plate-button-iphone_0_9744E6BD-506F-4796-A006-4CD457847402.png",
+        "timestamp": 1790827472.088
+      },
+      "sha256": "ca9ef2837ee5ecba38611c7a96e9f3ddf37c56a80140e43f005d62c0d54c9e95",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-settings-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "E586E244-A1E2-48C9-909D-43E2F3BACEF4.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-settings-end-clears-plate-button-iphone_0_66D3E630-1F20-46B4-9ADB-7DDED6105596.png",
+        "timestamp": 1790827350.327
+      },
+      "sha256": "540756909edec0254e2ead9e298eb678d7c0c8d219b84b9cdfcb2df1582e3463",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-11-today-end-clears-plate-button-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test08PlateButtonNeverCoversContent()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "0C6B641F-2D77-4789-BE6A-EF8CC505A2BE.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-11-today-end-clears-plate-button-iphone_0_07ED0946-2E28-46F4-BD96-A9E62409FC63.png",
+        "timestamp": 1790827428.666
+      },
+      "sha256": "177e8a7a37f9161386ab64b22f8dc6eb92966dbef6e6bec62d65a8ca7e716284",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-12-audit-current-session-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "72E3F6F3-C8A9-46D1-9B8F-25A1C4E60AA2.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-12-audit-current-session-iphone_0_3D61A731-8FCD-44FE-AB46-265ED0A62DA6.png",
+        "timestamp": 1790827620.161
+      },
+      "sha256": "cd5a146fb603335a7474bef072b09f56c04ad768226381d81ac9f69824692d28",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-12-audit-plate-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "3D725C3C-A1F3-4F98-99E7-2A85899F0AED.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-12-audit-plate-calculator-iphone_0_81DD4756-CA84-4C5E-A04D-DFDDDD26E9CE.png",
+        "timestamp": 1790827639.615
+      },
+      "sha256": "9b04f05f098e10a37a11e3006fe019599d02f6fcd8e79ea16c50d647af7e98df",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-12-audit-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2FD0B144-3EA5-41A3-A91A-51316C74951E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-12-audit-settings-iphone_0_1A7DBD8C-1834-4FDA-852E-003BC3C7C4D6.png",
+        "timestamp": 1790827596.747
+      },
+      "sha256": "a8bd682fde130da68088d9db8b90157bdeca889a88ab9c0de558f8dd33c78907",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-12-audit-today-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "4CD6927D-D7F3-4FAC-8F37-2F722AFA2C09.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-12-audit-today-iphone_0_200B3B6C-8B81-428C-9B48-48176E9A383B.png",
+        "timestamp": 1790827589.073
+      },
+      "sha256": "7017cd5bca4af89af1bbdc51f50a484e5c891820309bc9c1d3a2a814cee85a71",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-13-session-after-set-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test13SetCompletionKeepsDominantBlockStill()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "6962D302-A5AE-4D22-BEB8-1246D7D9297D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-13-session-after-set-iphone_0_B43A3752-C9BF-4E77-B287-4984728C743C.png",
+        "timestamp": 1790827658.841
+      },
+      "sha256": "f2c01ee0b7c3c4687b5fd633dda680f5d890905339c94014612dc8aa39018918",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-13-session-before-set-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test13SetCompletionKeepsDominantBlockStill()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "4DE32301-C38D-48A5-AA41-139AD35BB492.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-13-session-before-set-iphone_0_4CDB9621-567A-43D8-AE08-26C25525722F.png",
+        "timestamp": 1790827654.497
+      },
+      "sha256": "952d2209592b3300e0d68cb619b58d0d62a43ab4f525a754fa7fd5cf494ea64f",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-14-calculator-target-accessibility-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "BD0527D0-789D-4A52-8FBE-5D3DA8B25CB3.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-14-calculator-target-accessibility-iphone_0_5397859A-ABB0-4EFF-AFA1-08943A48A7AD.png",
+        "timestamp": 1790827713.035
+      },
+      "sha256": "df0e6825f63a5a13264c5f549465d0165e7eaf758bd204c549ed103f7e6fb20b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-14-calculator-target-standard-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "FD817C38-8658-492B-8878-A22DCE3E20BB.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-14-calculator-target-standard-iphone_0_36784F30-BD8C-4EF7-BBEC-3A3D493D6798.png",
+        "timestamp": 1790827690.279
+      },
+      "sha256": "b8e0585907914ee133779fea358a7ce2967d9822b5b2a274fb622bf006197049",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-blackBumpersBand-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "B0EED5B2-8FFE-4F80-9C49-AD2208FD1B95.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-blackBumpersBand-assembled-iphone_0_383CA007-EAAB-4FA6-9EB7-4F39C0F554F0.png",
+        "timestamp": 1790828000.138
+      },
+      "sha256": "716ebef3d56e542b19f51b9053f45d50ff15ba06612900829f3a8b3d804a3ed1",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-blackBumpersBand-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "40397AB2-4C2F-4556-97DD-DBF30B64FBFB.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-blackBumpersBand-exploded-iphone_0_4A9C7892-8B22-4254-A0C3-D4D4530454CA.png",
+        "timestamp": 1790828003.487
+      },
+      "sha256": "8683cca5ad3245a9f7888082586adc40fb2bbc95559ceaeafe7e73127a1204c2",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-cadenceHouse-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "6712B89F-A0BE-45FB-A83A-CC0AB51031B3.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-cadenceHouse-assembled-iphone_0_EA337D72-4107-4B78-94E7-D8A8E83DB757.png",
+        "timestamp": 1790828036.435
+      },
+      "sha256": "6271416b94df71544ad6bb8899becba6c5c66e062756db85511278e8996f4c2a",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-cadenceHouse-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "3D082314-440A-4A76-B9E2-4B0898A1808E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-cadenceHouse-exploded-iphone_0_3CAA19FA-B908-43DF-94E6-4C92F3801864.png",
+        "timestamp": 1790828039.19
+      },
+      "sha256": "aa98aeaad1e1b071b722ca208f06fcb386174d3e306596dc3d004c0444145f5b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-ipfCalibrated-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "FBABC6B6-74E3-41BA-85D5-FC8C3F691B75.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-ipfCalibrated-assembled-iphone_0_495C9194-1D50-4D61-98F7-81451CFB3E9F.png",
+        "timestamp": 1790827806.776
+      },
+      "sha256": "f7d505c6d7b8cc866cefe3f9b47313ed3e6fa2fd538a729ea104d53cc769a000",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-ipfCalibrated-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "87FA2F13-AE55-4E9E-8DC6-FE68FED954CA.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-ipfCalibrated-exploded-iphone_0_4C95F27E-326E-4AC2-986D-3D9E983D9C3C.png",
+        "timestamp": 1790827809.425
+      },
+      "sha256": "d6ea0d17c3ef2753b88e96d2641750501eccc5358f3841e8e7518053993503be",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-ipfCalibratedGloss-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "88C87000-8BF4-4B43-8589-841C200F04D7.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-ipfCalibratedGloss-assembled-iphone_0_0D279C59-B7B1-4ED1-B82C-8E2261834A5F.png",
+        "timestamp": 1790827835.866
+      },
+      "sha256": "34f2a24a4c6e7d8c565c36fc0a324bd38673e93057c4a37d8b563676ffcd9050",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-ipfCalibratedGloss-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "EDE24643-8B93-4B20-99C5-AF556AEF866C.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-ipfCalibratedGloss-exploded-iphone_0_01093B55-7121-4A5A-9B68-17F96DF55EEE.png",
+        "timestamp": 1790827838.357
+      },
+      "sha256": "23b796a833e7acec38a60d48a761d1491f1dc98c0587d862dfaf21c8568f85e0",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-iwfCompetition-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "5F358240-984F-4F45-BBA2-7D8A42E149FF.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-iwfCompetition-assembled-iphone_0_69F61120-C214-4AB7-AD30-5A4986D5C2F8.png",
+        "timestamp": 1790827749.445
+      },
+      "sha256": "c3eeea798b8a67ff6e279b00929871ffcea6680bf63ba8c3c084d687d2e3c353",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-iwfCompetition-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "C27A0D6D-6F15-4514-BC09-9029E1A06C1D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-iwfCompetition-exploded-iphone_0_27F5769F-C845-4EF2-9A68-004719335D5E.png",
+        "timestamp": 1790827752.032
+      },
+      "sha256": "f8b51d5abbef69d6f848383f865dab5f4026e095013aa539170c7117e85d9222",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-iwfTraining-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2E0F678C-D5E7-4CC0-9737-1FA0114E12D8.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-iwfTraining-assembled-iphone_0_4E338451-4766-46E7-89FE-5E7C5A95BA07.png",
+        "timestamp": 1790827778.043
+      },
+      "sha256": "03db9ffd7f513af6f74d6a528d72426cbce1b731c0d49db530c54d77479e6b2e",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-iwfTraining-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "DE7598A2-5378-4F1C-ADFD-A9C96B55A69E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-iwfTraining-exploded-iphone_0_E6593DF1-C1AD-4E2B-95E5-9052810C8CF0.png",
+        "timestamp": 1790827780.796
+      },
+      "sha256": "7261eecee100bffe2dec4af98a6fa5362f1428a8dd871d1ffbc90f08003c51ba",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbBlackIron-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "5A54C429-9303-4B13-BAC4-150B99752000.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbBlackIron-assembled-iphone_0_324F0AE9-9181-442C-887F-5C975E109F3C.png",
+        "timestamp": 1790827911.809
+      },
+      "sha256": "fa6c72e581c95ae9be5aeb6619a2a8ee3fa9455ee31b57a7560fa6e8fcda839a",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbBlackIron-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2F167DF8-0ADA-4119-8D68-4E717C34BADE.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbBlackIron-exploded-iphone_0_67BC3F00-B15E-4188-A651-307F2725DB56.png",
+        "timestamp": 1790827914.704
+      },
+      "sha256": "d6fdc95f9d4495949bcfa5182bbc79932b89093ce833c80bbbe248da94baed32",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbColourBumpers-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "7B8E07BB-AF19-4165-B40B-3B9F7B2C882D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbColourBumpers-assembled-iphone_0_59B4175F-83EE-4351-A8D8-8688EF2051F9.png",
+        "timestamp": 1790827880.6
+      },
+      "sha256": "b096e8eb913d035a97b5d9673ca94e82ea8ded9a44a3fad156760f025239f1cd",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbColourBumpers-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "63923912-9217-45BC-B162-A79D4585116F.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbColourBumpers-exploded-iphone_0_EEF45D78-B7DB-41EA-9247-03C3980363F4.png",
+        "timestamp": 1790827883.396
+      },
+      "sha256": "fd81e36212fe0dd56c4b97fd9c5a6a6a1cb4c9ab8ecbbc7eea64ccc6e11dff29",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbGreyHammertone-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "79C38A18-3779-46FB-ACC9-31C4990C1175.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbGreyHammertone-assembled-iphone_0_FFFCDDF1-5DC3-4280-89A9-2BE01942885C.png",
+        "timestamp": 1790827940.271
+      },
+      "sha256": "d91b56feb319c567de397dbfad1c37a9aab007df1cb55d136575e957616a42c1",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbGreyHammertone-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "90DF531F-BF5F-4CBC-8BDC-B38BEEB75FAC.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbGreyHammertone-exploded-iphone_0_21C3A604-2CE8-4C65-8223-1BA71EEB895D.png",
+        "timestamp": 1790827943.023
+      },
+      "sha256": "71e328f454ca88b463dced5caa3a42ee0d62c382a94ea69431d3706718d56c94",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbMachinedSteel-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "C5CEF489-C57A-48DF-8DF2-CD01493305C3.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbMachinedSteel-assembled-iphone_0_27E1109C-2879-4D40-90A6-268A11B64628.png",
+        "timestamp": 1790827968.689
+      },
+      "sha256": "0765d48268d5594922da1c7d9ebd7009ce3141270cfa76c2e019200e19481c2d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-15-theme-lbMachinedSteel-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test15PlateThemesLoadedBar()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "F05F1F17-D755-483F-9063-A9110A9E822B.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-15-theme-lbMachinedSteel-exploded-iphone_0_B36C836D-5370-4E9A-AE8B-7E3BFF6F2FCE.png",
+        "timestamp": 1790827971.389
+      },
+      "sha256": "91e1b3e76c95e93d465e947943a96366075ca7a8d8b952db9bde39966e95b3be",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-carbon-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "0472D2A5-EFBE-4D32-92C0-C0F7C51897E5.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-carbon-calculator-iphone_0_EE2CFCF6-8B16-4B26-99C1-1D9AA7161926.png",
+        "timestamp": 1790828353.405
+      },
+      "sha256": "d73722349981c14e4edfac2f85d7fcf0a40b62e8edf07b70748c096c61b6608b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-carbon-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "A6B9FD68-BEE4-4F8D-BE23-800E7E7AB731.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-carbon-settings-iphone_0_35E3647B-923A-42F1-9E20-9082947916A0.png",
+        "timestamp": 1790828344.274
+      },
+      "sha256": "336e945e60134f916433ff80c604e959ee04ed7d7fd0076540aa1c5bd2d41eb4",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-memento-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "22485DF5-C375-4970-9AE9-ECC3FF5B44BF.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-memento-calculator-iphone_0_803CFFCE-FD64-4190-919D-4C2E94BFD0F7.png",
+        "timestamp": 1790828376.518
+      },
+      "sha256": "90eeb779d36ae0ee5a74f1f11dc91000fe69a480366e08ee0a09ad568c8b41cd",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-memento-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "4824AEF5-3CA8-4784-B0B2-379995536FB3.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-memento-settings-iphone_0_371E7469-4089-4C8B-AE67-4CF1D9A24B66.png",
+        "timestamp": 1790828366.804
+      },
+      "sha256": "297a07e2898254a516c8d2f53190c2fc3eb1dd965234281dd652f65c221a884b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-slate-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "0E9F0E34-3CCD-44A2-92A4-2A902F7F311E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-slate-calculator-iphone_0_1525E5C8-5C99-4E9B-B14A-3829CDCAE739.png",
+        "timestamp": 1790828422.143
+      },
+      "sha256": "e0e865579b6e36579e1385451f5a560be376c40f153707dd9d3b0989c3bf6fe7",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-slate-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "EB66CA29-4588-45C1-934F-C006E5033CF6.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-slate-settings-iphone_0_E1736E65-A1F6-4F74-B2E6-484D1AEB5D11.png",
+        "timestamp": 1790828412.507
+      },
+      "sha256": "6522709e2039150e332dba7ea67fcd5acfa0966bd2062afb953c03a1f1e70cab",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-system-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "F391FC17-790E-4883-B808-C38DF47C6058.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-system-calculator-iphone_0_BDE0BFF8-D3F3-4996-A9E9-28FA863F2440.png",
+        "timestamp": 1790828445.003
+      },
+      "sha256": "21ab4378a387aedbb6ad0bd1c7ac76c3f9f52143921f8485e27b407ad1b86754",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-system-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "B58BBA09-3E11-47F7-8E54-5349AB8B1C5B.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-system-settings-iphone_0_9E477B68-B37A-4DC3-8509-8D996C4D804F.png",
+        "timestamp": 1790828436.15
+      },
+      "sha256": "fd0a56d78c7539e24ba4dd146348005102b1dfd408b48302e2d0d4a9325e60ac",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-titanium-calculator-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "408FE46F-72C0-4730-A1A6-7975F5AAE516.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-titanium-calculator-iphone_0_5F5EECC6-C70C-428A-9572-D9C6B6102BA9.png",
+        "timestamp": 1790828399.166
+      },
+      "sha256": "356ca12324ce9e2c8dc6e17c6b49cb044146ed42b4fc5f031b679847a8f215f7",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-19-app-theme-titanium-settings-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test19AppThemeCanvases()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "D3457DAC-C9B3-4B62-9640-8A01DE38047C.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-19-app-theme-titanium-settings-iphone_0_A4099533-22E1-4B40-A43E-75C84A6A8EBB.png",
+        "timestamp": 1790828390.048
+      },
+      "sha256": "09d200899be4a18d48be31c2bbf551f4047bf534c2e8f24ae9e6a4da2dc033ea",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-calculator-kg-change-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test18DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "CCC6FEE5-F9DD-4C48-A761-46583E95BD10.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-calculator-kg-change-iphone_0_0C5EF67B-3932-4841-BEEF-D51A747036B4.png",
+        "timestamp": 1790828293.576
+      },
+      "sha256": "8d503294073057d68ec9891713baec0eb53392f5e78677dda157a5aacbbc29d4",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-calculator-lb-exact-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test18DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "8F876FD1-1CE7-4C71-BB65-26405DF7603F.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-calculator-lb-exact-iphone_0_953F4800-8528-4BE9-919D-21FC525750A3.png",
+        "timestamp": 1790828238.492
+      },
+      "sha256": "7f18c2e29d20ac7416a5304c484ffb2c03019231f633001582ad90bf4a2cbe02",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-calculator-mixed-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test18DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "7762E764-3175-4580-AAD4-1840092EA85E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-calculator-mixed-iphone_0_9AF57FA8-A3D8-482C-B74D-027B667D995A.png",
+        "timestamp": 1790828262.577
+      },
+      "sha256": "1383fb71e72783e6ad58dc4c4c65492bbb0976837857f4f2aa7785b9b8d978e9",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-calculator-reverse-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test18DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "1650723A-3B9D-4A82-BDF5-C62A49954090.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-calculator-reverse-iphone_0_B3604041-815B-4641-94AF-7038098932A1.png",
+        "timestamp": 1790828270.918
+      },
+      "sha256": "b97e7d4c1567174088ca2cd2edd230e7befa0d8b30674a04469f4558a1848c22",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-calculator-unreachable-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test18DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "15B06595-041B-44F1-994D-65A15D6DA64F.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-calculator-unreachable-iphone_0_025105F0-B6A0-453E-BE29-837629FB9083.png",
+        "timestamp": 1790828321.959
+      },
+      "sha256": "71169beeaf233cfd4c6fba002a8d2eeb092b0568289b79540821f5cfabc4ecc9",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-duration-picker-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "7FBD4B46-6928-431A-B0A2-CA2BCABE6C8C.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-duration-picker-iphone_0_7DCE771B-F943-49F9-B684-CEC384056E2E.png",
+        "timestamp": 1790827302.173
+      },
+      "sha256": "c8149045aa1a7d1d5dadf16db8e918c63aab1dc5cd5e6b184ca9794713d5bf12",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-settings-audio-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "F85AABC5-3B50-4300-B626-62F00604001B.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-settings-audio-iphone_0_11717F3C-2262-4B3A-9F37-FF041719F44B.png",
+        "timestamp": 1790827304.722
+      },
+      "sha256": "e25eb3e2ffa6ba9832bcc1f79c2db54fa3595f701677d6a772834b1b81488172",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-settings-rest-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test05SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "CC589AB4-DDC0-4577-BA80-2CC34650A709.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "after-settings-rest-iphone_0_54DD5D0F-1E01-42FE-80AD-ABE35A957039.png",
+        "timestamp": 1790827292.707
+      },
+      "sha256": "bebe091fd23e598d12fc160f453055fb8fe2269a1ecd4aa292b9c79d166eab44",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/after-web-ad-hoc-work-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "ad-hoc-work",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-ad-hoc-work-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "d30a5a2a079cf5e812704ef87144418ad9ee57fe3fd866764322349af8d78b22"
+    },
+    {
+      "file": "after/after-web-ad-hoc-work-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "ad-hoc-work",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-ad-hoc-work-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "d017cd158c7973aecb712abaf2037c44bcbdc70f9cd3abff37143cafe00addef"
+    },
+    {
+      "file": "after/after-web-app-theme-carbon-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "app-theme-carbon-settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-app-theme-carbon-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "ea0451268325c27e2daa5d2e172898ada16c89e2ca3f33d53eaa02500edfbc4b"
+    },
+    {
+      "file": "after/after-web-app-theme-carbon-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "app-theme-carbon-settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-app-theme-carbon-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "c8b95f928431b5f56d558553bbe2741c976138ba8e85e811a71331fddb600ec2"
+    },
+    {
+      "file": "after/after-web-app-theme-memento-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "app-theme-memento-settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-app-theme-memento-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "d068e126bf34f7ed521a23fd5e75dd0049363e213a3060850c73a04dabdcdd22"
+    },
+    {
+      "file": "after/after-web-app-theme-memento-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "app-theme-memento-settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-app-theme-memento-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "1b617a4e7eed47741cf9ba8625987013075106e75546b7e63dc05c0ffa1d2ae9"
+    },
+    {
+      "file": "after/after-web-app-theme-slate-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "app-theme-slate-settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-app-theme-slate-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "0439000559c475b8dadcaec6cd414dfa727419cf624e05a7be1c9c37b520f7f9"
+    },
+    {
+      "file": "after/after-web-app-theme-slate-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "app-theme-slate-settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-app-theme-slate-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "4a9b77c2ae08cba6c3485c20d25f62fb5387c1ccdb769189e7e8ac8502bec61e"
+    },
+    {
+      "file": "after/after-web-app-theme-system-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "app-theme-system-settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-app-theme-system-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "3a916b597d06a4e8f642143f82ac47d244f0dca6ac5f1f160aee77e65568be0f"
+    },
+    {
+      "file": "after/after-web-app-theme-system-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "app-theme-system-settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-app-theme-system-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "f5e2f65de53fcec73cfa7fcb1bad973d629cf996e65f480b639c956626793a28"
+    },
+    {
+      "file": "after/after-web-app-theme-titanium-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "app-theme-titanium-settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-app-theme-titanium-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "145d1209b9417aee1a436f9cdb8952a5ec9caf5028384834f723bf503109d2e5"
+    },
+    {
+      "file": "after/after-web-app-theme-titanium-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "app-theme-titanium-settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-app-theme-titanium-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "b48f858377e7bb8036eec118377f07b8b82c9d709706a6d434b9e8bb384a9a01"
+    },
+    {
+      "file": "after/after-web-calculator-kg-change-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-kg-change",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-calculator-kg-change-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "7d553744bfca05da6b8657f2e9c49def9ea3fc0ce54da03fdac3d13f250c5208"
+    },
+    {
+      "file": "after/after-web-calculator-kg-change-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-kg-change",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-calculator-kg-change-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 253
+        }
+      },
+      "sha256": "4477a351278767edd7d1ee5ea211a232a6f2ec2978504ff402b62cf29c06dc28"
+    },
+    {
+      "file": "after/after-web-calculator-lb-exact-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-lb-exact",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-calculator-lb-exact-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "8ad064b2bd9c1b826ec81092969b8f42ec21308b3eb07c17ebacceb297b72732"
+    },
+    {
+      "file": "after/after-web-calculator-lb-exact-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-lb-exact",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-calculator-lb-exact-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "2faac6a43672bdfd8b7cab25b20e3696e5098a7a48028b3f227e740ca090ae8f"
+    },
+    {
+      "file": "after/after-web-calculator-reverse-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-reverse",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-calculator-reverse-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "92bbc4a8c9ad7dcdc91ab26bb67a9fcfd30cdf8f03d006c9cfe81dd5df6aa8b6"
+    },
+    {
+      "file": "after/after-web-calculator-reverse-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-reverse",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-calculator-reverse-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "93e355d6d1cbfa55cee73252fb16bf6abc472014f7bab97e948f1d6bedff09a6"
+    },
+    {
+      "file": "after/after-web-calculator-unreachable-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-unreachable",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-calculator-unreachable-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "507142f1d4eda53e1106906a8b6b88e1a44fd424a8ca51a3bd88800a32aa4791"
+    },
+    {
+      "file": "after/after-web-calculator-unreachable-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-unreachable",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-calculator-unreachable-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "f456c4d9b53887e25c884fca9fbd5581cc7e4cb6208b2fbc6271014187f8baa6"
+    },
+    {
+      "file": "after/after-web-duration-picker-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "duration-picker",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-duration-picker-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "b784546bca3be83f6212acea55e7014b39a4f2a43b8fca44714ab4bd53d1d28f"
+    },
+    {
+      "file": "after/after-web-duration-picker-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "duration-picker",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-duration-picker-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "577bdc7423c940d9a0db52dc4b92f33ed5ba3f9bc53515b930dd7ec55e9351c7"
+    },
+    {
+      "file": "after/after-web-exercise-anatomy-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-anatomy",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-exercise-anatomy-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1901
+        }
+      },
+      "sha256": "3f9425200f5caad1368f0d3c23d4c5936bf01e76fd97bcb573e2c18af60f5d3e"
+    },
+    {
+      "file": "after/after-web-exercise-anatomy-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-anatomy",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-exercise-anatomy-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1595
+        }
+      },
+      "sha256": "62d7ae58dea00430badcba982b4c46ec313e17507c63a70503ddac26f7181360"
+    },
+    {
+      "file": "after/after-web-exercise-anatomy-selected-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-anatomy-selected",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-exercise-anatomy-selected-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1904
+        }
+      },
+      "sha256": "90a1ae84b04705507efee2d19d2faa8190f8afb3eceb4865c1cbc6c65b896252"
+    },
+    {
+      "file": "after/after-web-exercise-anatomy-selected-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-anatomy-selected",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-exercise-anatomy-selected-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1597
+        }
+      },
+      "sha256": "aab9b43fac90bfd546c824d1f1a279e07124ea24bfa63728c90970c1bb20c530"
+    },
+    {
+      "file": "after/after-web-exercise-pane-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-pane",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-exercise-pane-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "c7fce59d7c35742b670614378f2a22a3dbcb23e49f3ebc6a875ae292fdf4d6cb"
+    },
+    {
+      "file": "after/after-web-exercise-pane-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-pane",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-exercise-pane-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "7030d0bef5c4a451adc475cc5093e21dd96b7405c042dbbf227e7c258ccb045a"
+    },
+    {
+      "file": "after/after-web-exercise-pane-expanded-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-pane-expanded",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-exercise-pane-expanded-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1520
+        }
+      },
+      "sha256": "9b11b47827332e0e0e5a22345ff008a469999783b1a1be5ab130227aea1a9d23"
+    },
+    {
+      "file": "after/after-web-exercise-pane-expanded-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-pane-expanded",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-exercise-pane-expanded-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 1332
+        }
+      },
+      "sha256": "ac93cceaf97f88581041e99962f3193b6e3246f4a29ffc5b0d0090c00ce2d400"
+    },
+    {
+      "file": "after/after-web-favorites-320-zoom1.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        320,
+        844
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 320,
+        "height": 844,
+        "file": "after-web-favorites-320-zoom1.png",
+        "cssZoom": 1,
+        "reducedMotion": true,
+        "starBounds": {
+          "x": 241,
+          "y": 387.203125,
+          "width": 50,
+          "height": 44
+        }
+      },
+      "sha256": "d1f40f368b8d29fc5d0608c0bfdba98d3914ac1d61873452d6bfcc5926a64a15"
+    },
+    {
+      "file": "after/after-web-favorites-320-zoom2.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        320,
+        844
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 320,
+        "height": 844,
+        "file": "after-web-favorites-320-zoom2.png",
+        "cssZoom": 2,
+        "reducedMotion": true,
+        "starBounds": {
+          "x": 162,
+          "y": 451.296875,
+          "width": 100,
+          "height": 88
+        }
+      },
+      "sha256": "99b7cb6737a38a493d88e1646aee7bb4ef2cd051c5911a8541f4f8f392b35934"
+    },
+    {
+      "file": "after/after-web-favorites-430-zoom1.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        430,
+        844
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 430,
+        "height": 844,
+        "file": "after-web-favorites-430-zoom1.png",
+        "cssZoom": 1,
+        "reducedMotion": true,
+        "starBounds": {
+          "x": 351,
+          "y": 370.609375,
+          "width": 50,
+          "height": 44
+        }
+      },
+      "sha256": "b3f43b1c7541bc762dd5a61a93b234f0b8c2535af68b0c029d436e3272547275"
+    },
+    {
+      "file": "after/after-web-favorites-430-zoom2.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        430,
+        844
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 430,
+        "height": 844,
+        "file": "after-web-favorites-430-zoom2.png",
+        "cssZoom": 2,
+        "reducedMotion": true,
+        "starBounds": {
+          "x": 272,
+          "y": 451.8125,
+          "width": 100,
+          "height": 88
+        }
+      },
+      "sha256": "78d48783a7c48eed21078b171d0b6ba3cff3b9b63165706c827a8d14edc47d53"
+    },
+    {
+      "file": "after/after-web-history-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "history",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-history-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "8b0943f0e46c3054a36da946f30c59fcd7187ab7585dbe19a3ba82e817dab131"
+    },
+    {
+      "file": "after/after-web-history-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "history",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-history-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "0595ac00a381ca73fae1b948af2564fbbc5c373f86d48219b6bc39dade9d1ecf"
+    },
+    {
+      "file": "after/after-web-library-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "8a17c533fa176709909f299d0b59d23c68062a6117fb6e82edb6ab7cac493eb6"
+    },
+    {
+      "file": "after/after-web-library-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "04cc6bc360ec737d7df0c0a85c5119c37d9919927355ee9120236b59cc010d46"
+    },
+    {
+      "file": "after/after-web-library-category-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library-category",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-category-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "a92c174faefa575850acff743158399f2164a274da1ae24313f3ba875c7a0204"
+    },
+    {
+      "file": "after/after-web-library-category-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library-category",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-category-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "cee9931a72cf6a7d2bdbecb33ef19df6e82ebf1e37c907dc6c5822dc79ba289c"
+    },
+    {
+      "file": "after/after-web-library-composed-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library-composed",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-composed-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "fdd0e6393b54d033c1c75271dcf3a41456b477e7136a46297ed740c4d7541a34"
+    },
+    {
+      "file": "after/after-web-library-composed-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library-composed",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-composed-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "5e5f863565f1f800b4d493f20a216b8f7b2b03f3605c1fcf7cc025745d4de897"
+    },
+    {
+      "file": "after/after-web-library-favorites-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-favorites-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "b6e4b9ff1c4d57cac42f6ccdaec198e4640419fa0881b3b4ebfe9601934a46af"
+    },
+    {
+      "file": "after/after-web-library-favorites-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library-favorites",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-favorites-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "5c7d5e7581aa54d0bd8832f12c2a1671ef9ecf06d867d6dbed3747c082479880"
+    },
+    {
+      "file": "after/after-web-library-no-results-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library-no-results",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-no-results-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "add9a7f3a3d4bf72491dcd1ff83bd6f83f3f14ecff1cb531f3ac28e1099b9f47"
+    },
+    {
+      "file": "after/after-web-library-no-results-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library-no-results",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-no-results-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "99b166efd958b0d34290be5c570a849d1d28fe74a729aa0858b5cb940f28ee62"
+    },
+    {
+      "file": "after/after-web-library-search-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library-search",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-library-search-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "2d61f6edc8dd1e482a4d2b561a46f1ea920408157824ef398034183d3feb3418"
+    },
+    {
+      "file": "after/after-web-library-search-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library-search",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-library-search-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "dcae14e86f5f88ec718819bdf93c00a7ff7d805efed1e91b5d02fa29d408fadd"
+    },
+    {
+      "file": "after/after-web-plate-calculator-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "plate-calculator",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-plate-calculator-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "0bd06e54d54d6b673716c6d4d05d58db80bb1692bf4376427b4d7f783fb82f7d"
+    },
+    {
+      "file": "after/after-web-plate-calculator-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "plate-calculator",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-plate-calculator-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "0b9b2aafe05e8f8c049d2481bb509571c54e6ca3b8b816e59c899b005ece0a46"
+    },
+    {
+      "file": "after/after-web-plate-inspection-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "plate-inspection",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-plate-inspection-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "d5a706cb6d4a5c1ed5e361533d57762edb6e767a7ebc52a5f71ed77c488a4aeb"
+    },
+    {
+      "file": "after/after-web-plate-inspection-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "plate-inspection",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-plate-inspection-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "d465d16876a5710f46e173bb79bd06fa163bad9f2b382f97a08099c765177565"
+    },
+    {
+      "file": "after/after-web-plate-inspection-exploded-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "plate-inspection-exploded",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-plate-inspection-exploded-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "029267f571397117844e10e22a1e09791913f13740be06fb6781fad0b8ab09b9"
+    },
+    {
+      "file": "after/after-web-plate-inspection-exploded-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "plate-inspection-exploded",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-plate-inspection-exploded-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "3284ae0ff3272899c1ce05993682124a86c9ce2369053307387ebd56c013ce9f"
+    },
+    {
+      "file": "after/after-web-session-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "session",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-session-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "513d9c24f98ddc87a0ef3d1cbea461ddcf504e79d343c493cba437baa63ced26"
+    },
+    {
+      "file": "after/after-web-session-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "session",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-session-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "4c5d09cb9296972c0d918e30062f711fe08339545ee93ecc6dfcbd41b892b78a"
+    },
+    {
+      "file": "after/after-web-session-picker-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "session-picker",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-session-picker-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "21a1451b964b7c899a3371b75e5bcf1190c4fb8c8a3c5e56cf4e62979f422f14"
+    },
+    {
+      "file": "after/after-web-session-picker-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "session-picker",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-session-picker-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "0dba2969cd9caa0cf6f113153a52dd335ac6dc8680eba968ccd64a17be2750e7"
+    },
+    {
+      "file": "after/after-web-session-plates-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "session-plates",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-session-plates-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 431
+        }
+      },
+      "sha256": "d3816152ab22025ee9cc236aafd9a6276393255b86034cef59865cb34796ae52"
+    },
+    {
+      "file": "after/after-web-session-plates-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "session-plates",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-session-plates-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 532
+        }
+      },
+      "sha256": "85a586f68b428f3f0547826e2f7fdc5e2e454828872e64d11583eab22421969f"
+    },
+    {
+      "file": "after/after-web-settings-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "settings",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "ea0451268325c27e2daa5d2e172898ada16c89e2ca3f33d53eaa02500edfbc4b"
+    },
+    {
+      "file": "after/after-web-settings-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "settings",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "c8b95f928431b5f56d558553bbe2741c976138ba8e85e811a71331fddb600ec2"
+    },
+    {
+      "file": "after/after-web-settings-rest-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "settings-rest",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-settings-rest-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "53bded8562f04ae1f1b5dabfa625dee96f67afb394106898393f43d3851419f8"
+    },
+    {
+      "file": "after/after-web-settings-rest-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "settings-rest",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-settings-rest-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "65119df5601bed6542dcd3d846f53c1db4d8ba88a05b6236ccaaa02ca49549e3"
+    },
+    {
+      "file": "after/after-web-today-1280.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "today",
+        "width": 1280,
+        "height": 800,
+        "file": "after-web-today-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "01bb3df23c4edeb54a9470cfb1468f2c40d480d2701addab09df17552512143e"
+    },
+    {
+      "file": "after/after-web-today-390.png",
+      "phase": "after",
+      "platform": "web",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "today",
+        "width": 390,
+        "height": 844,
+        "file": "after-web-today-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "6e38eb408f450566f4390984db4790d50ce39b2a216dfe430a411926901b2068"
+    },
+    {
+      "file": "after/barbell-assembled-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test04PlateCalculatorHero()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "42CB8D9C-A5A8-4844-AAA4-D571A255E366.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "barbell-assembled-iphone_0_588C312F-4D80-4055-BD71-CC08C2F10D02.png",
+        "timestamp": 1790827237.35
+      },
+      "sha256": "b3c4c6209a9620409986fa2a4bcda59a13fd6f3af522bd646bd9f7ed7499b54c",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/barbell-bumper-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test04PlateCalculatorHero()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "B8B41C49-866E-4D1A-BA82-2822EC6CA8B8.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "barbell-bumper-exploded-iphone_0_010C13D1-A828-4D61-8A62-3E1F2377EB8C.png",
+        "timestamp": 1790827267.161
+      },
+      "sha256": "3c3617e04e87e00295ce9480b3118bf68747e79eab36e3cc41a2347e93bc543d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/barbell-exploded-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test04PlateCalculatorHero()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "A302A09E-6C1E-4E1B-930A-4E4F3C1FA77E.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "barbell-exploded-iphone_0_E6A2A628-FAE9-41F6-9D69-13ED384DB2DB.png",
+        "timestamp": 1790827238.955
+      },
+      "sha256": "2a3f387f19ba463d2128d37d1273354d0419211a84fd2a04f91d67665b36314b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/barbell-workout-preview-inspection-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test09WorkoutPreviewInspection()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "BFD0EF6A-2928-45A9-AE53-18BBE0C060AC.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "barbell-workout-preview-inspection-iphone_0_C85C76CA-5E77-4AD9-8C0A-79338280B424.png",
+        "timestamp": 1790827497.333
+      },
+      "sha256": "24d6c6a112ea385fe97a90d0a30abd1e0543edb6f6f2f4757bd82b626e79c40b",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/barbell-workout-preview-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test09WorkoutPreviewInspection()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2F2395F6-EA7B-4671-9BCE-65714072C876.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "barbell-workout-preview-iphone_0_30C69174-6208-47E0-B419-45050B326120.png",
+        "timestamp": 1790827490.057
+      },
+      "sha256": "7d90cc9af771cdcf01280791d157408f19a1302b2d782ac881c9643347c23f04",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/dynamic-type-advisories-current-session.txt",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "CADD8C68-4160-486E-86AA-DA3DF1416E01.txt",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "dynamic-type-advisories-current-session_0_48856E67-A463-4AA2-91A7-984888950B6B.txt",
+        "timestamp": 1790827620.163
+      },
+      "sha256": "268c76b63d754a5ca83938abe44a996d1b8bc8545b21c823eeac06de3e927da0"
+    },
+    {
+      "file": "after/dynamic-type-advisories-today.txt",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test12AccessibilityAudit()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "B66ECAA6-9DED-49EC-ADA2-0E670794B6C0.txt",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "dynamic-type-advisories-today_0_6BBF46C9-1177-4019-BE4B-709BF5B6A01A.txt",
+        "timestamp": 1790827589.074
+      },
+      "sha256": "59d3cb2e71d130285f9d0b9d3e8d8d4405100826e9cc90de9b0d1f0633b9e6ea"
+    },
+    {
+      "file": "after/favorites-01-library-empty-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "0E9F3771-AFAA-4135-8792-E425381A43AB.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-01-library-empty-iphone_0_78B8F4C2-71AF-49D5-A802-994C5C3E321A.png",
+        "timestamp": 1790828065.842
+      },
+      "sha256": "2728cc9d18f368641e0354c31c00eb1e1329a8120d3ee8742a1b788d3e45b2fc",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-02-library-filtered-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "53DF1791-24B9-41C7-AA61-E40D588BA548.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-02-library-filtered-iphone_0_77E05079-A915-4A6F-B5E4-50EF08893B1E.png",
+        "timestamp": 1790828087.181
+      },
+      "sha256": "bdd38ede7d3f384a05579195b61038310ed1cdce21a043642ab73b35736df307",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-03-library-starred-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "FC844F39-5187-4EFC-9D2D-082ABBAC101B.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-03-library-starred-iphone_0_E1E4A162-3F59-4203-83EB-5AA3E52EF91F.png",
+        "timestamp": 1790828108.864
+      },
+      "sha256": "5ab1da88c582ab89560ad970e0a41d6e14fbf5af4b36c0e242d6a1cf90a6c619",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-04-session-picker-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "D03CB09D-538E-48D2-B1CD-9EF069D3B30C.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-04-session-picker-iphone_0_A983EFD3-2D44-460B-83F5-661F941F2085.png",
+        "timestamp": 1790828141.778
+      },
+      "sha256": "dc9c4722b9654ba5ba1efb4b784d6233eca6e1b8b83617c97e0d86bea889a89d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-accessibility-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "0046F577-590F-4EF9-B852-E36475F1F596.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-accessibility-iphone_0_D4A00E7A-DFF7-46D9-9EE9-2BCD7FB31AD1.png",
+        "timestamp": 1790828207.282
+      },
+      "sha256": "54e81baeec511abef59e406347a8bf36dc8c643b92f06105c5aa1c5dfd5505c3",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-library-category-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "85E2A40C-A5AE-4F19-99F3-B4D089653B3A.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-library-category-iphone_0_5E058E01-FB18-458E-BBF0-944D2118D6AB.png",
+        "timestamp": 1790828071.457
+      },
+      "sha256": "30e9b65441bea6fd621efdf856bdb0106e5ac8dc71c1e692a97bb5b3cc1f7ddf",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-library-composed-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "318EAAE8-7314-4029-A014-8CB9A34582D9.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-library-composed-iphone_0_44D52361-1418-4488-819E-7451DB2269B7.png",
+        "timestamp": 1790828098.945
+      },
+      "sha256": "6e8f5a43fae583a33f4f093b461beae7afacb67aff7fa5caa2c617302ce0d4be",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/favorites-library-no-results-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test16FavoritesInLibraryAndSessionPicker()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "8CBA6297-A4A8-40C5-AB29-1803922047F9.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "favorites-library-no-results-iphone_0_1B688D77-4382-4B37-A384-9152DF77B86A.png",
+        "timestamp": 1790828105.874
+      },
+      "sha256": "f8aa7d215db83978ed7be7ef8d4da7454639e154362adaa5240b955bc0b4e508",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/plank-countdown-accessibility-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test11PlankTimerAtAccessibilityTextSize()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "15535E1B-B4B0-49BA-A687-87F9825AC382.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "plank-countdown-accessibility-iphone_0_C0E399C0-45C7-42A1-98F7-D1371DD7C671.png",
+        "timestamp": 1790827568.533
+      },
+      "sha256": "651195a48529e9d30f8977cae7b731181b862b9d8074a427c6a828c7eda90e20",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "after/plank-target-complete-iphone.png",
+      "phase": "after",
+      "platform": "native",
+      "sourceSHA": "78405bf4a12c32e5be65373b7006cb11c355d4e6",
+      "artifactID": "11141435392",
+      "testIdentifier": "VisualProofUITests/test10PlankCountdownAndLog()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2DBD4EB7-D30A-4AC4-919B-35BE3B10F234.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "plank-target-complete-iphone_0_62FB3A0F-1410-45CC-A62B-155B2273D072.png",
+        "timestamp": 1790827529.471
+      },
+      "sha256": "097aacd1a458020be3b643a9b9a4004ca4b4d0296ba4943b2e333de5e9faa3ea",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-01-home-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test01HomeAndAdHocWork()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "77BD2A00-2373-4642-8D39-3C7E5442C15D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-01-home-iphone_0_AC9B1D09-B0B9-4FF1-AEB8-36DE8A4D4F9A.png",
+        "timestamp": 1790827016.22
+      },
+      "sha256": "7b0d902a8c1fca32b9c39611ae98ebddf01079e6dccf4cbe332b14ec3bb4d0f0",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-02-ad-hoc-work-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test01HomeAndAdHocWork()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "401F6CF0-6767-4166-A08B-599A12F72194.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-02-ad-hoc-work-iphone_0_55B7FA8F-9FE2-4073-85F5-C147ECB44412.png",
+        "timestamp": 1790827023.89
+      },
+      "sha256": "b3f61f96469f5b5cc8d2faaa6ad84ae10f4b7f2a4a4a9742c2582dc41c2e39f7",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-03-current-session-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test02SessionAndExercisePane()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "EC2D6F41-CA64-4AE0-BADE-95C770B130B5.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-03-current-session-iphone_0_D9AFB381-76AB-4E13-9600-B515A713E81F.png",
+        "timestamp": 1790827051.879
+      },
+      "sha256": "5fcd543f626fdd179e7740f33ff08334ce355f04f86d5dfafae9a1670f9c402e",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-04-exercise-anatomy-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test02SessionAndExercisePane()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "2371F867-2D77-4FD3-B4A7-7215D998B1B4.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-04-exercise-anatomy-iphone_0_DA80E50F-96E8-4343-876F-8CCC310833EE.png",
+        "timestamp": 1790827061.651
+      },
+      "sha256": "8377f91ea3c5ef29958af053abbf1b1a8fb5eb4c7beefbd8b91b0bd5ec25d36d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-05-plate-calculator-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test03PlateCalculator()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "93BB6C9B-F371-4712-AA47-AA6A61909E52.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-05-plate-calculator-iphone_0_D0B1C2B7-FAA3-4646-9A6C-4EFD4492B463.png",
+        "timestamp": 1790827081.651
+      },
+      "sha256": "06f64ae701ea7497de1402833c02aef5d2178842f473a71a8dab4ccd4e094f6d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-06-settings-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test04SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "63EEB1A2-88AF-4FA9-AA9C-B311A6913F73.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-06-settings-iphone_0_15E3EBBC-4E99-4667-95C1-9E860372FE03.png",
+        "timestamp": 1790827096.908
+      },
+      "sha256": "27d07f062d70658e6d89b7c481cf9ac3373759e5dbade6f214b364847f46e4c5",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-07-history-ad-hoc-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test04SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "A7999236-6BA0-4732-A8C0-5F83EBB0860D.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-07-history-ad-hoc-iphone_0_BB9F6E74-0DF2-4E66-8E2C-FE33A96ADA1C.png",
+        "timestamp": 1790827107.255
+      },
+      "sha256": "e702298021b85b7c0804cf64440fa1d4602fc88514adefd33926ec668ddbd405",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-calculator-kg-change-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test06DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "E6203990-FBCA-4940-898A-0D439BA43B58.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-calculator-kg-change-iphone_0_6A1A8E9A-9BCF-4FB7-BFF2-EDBB009A7C24.png",
+        "timestamp": 1790827196.349
+      },
+      "sha256": "9b1d501ee92c090a6d14dd662f174896ffad0e2aaf719e273f9e82b5dede0d4d",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-calculator-lb-exact-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test06DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "11A53F94-7D5B-4094-A467-52C2A4F454BB.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-calculator-lb-exact-iphone_0_E2CA09D0-B650-42AC-97D0-1890C0C1541F.png",
+        "timestamp": 1790827162.176
+      },
+      "sha256": "6fd86039f092587333e07964445b8e19462471cc0ba15399cc17e9d48ba38691",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-calculator-mixed-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test06DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "CEB4D284-0F13-4768-952F-070FF8628AC5.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-calculator-mixed-iphone_0_C0FF3EEB-B3E8-4D07-827B-59E99CFCE3F7.png",
+        "timestamp": 1790827174.812
+      },
+      "sha256": "1d942c948796f9300b29f934d2e17aebe7001b78075678ebb4c2c7cde62ab7f2",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-calculator-reverse-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test06DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "BE516CD1-E531-4A5A-AFC0-2B1D46FE27ED.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-calculator-reverse-iphone_0_959054FA-939E-4B17-871D-EE0793E8D497.png",
+        "timestamp": 1790827182.065
+      },
+      "sha256": "412e16d0fe4b88fe5c246dda412501d329421ab20daf563b2d39971f1efd6988",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-calculator-unreachable-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test06DP1CalculatorStates()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "E868F4AD-1480-4CA7-B8AE-59E9ECCA5F73.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-calculator-unreachable-iphone_0_BC3AA78E-FBF1-4621-9325-0CE53596B88E.png",
+        "timestamp": 1790827212.083
+      },
+      "sha256": "cdb913d89415440ab613c60216a7a8e76a1d2eaec94db9de19fec2588b21cda7",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-library-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test05Library()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "D292BD34-16A7-4248-B1F4-5CA09D8AAE04.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-library-iphone_0_9FAF507C-BE5F-4A72-BB04-CE43A860450C.png",
+        "timestamp": 1790827140.677
+      },
+      "sha256": "d1eb762f9973cc213d0c8f580694a077c645ec2ba58285ba125a1950873b9b33",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-settings-rest-iphone.png",
+      "phase": "before",
+      "platform": "native",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "testIdentifier": "BaselineVisualProofUITests/test04SettingsAndHistory()",
+      "attachment": {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "4E3A6BB3-F417-4829-8DF5-0EA652541F40",
+        "deviceName": "iPhone 17 Pro",
+        "exportedFileName": "DD15D00E-0A01-491D-9B2F-3FEE6CE29BC0.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "before-settings-rest-iphone_0_3AC64CA8-EE0F-4232-A949-9ABC97C30FA9.png",
+        "timestamp": 1790827099.91
+      },
+      "sha256": "27d07f062d70658e6d89b7c481cf9ac3373759e5dbade6f214b364847f46e4c5",
+      "pixels": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "before/before-web-ad-hoc-work-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "ad-hoc-work",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-ad-hoc-work-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "a24d9d8a0c6dcf710d9bf020164232b557f041b7d9e118acd5d35c5f7f9fdd53"
+    },
+    {
+      "file": "before/before-web-ad-hoc-work-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "ad-hoc-work",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-ad-hoc-work-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "88027eb71b0bc079de217b75612dec1c303a7ca0330973534d55e2929253b855"
+    },
+    {
+      "file": "before/before-web-calculator-kg-change-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-kg-change",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-calculator-kg-change-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "8881bffe3aed7ec122bb3f2c74058df560c7f35aa69a966bde4dc837f5967507"
+    },
+    {
+      "file": "before/before-web-calculator-kg-change-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-kg-change",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-calculator-kg-change-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "1ae0a168cb8049a2fd305937c3cfefbf6720543ccc43de6da48cbd5450e3000c"
+    },
+    {
+      "file": "before/before-web-calculator-lb-exact-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-lb-exact",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-calculator-lb-exact-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "4aca5c265e4a9b99fde18eedfe8671020888edd9d734d42a33e91ae3ebe77b0d"
+    },
+    {
+      "file": "before/before-web-calculator-lb-exact-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-lb-exact",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-calculator-lb-exact-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "7bbd99afd43f13f45f559b37eb96e716e36427bb1fcc9b888a7fe83f05b2a6af"
+    },
+    {
+      "file": "before/before-web-calculator-reverse-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-reverse",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-calculator-reverse-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "dd53207de3d25fcb291d7d38d701c1fda61ffd1721fdbf3685a9675afd8b71ea"
+    },
+    {
+      "file": "before/before-web-calculator-reverse-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-reverse",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-calculator-reverse-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "8e7efc1f4c4f5206eca1ab269c97966d0c60d36c31d4ef1704ef41c88ecb3aee"
+    },
+    {
+      "file": "before/before-web-calculator-unreachable-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "calculator-unreachable",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-calculator-unreachable-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "7b432af57912ad9cd3a6fc93c3db29afb99655f37618043aa2afe57c5d20a714"
+    },
+    {
+      "file": "before/before-web-calculator-unreachable-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "calculator-unreachable",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-calculator-unreachable-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "b57d1f16607f2b06abf838d782924e1d1f95399bbb0e4dd8a1f063b0b424cf33"
+    },
+    {
+      "file": "before/before-web-exercise-anatomy-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-anatomy",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-exercise-anatomy-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "95d615fe72ae26461eb658875b61ed840e84ce9e6a907df56ddc79ef88c3e874"
+    },
+    {
+      "file": "before/before-web-exercise-anatomy-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-anatomy",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-exercise-anatomy-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "3593ff2dc9b988db440e47127eb187f5e1b3a2bfa2d9152eb5abccc3c750e059"
+    },
+    {
+      "file": "before/before-web-exercise-pane-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "exercise-pane",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-exercise-pane-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "95d615fe72ae26461eb658875b61ed840e84ce9e6a907df56ddc79ef88c3e874"
+    },
+    {
+      "file": "before/before-web-exercise-pane-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "exercise-pane",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-exercise-pane-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "3593ff2dc9b988db440e47127eb187f5e1b3a2bfa2d9152eb5abccc3c750e059"
+    },
+    {
+      "file": "before/before-web-history-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "history",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-history-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "c02a6c07d46e5de3dabed5feb3fd47c09234d45e9de337a376f9698e30a87059"
+    },
+    {
+      "file": "before/before-web-history-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "history",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-history-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "8bc719115fe47295b903bd86e86a8fe7b99d8027786936aede447a6862b4a79b"
+    },
+    {
+      "file": "before/before-web-library-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "library",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-library-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 1447,
+          "overlayY": 0
+        }
+      },
+      "sha256": "698df67a0057354abe455a5234f3abe468593a848f1d2a252b3bf1a26ddcf973"
+    },
+    {
+      "file": "before/before-web-library-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "library",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-library-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 1647,
+          "overlayY": 0
+        }
+      },
+      "sha256": "049455647f109240e6ccdf723602d12929a8c44513e261928589ef7562db4705"
+    },
+    {
+      "file": "before/before-web-plate-calculator-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "plate-calculator",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-plate-calculator-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "805e5be5d39ec2f605aecc74ec767acf38aca03dd927e1ac9a437165df0cc9b2"
+    },
+    {
+      "file": "before/before-web-plate-calculator-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "plate-calculator",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-plate-calculator-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "6e023f0bd2a04e5db8c8ac151d3469b66c057cdcdf4eddd44a08c4ddb58c97f7"
+    },
+    {
+      "file": "before/before-web-session-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "session",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-session-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "877641c41a97c846a842daffc7c97fe27e4731fdd0bc09913bed9445f1e4cbaf"
+    },
+    {
+      "file": "before/before-web-session-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "session",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-session-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": 0
+        }
+      },
+      "sha256": "abbb8153b5340f116cf95ee382eb49922caaf79fe56401174245c7f0bf6ca76b"
+    },
+    {
+      "file": "before/before-web-settings-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "settings",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-settings-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "c8f566cce7b94310400d1cc884a09cb7945c747e09e5c7626cfba0660d8c9d98"
+    },
+    {
+      "file": "before/before-web-settings-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "settings",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-settings-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "031f5b37dbfc99a614768b83bedc533f647c170dd4683ac2c262aaa217b731e5"
+    },
+    {
+      "file": "before/before-web-settings-rest-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "settings-rest",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-settings-rest-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "c8f566cce7b94310400d1cc884a09cb7945c747e09e5c7626cfba0660d8c9d98"
+    },
+    {
+      "file": "before/before-web-settings-rest-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "settings-rest",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-settings-rest-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "031f5b37dbfc99a614768b83bedc533f647c170dd4683ac2c262aaa217b731e5"
+    },
+    {
+      "file": "before/before-web-today-1280.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        1280,
+        800
+      ],
+      "capture": {
+        "surface": "today",
+        "width": 1280,
+        "height": 800,
+        "file": "before-web-today-1280.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "3794da10739ea6587f7fcab780d28302e84f8727e8bc5333301649367d806060"
+    },
+    {
+      "file": "before/before-web-today-390.png",
+      "phase": "before",
+      "platform": "web",
+      "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+      "artifactID": "11139963320",
+      "pixels": [
+        390,
+        844
+      ],
+      "capture": {
+        "surface": "today",
+        "width": 390,
+        "height": 844,
+        "file": "before-web-today-390.png",
+        "scroll": {
+          "windowX": 0,
+          "windowY": 0,
+          "overlayY": null
+        }
+      },
+      "sha256": "76f479d0a3a3ce778e22caed66f4cc23abe26ea1bb15857bb112a0897fe049c2"
+    }
+  ]
+}

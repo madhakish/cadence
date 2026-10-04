@@ -89,6 +89,9 @@ final class Exercise {
     var notes: String
     /// Shelved = in the library but not available for programming.
     var isShelved: Bool
+    /// User-owned shortcut, independent of the movement gate. V15's literal
+    /// default leaves every migrated lift unstarred; seed sync never changes it.
+    var isFavorite: Bool = false
     /// Re-entry test, in the coach's words.
     var shelvedNote: String
     /// Body site to watch when doing this movement, if any.
