@@ -141,6 +141,44 @@ final class ProgramActivationTests: XCTestCase {
         XCTAssertNoThrow(try ProgramActivationService.activate(b, context: context))
     }
 
+    /// A refused new block inserts nothing. The open-session check used to
+    /// run after template instantiation, leaving the refused program, its
+    /// days and any seeded exercises in the context for the next save.
+    func testARefusedNewBlockLeavesNothingBehind() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let a = makeProgram(context, name: "Program A", active: true)
+        let open = WorkoutSession(date: .now)
+        context.insert(open)
+        open.programID = a.id
+        open.programName = a.name
+        try context.save()
+        let programs = try context.fetchCount(FetchDescriptor<Program>())
+        let days = try context.fetchCount(FetchDescriptor<ProgramDay>())
+        let exercises = try context.fetchCount(FetchDescriptor<Exercise>())
+
+        let template = try XCTUnwrap(ProgramTemplateData.all.first)
+        XCTAssertThrowsError(try ProgramActivationService.startBlock(template, context: context)) { error in
+            XCTAssertEqual(error as? ProgramActivationService.ActivationError,
+                           .openSessionBelongsToAnotherProgram("Program A"))
+        }
+        XCTAssertFalse(context.hasChanges, "the refusal staged nothing")
+        // A later unrelated save must not persist a phantom block.
+        try context.save()
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Program>()), programs)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ProgramDay>()), days)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Exercise>()), exercises)
+        XCTAssertTrue(a.isActive, "the open block stays active")
+
+        // An untagged ad-hoc session blocks nothing.
+        open.programID = nil
+        open.programName = nil
+        try context.save()
+        let fresh = try ProgramActivationService.startBlock(template, context: context)
+        XCTAssertTrue(fresh.isActive)
+        XCTAssertFalse(a.isActive)
+    }
+
     func testSuspendingIsAPauseNotAReset() throws {
         let container = try makeContainer()
         let context = container.mainContext

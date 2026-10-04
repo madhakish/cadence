@@ -27,7 +27,7 @@ enum ProgramActivationService {
     /// cycle, rotation, next day, per-slot stalls, and pending peak results
     /// are exactly where the lifter left them, and no weight is re-derived.
     static func activate(_ program: Program, context: ModelContext) throws {
-        try assertNoForeignOpenSession(target: program, context: context)
+        try assertNoForeignOpenSession(targetID: program.id, context: context)
         for other in try context.fetch(FetchDescriptor<Program>())
         where other.isActive && other.id != program.id {
             other.isActive = false
@@ -46,15 +46,29 @@ enum ProgramActivationService {
     /// existing instance is preserved (and its history with it); the new
     /// program becomes active only after the store accepts it, so a failed
     /// write can never leave two active programs or none.
+    ///
+    /// The open-session rule is checked BEFORE anything is inserted: a
+    /// refused block must leave no program, days or seeded exercises in the
+    /// context for a later save to persist. A brand-new program owns no
+    /// session yet, so any program-tagged open session refuses it. Mirrors
+    /// web `assertNoForeignOpenSession(null)` in views/home.js.
     @discardableResult
     static func startBlock(
         _ template: ProgramTemplateData.Template, context: ModelContext
     ) throws -> Program {
-        let target = try ProgramTemplates.instantiate(template, context: context)
-        try assertNoForeignOpenSession(target: target, context: context)
+        try assertNoForeignOpenSession(targetID: nil, context: context)
+        // Commit unrelated pending edits first so the rollback below owns
+        // only the new block, like ProgramEquipmentService.applyAndSave.
         try context.save()
-        try activate(target, context: context)
-        return target
+        do {
+            let target = try ProgramTemplates.instantiate(template, context: context)
+            try context.save()
+            try activate(target, context: context)
+            return target
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     /// Programs grouped by the methodology they came from — the switcher's
@@ -66,8 +80,9 @@ enum ProgramActivationService {
         Dictionary(grouping: programs, by: \.templateID)
     }
 
+    /// `targetID` nil means a program that does not exist yet.
     private static func assertNoForeignOpenSession(
-        target: Program, context: ModelContext
+        targetID: String?, context: ModelContext
     ) throws {
         let open = try context.fetch(
             FetchDescriptor<WorkoutSession>(predicate: #Predicate { !$0.isCompleted })
@@ -75,7 +90,7 @@ enum ProgramActivationService {
         for session in open {
             // An untagged ad-hoc session belongs to no program and blocks
             // nothing; only work built from a DIFFERENT program does.
-            guard let programID = session.programID, programID != target.id else { continue }
+            guard let programID = session.programID, programID != targetID else { continue }
             throw ActivationError.openSessionBelongsToAnotherProgram(
                 session.programName ?? "unfinished")
         }

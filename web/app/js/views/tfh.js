@@ -77,6 +77,7 @@ export function tfhPlanRow(program,slot,exercise,sessions,gym,rotation=null) {
     ui.h("span",{class:"title",text:slot.exerciseName}),ui.h("span",{class:"sub",style:{whiteSpace:"pre-line"},text})));
 }
 
+// save resolves true once durable, false when it failed and was undone.
 export function tfhEvidence(session,save) {
   const box = ui.h("details",{class:"card"},ui.h("summary",{text:"TFH evidence · optional"}));
   const context = ui.h("input",{type:"text",maxLength:500,value:session.tfhContext || "",placeholder:"Setup, support, bodyweight…"});
@@ -85,7 +86,7 @@ export function tfhEvidence(session,save) {
   box.append(ui.h("button",{class:"btn ghost",text:"Completed, unflagged work felt clean",onClick:async()=>{
     for (const e of session.exercises) for (const s of e.sets) if(!s.isWarmup && s.status==="completed"
       && !C.setQuality(s.flags) && !(s.flags || []).includes("stopped early") && !s.bodyFlagSite) s.flags=[...(s.flags || []),"clean"];
-    await save();ui.toast("Set quality recorded.");
+    if(await save()) ui.toast("Set quality recorded.");
   }}));
   for(const e of session.exercises) for(const s of e.sets) if(s.tfhBenchmark!=null) {
     const labels = {"":"Not recorded",technicalLimit:"Technical limit",repCap:"Rep cap",pain:"Pain",interrupted:"Interrupted",voluntary:"Chose to stop"};
@@ -95,7 +96,7 @@ export function tfhEvidence(session,save) {
     box.append(ui.h("button",{class:"btn ghost",text:"Record benchmark context",onClick:async()=>{
       const b={stopReason:stop.value || null,restSeconds:rest.value==="" ? null : Number(rest.value)};
       if(!C.tfhValidBenchmark(b)){ui.toast("Rest must be 1–3600 seconds.");return;}
-      s.tfhBenchmark=b;await save();ui.toast("Benchmark context recorded.");
+      s.tfhBenchmark=b;if(await save()) ui.toast("Benchmark context recorded.");
     }}));
   }
   return box;

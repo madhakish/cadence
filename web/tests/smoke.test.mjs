@@ -5897,5 +5897,103 @@ await withCleanup(async (keep) => {
   ok(otherAfter === otherBefore, "a scoped rebuild never touches records it does not own");
 })();
 
+// ---- a failed logger write never shows work that a reload would lose ----
+// Status taps redrew "completed" and fired an unawaited save; a rejected
+// IndexedDB put left the screen saying completed while the store said planned.
+await withCleanup(async (keep) => {
+  const sid = keep(db.Sessions, await db.Sessions.save({
+    date: db.iso(new Date()), isCompleted: false, notes: "Synthetic save-failure fixture",
+    exercises: [{ exerciseName: "Back Squat", order: 0,
+      sets: [{ weightLb: 135, reps: 5, status: "planned", isWarmup: false, order: 0 }] }],
+  }));
+  document.getElementById("toast").textContent = "";
+  await session.openSession(sid); await tick();
+  const logger = () => [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const statusButton = () => logger().querySelector('.setrow button[aria-label^="Set status:"]');
+  const realSave = db.Sessions.save;
+  let rejected = 0;
+  db.Sessions.save = async (...args) => {
+    rejected += 1;
+    throw new DOMException("Simulated quota", "QuotaExceededError");
+  };
+  try {
+    statusButton().click();
+    await waitFor(() => document.getElementById("toast").textContent.includes("Couldn't save"));
+  } finally { db.Sessions.save = realSave; }
+  ok(rejected === 1, "the status tap attempted exactly one write");
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "planned", "the store still says planned");
+  ok(statusButton().getAttribute("aria-label") === "Set status: planned",
+    "the screen rolls back to the durable state instead of showing a completed set");
+  ok(document.getElementById("toast").textContent.includes("your unsaved changes were undone"),
+    "the lifter is told the change was not saved");
+
+  statusButton().click();
+  for (let i = 0; i < 5 && (await db.Sessions.get(sid)).exercises[0].sets[0].status !== "completed"; i += 1) await tick();
+  ok((await db.Sessions.get(sid)).exercises[0].sets[0].status === "completed"
+    && statusButton().getAttribute("aria-label") === "Set status: completed",
+    "a retry after the failure persists and shows the completed set");
+
+  // Every write saves the whole session, so a failed write with a newer edit
+  // queued behind it is superseded, not rolled back over that edit.
+  const notes = () => logger().querySelector(".session-support textarea");
+  const type = (value) => { notes().value = value; notes().dispatchEvent(new window.Event("input")); };
+  document.getElementById("toast").textContent = "";
+  let failNext = true;
+  db.Sessions.save = async (...args) => {
+    if (failNext) { failNext = false; throw new DOMException("Simulated quota", "QuotaExceededError"); }
+    return realSave(...args);
+  };
+  try {
+    type("a"); type("ab");
+    for (let i = 0; i < 10 && (await db.Sessions.get(sid)).notes !== "ab"; i += 1) await tick();
+  } finally { db.Sessions.save = realSave; }
+  ok((await db.Sessions.get(sid)).notes === "ab" && notes().value === "ab"
+    && !document.getElementById("toast").textContent.includes("Couldn't save"),
+    "a queued edit behind a failed write is saved, not overwritten by a rollback");
+
+  // A rejected gym switch restores the gym the equipment math resolves.
+  const gymSelect = () => logger().querySelector(".session-support select");
+  const durableGym = gymSelect().value;
+  const otherGym = [...gymSelect().options].find((o) => o.value !== durableGym)?.value;
+  ok(otherGym != null, "the fixture offers a second gym");
+  db.Sessions.save = async () => { throw new DOMException("Simulated quota", "QuotaExceededError"); };
+  try {
+    document.getElementById("toast").textContent = "";
+    gymSelect().value = otherGym; gymSelect().dispatchEvent(new window.Event("change"));
+    await waitFor(() => document.getElementById("toast").textContent.includes("Couldn't save"));
+  } finally { db.Sessions.save = realSave; }
+  ok(gymSelect().value === durableGym, "the redraw resolves the durable gym, not the rejected one");
+
+  // Discard waits for queued writes so none can recreate the deleted record.
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  db.Sessions.save = async (...args) => { await gate; return realSave(...args); };
+  try {
+    type("abc"); type("abcd");
+    logger().querySelector('button[aria-label="Discard this session without banking it"]').click();
+    await tick();
+    [...document.querySelectorAll("#overlays button")].find((b) => b.textContent === "Discard session").click();
+    await tick();
+    release();
+    for (let i = 0; i < 10 && document.querySelector("#overlays .overlay"); i += 1) await tick();
+  } finally { db.Sessions.save = realSave; }
+  await tick();
+  ok(await db.Sessions.get(sid) == null, "a discarded session is not recreated by a queued write");
+  document.getElementById("overlays").replaceChildren();
+})();
+
+// TFH evidence actions report success only after the write is durable.
+{
+  const { tfhEvidence } = await import("../app/js/views/tfh.js");
+  document.getElementById("toast").textContent = "";
+  const fixture = { exercises: [{ exerciseName: "Back Squat",
+    sets: [{ status: "completed", isWarmup: false, flags: [] }] }] };
+  const box = tfhEvidence(fixture, async () => false);
+  [...box.querySelectorAll("button")].find((b) => b.textContent.includes("felt clean")).click();
+  await tick();
+  ok(!document.getElementById("toast").textContent.includes("Set quality recorded"),
+    "a failed TFH write shows no success toast");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
