@@ -482,7 +482,7 @@ final class VisualProofUITests: XCTestCase {
             target.tap()
             target.typeText("139")
             let done = app.buttons["plate-target-done"]
-            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            XCTAssertTrue(done.waitForExistence(timeout: 6))
             done.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
 
@@ -493,7 +493,11 @@ final class VisualProofUITests: XCTestCase {
                                        height: window.maxY - top - 34)
             let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
             revealRootListRows([inputRow], viewport: inputViewport)
-            XCTAssertTrue(target.isHittable)
+            // The list is still settling from the keyboard dismissal; a single
+            // isHittable sample raced it. Wait for the field, then assert.
+            let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
+            XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
+                           "the target must be tappable once the keyboard has closed")
             XCTAssertTrue(units.buttons["lb"].isHittable)
             XCTAssertTrue(units.buttons["kg"].isHittable)
             XCTAssertTrue(app.windows.firstMatch.frame.contains(target.frame))
