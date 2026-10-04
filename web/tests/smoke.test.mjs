@@ -5678,6 +5678,27 @@ await withCleanup(async (keep) => {
     const flags = async () => Object.fromEntries((await db.Programs.all())
       .filter((p) => p.id === aId || p.id === bId).map((p) => [p.id, p.isActive]));
     const realPut = IDBObjectStore.prototype.put;
+    const stale = await db.Programs.get(await mk("Deleted Activation Target", false));
+    await db.Programs.del(stale.id);
+    const beforeMissing = JSON.stringify(await db.Programs.all());
+    for (const [label, activate] of [
+      ["unknown", () => db.Programs.setActive(-1)],
+      ["deleted", () => settingsView.activateProgram(stale)],
+    ]) {
+      let missingPuts = 0, missingError = null;
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === "programs") missingPuts++;
+        return realPut.apply(this, args);
+      };
+      try { await activate(); }
+      catch (error) { missingError = error; }
+      finally { IDBObjectStore.prototype.put = realPut; }
+      ok(missingError?.message === "Program not found", `${label} activation target rejects`);
+      ok(missingPuts === 0, `${label} activation target queues no program writes`);
+      ok(JSON.stringify(await db.Programs.all()) === beforeMissing,
+        `${label} activation target preserves every stored program`);
+    }
+    ok(stale.isActive === false, "failed activation does not mark the deleted UI target active");
     let puts = 0;
     IDBObjectStore.prototype.put = function (...args) {
       if (this.name === "programs" && ++puts === 2) throw new DOMException("Simulated quota", "QuotaExceededError");

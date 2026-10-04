@@ -568,6 +568,7 @@ export const Programs = {
     read.onsuccess = () => {
       const writes = [];
       try {
+        if (!read.result.some((program) => program.id === id)) throw new Error("Program not found");
         for (const program of read.result) {
           const want = program.id === id;
           if (program.isActive === want) continue;
