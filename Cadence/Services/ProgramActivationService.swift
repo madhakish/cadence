@@ -57,6 +57,9 @@ enum ProgramActivationService {
         _ template: ProgramTemplateData.Template, context: ModelContext
     ) throws -> Program {
         try assertNoForeignOpenSession(targetID: nil, context: context)
+        // Commit unrelated pending edits first so the rollback below owns
+        // only the new block, like ProgramEquipmentService.applyAndSave.
+        try context.save()
         do {
             let target = try ProgramTemplates.instantiate(template, context: context)
             try context.save()
