@@ -223,33 +223,45 @@ export async function openSession(id) {
     : null;
   const workoutName = sessionDayName || session.programTag?.programName || "Workout";
   // Logger edits redraw optimistically, then persist. Writes are serialized
-  // so a later save cannot race an earlier failed one. persist() rejects for
-  // the few callers that undo their own fields; save() is the fire-and-forget
-  // form: on failure it reloads the last durable session from IndexedDB,
-  // redraws, and says the change was not saved, so the screen never shows
-  // work that a reload would lose (#261).
+  // so a later save cannot race an earlier failed one, and every write saves
+  // the whole session. persist() rejects for the few callers that undo their
+  // own fields. commit() owns failure: when the failed write is the last one
+  // queued, it reloads the durable session from IndexedDB, redraws, says the
+  // change was not saved and rejects, so the screen never shows work that a
+  // reload would lose (#261). A failed write with a later one queued is
+  // superseded: that write carries this change along with the newer edits.
   let saving = Promise.resolve();
+  let queued = 0;
+  let discarded = false;
   let lastBody = null;
   const persist = () => {
-    const write = saving.catch(() => {}).then(() => Sessions.save(session));
+    queued += 1;
+    const write = saving.catch(() => {})
+      .then(() => (discarded ? undefined : Sessions.save(session)))
+      .finally(() => { queued -= 1; });
     saving = write;
     return write;
   };
-  // The rollback joins the chain too: a write queued behind a failed one waits
-  // until memory is the reloaded durable state, so memory and store agree.
-  const save = () => (saving = persist().catch(async (error) => {
+  const reload = async () => {
+    const stored = await Sessions.get(session.id);
+    if (!stored || discarded) return;
+    for (const key of Object.keys(session)) delete session[key];
+    Object.assign(session, stored);
+    gymState.value = await Gyms.resolve(session.gymId, session.gymName);
+    currentSE = null;
+    if (lastBody) renderBody(lastBody);
+  };
+  // The rollback joins the chain too: a write queued after it waits until
+  // memory is the reloaded durable state, so memory and store agree.
+  const commit = () => (saving = persist().catch(async (error) => {
     console.error("Workout change was not saved", error);
-    try {
-      const stored = await Sessions.get(session.id);
-      if (stored) {
-        for (const key of Object.keys(session)) delete session[key];
-        Object.assign(session, stored);
-        currentSE = null;
-        if (lastBody) renderBody(lastBody);
-      }
-    } catch (reloadError) { console.error("Reloading the saved workout failed", reloadError); }
-    ui.toast(`Couldn't save — your last change was undone. ${error?.message || ""}`.trim());
+    if (queued > 0) return;
+    try { await reload(); } catch (reloadError) { console.error("Reloading the saved workout failed", reloadError); }
+    ui.toast(`Couldn't save — your unsaved changes were undone. ${error?.message || ""}`.trim());
+    throw error;
   }));
+  // Fire-and-forget form for the redraw-then-save call sites.
+  const save = () => { commit().catch(() => {}); };
 
   // Program recall is slot-scoped. Same-name main/complementary work on other
   // days and slotless extra work are different exposures.
@@ -474,7 +486,7 @@ export async function openSession(id) {
   function renderBody(body) {
     lastBody = body;
     ui.clear(body);
-    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>Sessions.save(session)));
+    if(session.tfhPolicyId != null) body.append(tfhEvidence(session,()=>commit().then(()=>true,()=>false)));
     session.exercises.sort((a, b) => a.order - b.order);
     const current = currentEntry();
     const exerciseNumber = current ? session.exercises.indexOf(current) + 1 : 0;
@@ -1359,6 +1371,9 @@ export async function openSession(id) {
         : `Discard this session and lose ${performed} logged set${performed === 1 ? "" : "s"}?`,
       [
         { label: "Discard session", role: "destructive", onClick: async () => {
+          // A queued write must not recreate the deleted record.
+          discarded = true;
+          await saving.catch(() => {});
           await Sessions.del(session.id); // Sessions.del drops the clock record
           rest.stop();
           screen.close();
