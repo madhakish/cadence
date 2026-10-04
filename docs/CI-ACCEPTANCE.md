@@ -132,11 +132,11 @@ Repository auto-merge is enabled. `auto-merge.yml` opts non-draft, same-reposito
 pull requests into native squash auto-merge when they target the default
 branch. It runs without checking out PR code and matches the observed head
 commit; GitHub continues enforcing required checks and blocking reviews.
-Because it enables auto-merge with the workflow token, GitHub performs those
-merges as `github-actions[bot]` and starts no `push` run for them.
-`release-after-auto-merge.yml` therefore dispatches `ci.yml` on `main` (with
-the full migration suite) after each bot merge, so releases, Pages and
-TestFlight still run (#299). Human merges keep their own `push` run.
+It enables auto-merge only with the `AUTO_MERGE_TOKEN` secret (a fine-grained
+token or GitHub App token with contents and pull-request write). A merge made
+with the workflow token starts no `push` run, so it would skip releases, Pages
+and TestFlight (#299). Without the secret the job skips with a notice and PRs
+are merged by hand.
 
 Deployment restrictions and service-side security scanning still require
 separate verification. Workflow source alone cannot establish their enforcement.
