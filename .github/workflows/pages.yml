@@ -17,6 +17,8 @@ concurrency:
 jobs:
   # Manual recovery path. Normal main-branch deploys live in ci.yml and reuse
   # its already-passing web-tests job instead of running this suite twice.
+  # Recovery requires a successful App build aggregate for this exact main
+  # commit, then reruns the full web and browser suites before deployment.
   test:
     name: Web tests
     if: github.ref == 'refs/heads/main'

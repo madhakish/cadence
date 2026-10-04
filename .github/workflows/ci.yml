@@ -102,7 +102,7 @@ jobs:
           bash .github/scripts/test-cancel-stale-pr-runs.sh
           bash .github/scripts/test-classify-ci-paths.sh
           bash .github/scripts/test-ci-topology.sh
-          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs
+          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs
           bash .github/scripts/test-fastlane-phases.sh
           bash .github/scripts/test-verify-native-jobs.sh
       - name: Classify changed paths
@@ -745,7 +745,19 @@ jobs:
   deploy-web:
     name: Deploy site + web app (Pages)
     needs: [changes, web-tests, app-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
+    # Evaluate the Pages gate even when an app-build dependency was skipped
+    # (the unsigned device build is PR-only, so it is skipped on every main
+    # push). Without always(), GitHub propagates that transitive skip and
+    # deploy-web never runs on main. The aggregate app-build job is the source
+    # of truth for native CI health, exactly as for the release job above.
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.web-tests.result == 'success' &&
+      needs.app-build.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.web == 'true'
     runs-on: macos-latest
     timeout-minutes: 10
     concurrency:
