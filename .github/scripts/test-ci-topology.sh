@@ -195,6 +195,12 @@ assert_job_contains deploy "runs-on: macos-latest"
 workflow=".github/workflows/visual-proof.yml"
 assert_job_contains capture "runs-on: macos-latest"
 
+# Bot merges start no push run, so they must dispatch the release path (#299).
+workflow=".github/workflows/release-after-auto-merge.yml"
+assert_job_contains dispatch "github.event.pull_request.merged_by.login == 'github-actions[bot]'"
+assert_job_contains dispatch 'run: gh workflow run ci.yml --repo "$GH_REPO" --ref "$BRANCH" -f full_migrations=true'
+assert_workflow_contains "actions: write"
+
 # Reject self-hosted selectors and expressions that could route work to them.
 for workflow in .github/workflows/*.yml; do
   if grep '^[[:space:]]*runs-on:' "$workflow" | grep -Ev '^[[:space:]]*runs-on: (ubuntu-latest|macos-latest)$'; then
