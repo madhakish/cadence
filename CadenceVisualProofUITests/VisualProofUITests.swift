@@ -493,11 +493,15 @@ final class VisualProofUITests: XCTestCase {
                                        height: window.maxY - top - 34)
             let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
             revealRootListRows([inputRow], viewport: inputViewport)
-            // The list is still settling from the keyboard dismissal; a single
-            // isHittable sample raced it. Wait for the field, then assert.
+            // The plain List pins the scrolled section's header over the top
+            // of this row at accessibility sizes, and the frame check above
+            // cannot see that. Nudge the row back below the header, then wait.
+            for _ in 0..<2 where !target.isHittable {
+                scrollRootList(by: 80, viewport: inputViewport)
+            }
             let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
             XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
-                           "the target must be tappable once the keyboard has closed")
+                           "the target must be tappable once the keyboard has closed; field \(target.frame), row \(inputRow.frame), viewport \(inputViewport)")
             XCTAssertTrue(units.buttons["lb"].isHittable)
             XCTAssertTrue(units.buttons["kg"].isHittable)
             XCTAssertTrue(app.windows.firstMatch.frame.contains(target.frame))
