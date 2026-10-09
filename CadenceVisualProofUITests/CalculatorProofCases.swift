@@ -45,13 +45,23 @@ enum CalculatorProofCases {
                 // A SwiftUI Stepper can expose a non-hittable grouping
                 // element even while its Increment button is on screen.
                 let increment = count.buttons["Increment"]
-                for _ in 0..<8 where !increment.isHittable { app.swipeUp() }
+                // A swipeUp fling can carry this lazy row from below the 375pt
+                // viewport to above it between checks; drag slowly instead.
+                for _ in 0..<16 where !increment.isHittable { dragUp(app) }
                 XCTAssertTrue(increment.isHittable)
                 increment.tap()
                 for _ in 0..<5 where !app.segmentedControls.buttons["On the bar"].isHittable { app.swipeDown() }
                 capture(test, "\(legacy ? "before" : "after")-calculator-reverse-iphone")
             }
         }
+    }
+
+    /// Scroll about a third of the screen with no momentum. The press starts
+    /// on the left, over row labels, so it cannot tap a stepper button.
+    private static func dragUp(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.7))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.4))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
     }
 
     private static func capture(_ test: XCTestCase, _ name: String) {

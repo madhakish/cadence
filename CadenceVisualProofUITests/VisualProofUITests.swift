@@ -740,6 +740,11 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Remove Back Squat from Favorites"].firstMatch.waitForExistence(timeout: 5))
         // A reachable star alone does not prove the lift name/metadata are
         // clear of navigation chrome. Retain the entire favorite row.
+        // Starring adds a second Back Squat row, in Favorites, and List rows
+        // are lazy: firstMatch named whichever copy was on screen and the
+        // reveal chased it. Return to the top so it names the Favorites row.
+        for _ in 0..<6 where !search.isHittable { app.swipeDown() }
+        XCTAssertTrue(search.isHittable)
         let favorite = app.cells.containing(.button, identifier: "Remove Back Squat from Favorites").firstMatch
         XCTAssertTrue(favorite.waitForExistence(timeout: 3))
         revealRootListRows([favorite])
