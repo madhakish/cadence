@@ -14,6 +14,20 @@ final class PersistenceErrorCenter: ObservableObject {
     private init() {}
 
     @discardableResult
+    func toggleFavorite(_ exercise: Exercise, context: ModelContext) -> Bool {
+        let previous = exercise.isFavorite
+        exercise.isFavorite.toggle()
+        guard save(context, operation: "Saving the exercise favorite") else {
+            // SwiftData's rollback can leave an already-bound model reference
+            // carrying the failed value (including with a read-only store).
+            // Restore this preference explicitly so the star tells the truth.
+            exercise.isFavorite = previous
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
     func save(_ context: ModelContext, operation: String) -> Bool {
         do {
             try context.save()

@@ -1,11 +1,24 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
+import { PLATE_SPRITES } from '../app/js/plate-sprites.js';
 import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, plateTintTarget, plateTintMatrixForFill, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
 const C = await import('../app/js/core.js');
 const B = await import('../app/js/barbell.js');
+// Inline bars and the solid inspector must share physical proportions.
+for (const bar of [C.BARS.bar45lb, C.BARS.bar20kg, C.BARS.bar35lb, C.BARS.bar15kg]) {
+  const load = C.enteredPlateSolution(bar, [{ plate: { value: 20, unit: 'kg' }, count: 2 }]);
+  const scene = barbellScene(load, 'steel', false);
+  const near = scene.discs.filter(d => d.side === 1).sort((a, b) => a.index - b.index);
+  const mm = near[0].radius / 225;
+  assert.ok(Math.abs(scene.shoulder / mm - 685) < 1e-8, 'shaft matches the physical 1370 mm grip section');
+  assert.ok(Math.abs((scene.end - scene.shoulder) / mm - (bar.value === 15 || bar.value === 35 ? 320 : 415)) < 1e-8,
+    'sleeve length follows the selected bar, not an arbitrary shortened shaft');
+  assert.ok(Math.abs(near[0].x / scene.axisX / mm - (705 + 11)) < 1e-8, 'first steel disc rests at the shoulder');
+  assert.ok(Math.abs((near[1].x - near[0].x) / scene.axisX / mm - 22) < 1e-8, 'assembled plates do not float apart');
+}
 const fixtures = JSON.parse(readFileSync(new URL('./fixtures/barbell-scene.json', import.meta.url), 'utf8'));
 for (const fixture of fixtures) {
   assert.deepEqual(barbellScene(fixture.loadout, fixture.style, fixture.exploded), fixture.scene,
@@ -17,6 +30,18 @@ const before = JSON.stringify(solution);
 const closed = barbellScene(solution, 'bumper', false);
 const open = barbellScene(solution, 'bumper', true);
 const compact = B.barbellSVG(solution, 'compact', 'bumper');
+for (const target of compact.svg.querySelectorAll('.barbell-plate-target')) {
+  assert.ok(Math.abs(Number(target.getAttribute('cy')) - Number(target.getAttribute('cx')) * closed.axisY / closed.axisX) < 1e-8,
+    'front-face bore remains on the sleeve axis on both sides');
+}
+for (const face of compact.svg.querySelectorAll('image.barbell-plate-face')) {
+  const meta = PLATE_SPRITES.sprites[face.dataset.sprite];
+  const k = Number(face.getAttribute('width')) / meta.size[0];
+  const x = Number(face.getAttribute('x')) + meta.faceCenter[0] * k;
+  const y = Number(face.getAttribute('y')) + meta.faceCenter[1] * k;
+  assert.ok(Math.abs(y - x * closed.axisY / closed.axisX) < 1e-8,
+    'the photographed bore itself, not only its hit target, sits on the sleeve axis');
+}
 assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
 assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
 assert.equal(compact.svg.querySelectorAll('.barbell-plate-body[data-side="left"]').length, counts.length);

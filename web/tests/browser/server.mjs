@@ -11,7 +11,8 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 // A private server per test isolates the origin, IndexedDB, caches and deploy
 // version. Serve the actual Pages tree, mounted below a project path. No mocks,
 // alternate worker, storage stubs or production test hooks.
-export async function startServer() {
+export async function startServer({ directory = root } = {}) {
+  const serveRoot = resolve(directory);
   let build = 'acceptance-a';
   let disconnected = false;
   const server = createServer(async (req, res) => {
@@ -19,8 +20,8 @@ export async function startServer() {
     const pathname = new URL(req.url, 'http://localhost').pathname;
     if (!pathname.startsWith('/cadence/')) { res.writeHead(404).end(); return; }
     const relative = decodeURIComponent(pathname.slice('/cadence/'.length));
-    const path = resolve(root, relative + (relative.endsWith('/') ? 'index.html' : ''));
-    if (!path.startsWith(root.endsWith(sep) ? root : root + sep)) { res.writeHead(404).end(); return; }
+    const path = resolve(serveRoot, relative + (relative.endsWith('/') ? 'index.html' : ''));
+    if (!path.startsWith(serveRoot.endsWith(sep) ? serveRoot : serveRoot + sep)) { res.writeHead(404).end(); return; }
     try {
       let body = await readFile(path);
       // Match the deployment's sole transformation of the application worker.

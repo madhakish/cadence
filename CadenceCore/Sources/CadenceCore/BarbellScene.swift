@@ -195,6 +195,7 @@ public struct BarbellScene: Sendable {
     public let shoulder: Double
     public let end: Double
     public let collar: Double
+    public let collarLength: Double
     public let axisX: Double
     public let axisY: Double
     public let faceScale: Double
@@ -205,9 +206,11 @@ public struct BarbellScene: Sendable {
         axisX = cos(angle)
         axisY = -sin(angle) * 0.24
         faceScale = sin(angle)
-        shoulder = loadout.bar == .bar15kg || loadout.bar == .bar35lb ? 145 : 165
+        let bar = BarbellInspector.barDimensions(for: loadout.bar)
+        let mm = 0.36
+        shoulder = bar.shaftHalfLength * mm
         let plates = loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }
-        var cursor = shoulder + 8.0
+        var cursor = bar.shoulderEnd * mm
         var previousFaceRadius = 0.0
         var pending: [Disc] = []
         for (index, plate) in plates.enumerated() {
@@ -224,12 +227,13 @@ public struct BarbellScene: Sendable {
                     x: center * axisX, y: center * axisY, radius: radius,
                     faceRadius: faceRadius, depth: depth * axisX, theme: theme))
             }
-            cursor += depth + (exploded ? 0 : 2)
+            cursor += depth
             previousFaceRadius = faceRadius
         }
-        collar = cursor + 8
-        end = max(shoulder + 150, collar + 28)
-        width = max(end * axisX + 25,
+        collarLength = loadout.collarLb > 0 ? bar.collarLength * mm : 0
+        collar = cursor + collarLength / 2
+        end = (bar.shaftHalfLength + bar.sleeveLength) * mm
+        width = max(max(end, collar + collarLength / 2) * axisX + 25,
             pending.map { abs($0.x) + $0.faceRadius + $0.depth }.max() ?? 0) * 2 + 24
         height = max(110, pending.map { abs($0.y) + $0.radius }.max() ?? 0) * 2 + 40
         // Back-to-front paint order. Stack index remains stable for labels.

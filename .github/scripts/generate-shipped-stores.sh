@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-  echo "usage: $0 <v1.29 checkout> <PR72 checkout> <PR73 checkout> <fixture output>" >&2
+if [[ $# -ne 5 ]]; then
+  echo "usage: $0 <v1.29 checkout> <PR72 checkout> <PR73 checkout> <V14 checkout> <fixture output>" >&2
   exit 64
 fi
 
 v129_source="$1"
 pr72_source="$2"
 pr73_source="$3"
-fixture_root="$4"
+v14_source="$4"
+fixture_root="$5"
 
 device_id="$({ xcrun simctl list devices available -j; } | python3 -c '
 import json, sys
@@ -58,7 +59,7 @@ copy_store() {
   local store_dir="$container/Library/Application Support"
   test -f "$store_dir/default.store"
   mkdir -p "$output"
-  cp "$store_dir"/default.store* "$output/"
+  cp -R "$store_dir"/default.store* "$output/"
 }
 
 build_app "v129" "$v129_source"
@@ -87,4 +88,12 @@ xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true
 build_app "pr72" "$pr72_source"
 launch_app
 copy_store "pr72"
+
+# The predecessor of Favorites must be an actual production V14 store, not
+# merely a store made by our frozen snapshot of that schema. This pins the
+# checksum boundary against main's last pre-Favorites application.
+xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true
+build_app "v14" "$v14_source"
+launch_app
+copy_store "v14"
 xcrun simctl shutdown "$device_id" 2>/dev/null || true

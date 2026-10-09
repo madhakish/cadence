@@ -32,10 +32,20 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// The primary canvas, matching the web theme's `--bg` token. Raised
+    /// controls retain their system surfaces; the canvas carries the theme.
+    var background: Color {
+        switch self {
+        case .carbon: return Color(hex: 0x0C0D0E)
+        case .memento: return Color(hex: 0x0A0908)
+        case .titanium: return Color(hex: 0xE6E9EC)
+        case .slate: return Color(hex: 0x0D1117)
+        case .system: return Color(lightHex: 0xF5F5F7, darkHex: 0x0C0D0E)
+        }
+    }
+
     /// Accent + semantic colours, mirroring web styles.css token blocks 1:1.
-    /// (Backgrounds stay on the system grouped surfaces, which resolve dark
-    /// under the forced dark scheme, light under Titanium, and follow the OS
-    /// under System.) `onAccent` is the label colour on an accent-filled
+    /// `onAccent` is the label colour on an accent-filled
     /// control — chosen per theme to clear WCAG AA on that fill, never assumed
     /// white. Physical plate colours and anatomy role colours are not here:
     /// they come from equipment and muscle metadata, never from the theme.
@@ -87,6 +97,7 @@ enum Theme {
     static var hardStop: Color { name.palette.hardStop }    // hard stop (semantic critical)
     static var good: Color { name.palette.good }            // clean rep (semantic)
     static var onAccent: Color { name.palette.onAccent }    // label on an accent fill
+    static var background: Color { name.background }       // primary list canvas
     static let card = Color(.secondarySystemGroupedBackground)
     static let raised = Color(.tertiarySystemGroupedBackground)
     static let hairline = Color.primary.opacity(0.14)
@@ -151,6 +162,13 @@ enum Copy {
 }
 
 extension View {
+    /// Plain primary lists share the web canvas instead of inheriting an
+    /// empty system-black background. Row controls keep their native styling.
+    func themeListBackground() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Theme.background)
+    }
+
     /// The one primary-action treatment: accent fill, the theme's own label
     /// colour, industrial corner. Web twin: `.btn.primary`. A site that needs
     /// a different fill still adds `.tint(...)` after it.

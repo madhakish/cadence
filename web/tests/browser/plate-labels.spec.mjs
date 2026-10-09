@@ -52,8 +52,17 @@ test('[WEB-PLATE-LABELS] exact denominations survive final layout and inspection
         expect(stamps.every(s => !s.visible || s.size >= 12 - 1e-6)).toBe(true);
         if (id === 'F3' && width === 390) expect(stamps.every(s => !s.visible)).toBe(true);
         if (id === 'F3' && width === 1280) {
-          expect(stamps.every(s => s.visible)).toBe(true);
           await expect(page.locator('.barbell-plate-label')).toHaveText(['1.25 kg', '20 kg', '20 kg', '1.25 kg']);
+          // A desktop inline bar must leave its exact answer in this viewport.
+          // Physical face stamps can yield to the fixed-size sleeve readout.
+          await expect(page.locator('.weight-measure').first()).toBeInViewport();
+          await expect(page.locator('.weight-measure').last()).toBeInViewport();
+          const painted = await page.locator('.barbell-plate-label').evaluateAll(items => items
+            .filter(e => getComputedStyle(e).display !== 'none')
+            .map(e => ({ side: e.dataset.side, rect: e.getBoundingClientRect().toJSON() })));
+          expect(painted.every((a, i) => painted.slice(i + 1).every(b => a.side !== b.side
+            || a.rect.right <= b.rect.left || b.rect.right <= a.rect.left
+            || a.rect.bottom <= b.rect.top || b.rect.bottom <= a.rect.top))).toBe(true);
         }
         await expect(page.locator('.weight-unit')).toHaveText(['lb', 'kg']);
         const measures = await page.locator('.weight-measure').evaluateAll(items => items.map(e => {

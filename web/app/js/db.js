@@ -9,8 +9,8 @@ import { BODY_SITES, normalizeBodySite } from "./constants.js";
 import { PLATE_THEME_IDS, isPlateThemeID, inferredPlateTheme } from "./plate-theme.js";
 
 const DB_NAME = "cadence";
-const DB_VERSION = 10;
-export const BACKUP_SCHEMA_VERSION = 15;
+const DB_VERSION = 11;
+export const BACKUP_SCHEMA_VERSION = 16;
 const STORES = {
   settings: { keyPath: "id" },           // single row id:"app"
   exercises: { keyPath: "name" },
@@ -56,6 +56,9 @@ function open() {
       if (event.oldVersion === 8) migrateToV9(req.transaction);
       // No older upgrader rewrites gyms, so every pre-V10 store takes this pass.
       if (event.oldVersion < 10) migrateToV10(req.transaction);
+      // Pre-V8 upgrades already normalize exercises; avoid competing cursor
+      // writes. V8–V10 need just the new user-owned favorite default.
+      if (event.oldVersion >= 8 && event.oldVersion < 11) migrateToV11(req.transaction);
     };
     req.onsuccess = () => {
       if (settled) { req.result.close(); return; }
@@ -90,6 +93,16 @@ function migrateToV9(transaction) {
       cursor.continue();
     };
   }
+}
+
+// V11 (#63): a missing favorite becomes false, preserving all other fields.
+function migrateToV11(transaction) {
+  transaction.objectStore("exercises").openCursor().onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (!cursor) return;
+    cursor.update({ ...cursor.value, isFavorite: cursor.value.isFavorite === true });
+    cursor.continue();
+  };
 }
 
 // V10 (#55): each gym records its plate theme. A gym that predates themes
@@ -349,6 +362,7 @@ const normalizeSession = (session) => ({
 
 const normalizeExercise = (exercise) => ({
   ...exercise,
+  isFavorite: exercise.isFavorite === true,
   // Schema V11 identity: a portable id already present (v11 backup, a
   // user-created exercise's random UUID) is kept; anything else derives the
   // deterministic legacy id from the name — identical on both clients.
@@ -428,7 +442,19 @@ export const Exercises = {
     const exercise = await get("exercises", name);
     return exercise ? normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) }) : null;
   },
-  save: (exercise) => put("exercises", normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) })),
+  save(exercise) {
+    const value = normalizeExercise({ ...exercise, watchSite: normalizeBodySite(exercise.watchSite) });
+    return run("exercises", "readwrite", async (os) => {
+      const [existing, target] = await Promise.all([
+        reqP(os.index("byId").get(value.id)), reqP(os.get(value.name)),
+      ]);
+      if (target && target.id !== value.id) throw new Error(`An exercise named ${value.name} already exists.`);
+      // Names are store keys; portable identity survives a rename. Delete and
+      // put share a transaction so a failed write retains the old definition.
+      if (existing && existing.name !== value.name) os.delete(existing.name);
+      return reqP(os.put(value));
+    });
+  },
 };
 export const Gyms = {
   async all() {
@@ -632,7 +658,7 @@ export async function ensureSeeded() {
     // A missing seed stamp must never be an excuse to erase user-owned data.
     // Add only absent reference records and leave every mutable store intact.
     for (const exercise of SEED.exercises) {
-      if (!exerciseNames.has(exercise.name)) os("exercises").put(exercise);
+      if (!exerciseNames.has(exercise.name)) os("exercises").put(normalizeExercise(exercise));
     }
     if (!existingGyms.length) for (const gym of SEED.gyms) os("gyms").put(gym);
     os("settings").put({ ...normalizeSettings(s), seededAt: iso(new Date()), id: "app" });
@@ -727,7 +753,7 @@ export async function syncLibrary() {
   const have = new Map((await Exercises.all()).map((e) => [e.name, e]));
   for (const seed of SEED.exercises) {
     const cur = have.get(seed.name);
-    if (!cur) { await put("exercises", seed); continue; }
+    if (!cur) { await put("exercises", normalizeExercise(seed)); continue; }
     let changed = false;
     if (!cur.movementGroup && seed.movementGroup) { cur.movementGroup = seed.movementGroup; changed = true; }
     if (!C.MOVEMENT_PATTERNS.includes(cur.movementPattern) && seed.movementPattern) { cur.movementPattern = seed.movementPattern; changed = true; }
@@ -1378,6 +1404,9 @@ export function validateBackup(bundle) {
 
   const exercises = array(bundle, "exercises");
   each(exercises, "exercises", (exercise, path) => {
+    if ((schemaVersion >= 16 || exercise.isFavorite != null) && typeof exercise.isFavorite !== "boolean") {
+      invalid(`${path}.isFavorite`, "expected a Boolean");
+    }
     textValue(exercise.name, `${path}.name`, true); enumValue(exercise.category, BACKUP_ENUMS.categories, `${path}.category`, schemaVersion >= 1);
     enumValue(exercise.type, BACKUP_ENUMS.exerciseTypes, `${path}.type`, schemaVersion >= 1); bodySiteValue(exercise.watchSite, `${path}.watchSite`);
     enumValue(exercise.movementPattern, BACKUP_ENUMS.movementPatterns, `${path}.movementPattern`, schemaVersion >= 3);
@@ -1453,7 +1482,7 @@ const exerciseSignature = (e) => [
   strOrEmpty(e.category), strOrEmpty(e.type), strOrEmpty(e.movementGroup),
   strOrEmpty(e.movementPattern), strOrEmpty(e.secondaryMovementPattern), strOrEmpty(e.loadBasis),
   numOrZero(e.implementCount), boolFlag(e.isUnilateral), numOrZero(e.defaultRestSeconds),
-  strOrEmpty(e.notes), boolFlag(e.isShelved), strOrEmpty(e.stationDenomination),
+  strOrEmpty(e.notes), boolFlag(e.isShelved), boolFlag(e.isFavorite), strOrEmpty(e.stationDenomination),
 ].join("");
 
 const trackSignature = (t) => [

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 13,
+  "schemaVersion": 16,
   "exportedAt": "2026-07-01T12:00:00.000Z",
   "appVersion": "synthetic",
   "sessions": [
@@ -48127,7 +48127,8 @@
       "barcodeLabel": null,
       "id": "b9854a60-b003-4390-af90-81bc72cfd221",
       "collarWeightLb": 0,
-      "loadingPolicy": "closest"
+      "loadingPolicy": "closest",
+      "plateTheme": "custom"
     },
     {
       "name": "Main Gym",
@@ -48204,7 +48205,8 @@
       ],
       "barcodeImage": null,
       "barcodeLabel": "Membership tag",
-      "id": "061f50fc-78c5-4c14-a9b2-0dd2c95dba71"
+      "id": "061f50fc-78c5-4c14-a9b2-0dd2c95dba71",
+      "plateTheme": "custom"
     }
   ],
   "exercises": [
@@ -48234,7 +48236,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "488e719d-1aaa-470c-aa0c-f43971f8dd26"
+      "id": "488e719d-1aaa-470c-aa0c-f43971f8dd26",
+      "isFavorite": false
     },
     {
       "name": "Arnold Press",
@@ -48262,7 +48265,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7a84efc9-052a-4bdb-affb-f026c9b2fa1d"
+      "id": "7a84efc9-052a-4bdb-affb-f026c9b2fa1d",
+      "isFavorite": false
     },
     {
       "name": "Assisted Pull-up",
@@ -48290,7 +48294,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1eb7a682-05f2-42fb-aeab-37690532072f"
+      "id": "1eb7a682-05f2-42fb-aeab-37690532072f",
+      "isFavorite": false
     },
     {
       "name": "Back Extension",
@@ -48318,7 +48323,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7f3e9293-1b1c-4658-aa04-d7810e2a8a96"
+      "id": "7f3e9293-1b1c-4658-aa04-d7810e2a8a96",
+      "isFavorite": false
     },
     {
       "name": "Back Squat",
@@ -48346,7 +48352,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "acb48602-df66-4957-a2d9-c78cae576106"
+      "id": "acb48602-df66-4957-a2d9-c78cae576106",
+      "isFavorite": true
     },
     {
       "name": "Band External Rotation",
@@ -48374,7 +48381,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4f75445b-ed3f-4dd5-ace2-780b71fc0ced"
+      "id": "4f75445b-ed3f-4dd5-ace2-780b71fc0ced",
+      "isFavorite": false
     },
     {
       "name": "Band Pull-aparts",
@@ -48402,7 +48410,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f30dbe78-2f62-4ffa-a485-a5a5841e5e91"
+      "id": "f30dbe78-2f62-4ffa-a485-a5a5841e5e91",
+      "isFavorite": false
     },
     {
       "name": "Banded Chest Press",
@@ -48430,7 +48439,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7e95ae65-0fa7-4ee0-a517-22807b67dbe6"
+      "id": "7e95ae65-0fa7-4ee0-a517-22807b67dbe6",
+      "isFavorite": false
     },
     {
       "name": "Banded Row",
@@ -48458,7 +48468,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "2198d563-6449-4ded-a7c3-0e11072702f9"
+      "id": "2198d563-6449-4ded-a7c3-0e11072702f9",
+      "isFavorite": false
     },
     {
       "name": "Barbell Bench",
@@ -48486,7 +48497,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "586cd70c-df0f-448a-a948-c42358513a79"
+      "id": "586cd70c-df0f-448a-a948-c42358513a79",
+      "isFavorite": false
     },
     {
       "name": "Barbell Curl",
@@ -48514,7 +48526,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "0ea46090-453e-4230-a799-338859555eb6"
+      "id": "0ea46090-453e-4230-a799-338859555eb6",
+      "isFavorite": false
     },
     {
       "name": "Barbell Hip Thrust",
@@ -48542,7 +48555,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e3dff9cd-71bd-48bd-a41d-a79e20e83673"
+      "id": "e3dff9cd-71bd-48bd-a41d-a79e20e83673",
+      "isFavorite": false
     },
     {
       "name": "Barbell Row",
@@ -48570,7 +48584,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1cb6e2ce-8750-452b-a31f-5e9d9f5f4857"
+      "id": "1cb6e2ce-8750-452b-a31f-5e9d9f5f4857",
+      "isFavorite": false
     },
     {
       "name": "Battle Ropes",
@@ -48598,7 +48613,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "94f83036-17db-468f-a31e-f898c87ac08e"
+      "id": "94f83036-17db-468f-a31e-f898c87ac08e",
+      "isFavorite": false
     },
     {
       "name": "Bent-over DB Row",
@@ -48626,7 +48642,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "feca43eb-8718-4f6d-ad77-473c8dacb796"
+      "id": "feca43eb-8718-4f6d-ad77-473c8dacb796",
+      "isFavorite": false
     },
     {
       "name": "Bike",
@@ -48654,7 +48671,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "78f78f04-0129-446e-a616-0bf605f7833f"
+      "id": "78f78f04-0129-446e-a616-0bf605f7833f",
+      "isFavorite": false
     },
     {
       "name": "Bird Dog",
@@ -48682,7 +48700,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d49bff53-929c-48d8-a2a7-635fb31edd0d"
+      "id": "d49bff53-929c-48d8-a2a7-635fb31edd0d",
+      "isFavorite": false
     },
     {
       "name": "Box Jumps",
@@ -48710,7 +48729,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4cbc03cf-7f7d-4c2d-ac57-2687fe594e5b"
+      "id": "4cbc03cf-7f7d-4c2d-ac57-2687fe594e5b",
+      "isFavorite": false
     },
     {
       "name": "Bulgarian Split Squat",
@@ -48738,7 +48758,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "9f326a4f-0e78-4def-a1ec-9c6cfae8bc7c"
+      "id": "9f326a4f-0e78-4def-a1ec-9c6cfae8bc7c",
+      "isFavorite": false
     },
     {
       "name": "Burpees",
@@ -48766,7 +48787,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "708d05dd-703a-47fd-a136-000ddf1a0099"
+      "id": "708d05dd-703a-47fd-a136-000ddf1a0099",
+      "isFavorite": false
     },
     {
       "name": "Cable Chest Fly",
@@ -48794,7 +48816,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "645b8e3a-5662-4d4b-a703-3535423eeb4e"
+      "id": "645b8e3a-5662-4d4b-a703-3535423eeb4e",
+      "isFavorite": false
     },
     {
       "name": "Cable Crunch",
@@ -48822,7 +48845,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "58ea58c3-c4f6-4a59-a1ec-54ca6927f9bf"
+      "id": "58ea58c3-c4f6-4a59-a1ec-54ca6927f9bf",
+      "isFavorite": false
     },
     {
       "name": "Cable Curl",
@@ -48850,7 +48874,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "62d52b24-8db8-4db3-a932-785f10e477f0"
+      "id": "62d52b24-8db8-4db3-a932-785f10e477f0",
+      "isFavorite": false
     },
     {
       "name": "Cable Hip Adduction",
@@ -48878,7 +48903,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7369fe8e-45b5-404e-a54d-960441f886a1"
+      "id": "7369fe8e-45b5-404e-a54d-960441f886a1",
+      "isFavorite": false
     },
     {
       "name": "Cable Lateral Raise",
@@ -48906,7 +48932,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "b07c7d25-f1de-4802-afd6-8b81d8356b38"
+      "id": "b07c7d25-f1de-4802-afd6-8b81d8356b38",
+      "isFavorite": false
     },
     {
       "name": "Cable Overhead Triceps Extension",
@@ -48934,7 +48961,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d7b0f046-d0d1-436e-a25d-e2a60200d591"
+      "id": "d7b0f046-d0d1-436e-a25d-e2a60200d591",
+      "isFavorite": false
     },
     {
       "name": "Cable Pull-through",
@@ -48962,7 +48990,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "30cbe1cf-df89-4f8f-aabc-ad05070d2fae"
+      "id": "30cbe1cf-df89-4f8f-aabc-ad05070d2fae",
+      "isFavorite": false
     },
     {
       "name": "Chest-supported Row",
@@ -48990,7 +49019,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "5637def6-7e70-4ef8-a2ae-3c4eb961c1b5"
+      "id": "5637def6-7e70-4ef8-a2ae-3c4eb961c1b5",
+      "isFavorite": false
     },
     {
       "name": "Chin-ups",
@@ -49018,7 +49048,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "40e6ad8a-86dd-47da-a0ce-81a242f43b5d"
+      "id": "40e6ad8a-86dd-47da-a0ce-81a242f43b5d",
+      "isFavorite": false
     },
     {
       "name": "Clean",
@@ -49046,7 +49077,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "cff4807f-8fde-4757-af94-3e7d79a9f3f5"
+      "id": "cff4807f-8fde-4757-af94-3e7d79a9f3f5",
+      "isFavorite": false
     },
     {
       "name": "Clean & Jerk",
@@ -49074,7 +49106,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e190f080-34b8-4dc9-a6ed-adabb61a9c6d"
+      "id": "e190f080-34b8-4dc9-a6ed-adabb61a9c6d",
+      "isFavorite": false
     },
     {
       "name": "Clean High Pull",
@@ -49102,7 +49135,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "aa08dc07-9340-4fd8-a6d3-8b8d054d7c9f"
+      "id": "aa08dc07-9340-4fd8-a6d3-8b8d054d7c9f",
+      "isFavorite": false
     },
     {
       "name": "Clean Pull",
@@ -49130,7 +49164,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "55bfdbad-5f40-41f1-a3c2-60b095a2b160"
+      "id": "55bfdbad-5f40-41f1-a3c2-60b095a2b160",
+      "isFavorite": false
     },
     {
       "name": "Close-Grip Bench Press",
@@ -49158,7 +49193,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "13eebfcf-4778-439a-a98c-2c8b6419fbfc"
+      "id": "13eebfcf-4778-439a-a98c-2c8b6419fbfc",
+      "isFavorite": false
     },
     {
       "name": "Close-Grip Floor Press",
@@ -49186,7 +49222,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1923b765-0a28-4beb-a0b6-0e6b99f868d1"
+      "id": "1923b765-0a28-4beb-a0b6-0e6b99f868d1",
+      "isFavorite": false
     },
     {
       "name": "Close-Grip Push-ups",
@@ -49214,7 +49251,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "74b5ef3b-2224-455e-a3be-6c39ef859707"
+      "id": "74b5ef3b-2224-455e-a3be-6c39ef859707",
+      "isFavorite": false
     },
     {
       "name": "Copenhagen Plank",
@@ -49242,7 +49280,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "59ad833e-b49d-4590-a317-1cc7c443bbd4"
+      "id": "59ad833e-b49d-4590-a317-1cc7c443bbd4",
+      "isFavorite": false
     },
     {
       "name": "DB Curls",
@@ -49270,7 +49309,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "a27b1512-9b20-49f9-a1a7-9f864958c39f"
+      "id": "a27b1512-9b20-49f9-a1a7-9f864958c39f",
+      "isFavorite": false
     },
     {
       "name": "DB Floor Press",
@@ -49298,7 +49338,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "05f66629-78d5-4862-a903-c86b0dc55843"
+      "id": "05f66629-78d5-4862-a903-c86b0dc55843",
+      "isFavorite": false
     },
     {
       "name": "DB Front Raise",
@@ -49326,7 +49367,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d61363fb-3f26-4825-aa45-347c581cf734"
+      "id": "d61363fb-3f26-4825-aa45-347c581cf734",
+      "isFavorite": false
     },
     {
       "name": "DB Lateral Raise",
@@ -49354,7 +49396,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "136e07a6-7f93-4c38-a126-fa9738794857"
+      "id": "136e07a6-7f93-4c38-a126-fa9738794857",
+      "isFavorite": false
     },
     {
       "name": "DB Overhead Triceps Extension",
@@ -49382,7 +49425,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6c735485-fff7-4109-aeaa-8532cedb7ef7"
+      "id": "6c735485-fff7-4109-aeaa-8532cedb7ef7",
+      "isFavorite": false
     },
     {
       "name": "DB Romanian Deadlift",
@@ -49410,7 +49454,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "5b30b269-b581-42b1-af6c-f04db1103201"
+      "id": "5b30b269-b581-42b1-af6c-f04db1103201",
+      "isFavorite": false
     },
     {
       "name": "Dead Bug",
@@ -49438,7 +49483,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "a36b8b69-e8ca-497f-a1a1-266718dbe8c9"
+      "id": "a36b8b69-e8ca-497f-a1a1-266718dbe8c9",
+      "isFavorite": false
     },
     {
       "name": "Deadlift",
@@ -49466,7 +49512,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "19a09757-500a-408f-a70f-18e00beafe8b"
+      "id": "19a09757-500a-408f-a70f-18e00beafe8b",
+      "isFavorite": false
     },
     {
       "name": "Decline Push-ups",
@@ -49494,7 +49541,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "edb20745-5a08-453f-a2a4-29a840039917"
+      "id": "edb20745-5a08-453f-a2a4-29a840039917",
+      "isFavorite": false
     },
     {
       "name": "Diamond Push-ups",
@@ -49522,7 +49570,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e4029826-4135-4940-ad84-4ff4144702b6"
+      "id": "e4029826-4135-4940-ad84-4ff4144702b6",
+      "isFavorite": false
     },
     {
       "name": "Dips",
@@ -49550,7 +49599,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ff6d22f3-1fa6-4e9a-a083-b646c2c180dc"
+      "id": "ff6d22f3-1fa6-4e9a-a083-b646c2c180dc",
+      "isFavorite": false
     },
     {
       "name": "Elliptical",
@@ -49578,7 +49628,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6d030098-a5f4-4ae2-a1a7-334660a66023"
+      "id": "6d030098-a5f4-4ae2-a1a7-334660a66023",
+      "isFavorite": false
     },
     {
       "name": "Face Pulls",
@@ -49606,7 +49657,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "2da7a924-bd73-4539-a473-841e8cfe9b96"
+      "id": "2da7a924-bd73-4539-a473-841e8cfe9b96",
+      "isFavorite": false
     },
     {
       "name": "Farmer Carry",
@@ -49634,7 +49686,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4190b6c1-aa6d-4f1e-a3a0-6985ed1d2cf3"
+      "id": "4190b6c1-aa6d-4f1e-a3a0-6985ed1d2cf3",
+      "isFavorite": false
     },
     {
       "name": "Flat DB Press",
@@ -49662,7 +49715,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "fbbf220b-d04d-4f3d-af67-5773bd7ebef5"
+      "id": "fbbf220b-d04d-4f3d-af67-5773bd7ebef5",
+      "isFavorite": false
     },
     {
       "name": "Floor Press",
@@ -49690,7 +49744,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f49fdc35-64c7-4b5d-a5f2-e80b8753a1e0"
+      "id": "f49fdc35-64c7-4b5d-a5f2-e80b8753a1e0",
+      "isFavorite": false
     },
     {
       "name": "Forward Lunge",
@@ -49718,7 +49773,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4d7b2903-978e-447c-a49e-494b10b23304"
+      "id": "4d7b2903-978e-447c-a49e-494b10b23304",
+      "isFavorite": false
     },
     {
       "name": "Front Box Squat",
@@ -49746,7 +49802,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "dca76a03-0ff1-4ff0-a151-bb5f0028e1c3"
+      "id": "dca76a03-0ff1-4ff0-a151-bb5f0028e1c3",
+      "isFavorite": false
     },
     {
       "name": "Front Squat",
@@ -49774,7 +49831,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6670ad49-1dac-4654-ab93-805260ed774e"
+      "id": "6670ad49-1dac-4654-ab93-805260ed774e",
+      "isFavorite": false
     },
     {
       "name": "GHD Back Extension",
@@ -49802,7 +49860,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "60c73a6f-7589-4dbf-aaba-dea3c08f0fe2"
+      "id": "60c73a6f-7589-4dbf-aaba-dea3c08f0fe2",
+      "isFavorite": false
     },
     {
       "name": "GHD Sit-up",
@@ -49830,7 +49889,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "16414ce3-6aa7-45f3-a10b-c86d4d381232"
+      "id": "16414ce3-6aa7-45f3-a10b-c86d4d381232",
+      "isFavorite": false
     },
     {
       "name": "Glute Bridge",
@@ -49858,7 +49918,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "8132d5e0-c090-4bff-a38b-d4fa339ef0bc"
+      "id": "8132d5e0-c090-4bff-a38b-d4fa339ef0bc",
+      "isFavorite": false
     },
     {
       "name": "Goblet Squat",
@@ -49886,7 +49947,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f0a3f64e-df1c-4996-aaba-e8280269c5dc"
+      "id": "f0a3f64e-df1c-4996-aaba-e8280269c5dc",
+      "isFavorite": false
     },
     {
       "name": "Good Morning",
@@ -49914,7 +49976,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f29523a4-cf91-49dd-a5df-accc2223e175"
+      "id": "f29523a4-cf91-49dd-a5df-accc2223e175",
+      "isFavorite": false
     },
     {
       "name": "Hack Squat",
@@ -49942,7 +50005,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "2860b1ec-fc1d-47df-a5c5-2257238e4fc1"
+      "id": "2860b1ec-fc1d-47df-a5c5-2257238e4fc1",
+      "isFavorite": false
     },
     {
       "name": "Hammer Curl",
@@ -49970,7 +50034,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d4385c03-e43f-4c03-a672-230c37521efb"
+      "id": "d4385c03-e43f-4c03-a672-230c37521efb",
+      "isFavorite": false
     },
     {
       "name": "Hang Clean",
@@ -49998,7 +50063,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ac45b767-fd5e-4421-aabd-1110e6dee8a4"
+      "id": "ac45b767-fd5e-4421-aabd-1110e6dee8a4",
+      "isFavorite": false
     },
     {
       "name": "Hang Power Clean",
@@ -50026,7 +50092,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "fa378727-936d-4e14-a7bc-4de2a49cc133"
+      "id": "fa378727-936d-4e14-a7bc-4de2a49cc133",
+      "isFavorite": false
     },
     {
       "name": "Hang Power Snatch",
@@ -50054,7 +50121,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "47d041d6-817f-439f-a80d-fcf517c7dcdf"
+      "id": "47d041d6-817f-439f-a80d-fcf517c7dcdf",
+      "isFavorite": false
     },
     {
       "name": "Hang Snatch",
@@ -50082,7 +50150,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "9fd37f40-ef1f-4aa6-a45f-bad404794a21"
+      "id": "9fd37f40-ef1f-4aa6-a45f-bad404794a21",
+      "isFavorite": false
     },
     {
       "name": "Hanging Knee Raise",
@@ -50110,7 +50179,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ecfb3059-fcb0-4ec6-a7f2-ff1966e98136"
+      "id": "ecfb3059-fcb0-4ec6-a7f2-ff1966e98136",
+      "isFavorite": false
     },
     {
       "name": "Hollow Hold",
@@ -50138,7 +50208,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7f5d2905-2556-495f-a7f8-b9072814d240"
+      "id": "7f5d2905-2556-495f-a7f8-b9072814d240",
+      "isFavorite": false
     },
     {
       "name": "Incline Barbell Bench Press",
@@ -50166,7 +50237,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "272ae504-e122-42b7-a8a8-65e2e0c712ce"
+      "id": "272ae504-e122-42b7-a8a8-65e2e0c712ce",
+      "isFavorite": false
     },
     {
       "name": "Incline Bench DB Row",
@@ -50194,7 +50266,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "69d96cb4-df73-4eb7-a10c-fcc97a7116d7"
+      "id": "69d96cb4-df73-4eb7-a10c-fcc97a7116d7",
+      "isFavorite": false
     },
     {
       "name": "Incline DB Curl",
@@ -50222,7 +50295,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4967c042-9521-4670-af9d-544a54ddc43c"
+      "id": "4967c042-9521-4670-af9d-544a54ddc43c",
+      "isFavorite": false
     },
     {
       "name": "Incline DB Press",
@@ -50250,7 +50324,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "da3147e8-e685-4249-a0c2-b7f1409a6fbb"
+      "id": "da3147e8-e685-4249-a0c2-b7f1409a6fbb",
+      "isFavorite": true
     },
     {
       "name": "Incline Push-ups",
@@ -50278,7 +50353,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "dfa9cccc-d965-474b-a658-b7bfe44354bb"
+      "id": "dfa9cccc-d965-474b-a658-b7bfe44354bb",
+      "isFavorite": false
     },
     {
       "name": "Jump Rope",
@@ -50306,7 +50382,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "82885dc0-b33d-499a-a5d4-29f2634113b4"
+      "id": "82885dc0-b33d-499a-a5d4-29f2634113b4",
+      "isFavorite": false
     },
     {
       "name": "KB Clean",
@@ -50334,7 +50411,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "0426309f-249e-44b7-a88d-0f0969d78970"
+      "id": "0426309f-249e-44b7-a88d-0f0969d78970",
+      "isFavorite": false
     },
     {
       "name": "KB Press",
@@ -50362,7 +50440,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7c9491b9-5764-4d15-a95c-caf0e3702015"
+      "id": "7c9491b9-5764-4d15-a95c-caf0e3702015",
+      "isFavorite": false
     },
     {
       "name": "KB Row",
@@ -50390,7 +50469,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "48c37674-9050-46b3-a0cd-97befecded83"
+      "id": "48c37674-9050-46b3-a0cd-97befecded83",
+      "isFavorite": false
     },
     {
       "name": "KB Swing",
@@ -50418,7 +50498,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "07d2bb66-06da-45c8-ac30-2b5576c00938"
+      "id": "07d2bb66-06da-45c8-ac30-2b5576c00938",
+      "isFavorite": false
     },
     {
       "name": "Landmine Press",
@@ -50446,7 +50527,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "58e32e6d-c643-436a-a2d0-121096b53fcb"
+      "id": "58e32e6d-c643-436a-a2d0-121096b53fcb",
+      "isFavorite": false
     },
     {
       "name": "Lat Pulldown",
@@ -50474,7 +50556,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "71520cb2-dde3-4aa7-a861-b8e8af71a98e"
+      "id": "71520cb2-dde3-4aa7-a861-b8e8af71a98e",
+      "isFavorite": false
     },
     {
       "name": "Leg Extension",
@@ -50502,7 +50585,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "61aebad8-caa7-49ba-aa13-b09dcb27f8f4"
+      "id": "61aebad8-caa7-49ba-aa13-b09dcb27f8f4",
+      "isFavorite": false
     },
     {
       "name": "Leg Press",
@@ -50530,7 +50614,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d5ac8595-b13d-4f02-a97a-e9fc1e251e5d"
+      "id": "d5ac8595-b13d-4f02-a97a-e9fc1e251e5d",
+      "isFavorite": false
     },
     {
       "name": "Low Box Squat",
@@ -50558,7 +50643,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4385f6d7-6520-4df9-a3b2-781091b5102f"
+      "id": "4385f6d7-6520-4df9-a3b2-781091b5102f",
+      "isFavorite": false
     },
     {
       "name": "Lying Leg Curl",
@@ -50586,7 +50672,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "42e926ba-48c2-4e58-a6ef-27f547c82f6e"
+      "id": "42e926ba-48c2-4e58-a6ef-27f547c82f6e",
+      "isFavorite": false
     },
     {
       "name": "Machine Chest Press",
@@ -50614,7 +50701,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "72eeff01-c276-4e6a-a6f7-583b1716ea81"
+      "id": "72eeff01-c276-4e6a-a6f7-583b1716ea81",
+      "isFavorite": false
     },
     {
       "name": "Monster Walk",
@@ -50642,7 +50730,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1fb87bce-5ae9-4bc8-a831-6f6dad339316"
+      "id": "1fb87bce-5ae9-4bc8-a831-6f6dad339316",
+      "isFavorite": false
     },
     {
       "name": "Mountain Climbers",
@@ -50670,7 +50759,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e3c12949-dd0c-48ae-a52a-19490861b8e8"
+      "id": "e3c12949-dd0c-48ae-a52a-19490861b8e8",
+      "isFavorite": false
     },
     {
       "name": "Muscle Clean",
@@ -50698,7 +50788,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "51b2b138-3bac-4a5f-a05d-be2c66ee43d4"
+      "id": "51b2b138-3bac-4a5f-a05d-be2c66ee43d4",
+      "isFavorite": false
     },
     {
       "name": "Muscle Snatch",
@@ -50726,7 +50817,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "2fd6e538-1989-464c-a815-53e921c53dbc"
+      "id": "2fd6e538-1989-464c-a815-53e921c53dbc",
+      "isFavorite": false
     },
     {
       "name": "Nordic Hamstring Curl",
@@ -50754,7 +50846,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "8622d49f-52e6-4390-a299-86ad21c33baf"
+      "id": "8622d49f-52e6-4390-a299-86ad21c33baf",
+      "isFavorite": false
     },
     {
       "name": "One-arm Cable Row",
@@ -50782,7 +50875,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "4685b5a9-d0c2-4b09-af99-db7913c2f54e"
+      "id": "4685b5a9-d0c2-4b09-af99-db7913c2f54e",
+      "isFavorite": false
     },
     {
       "name": "Overhead DB Press",
@@ -50810,7 +50904,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "5938e9d7-702b-4195-a88f-b85e0c38f515"
+      "id": "5938e9d7-702b-4195-a88f-b85e0c38f515",
+      "isFavorite": false
     },
     {
       "name": "Overhead Press",
@@ -50838,7 +50933,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7801715e-956c-4b68-a12b-e3e5f0bd8bfa"
+      "id": "7801715e-956c-4b68-a12b-e3e5f0bd8bfa",
+      "isFavorite": false
     },
     {
       "name": "Overhead Squat",
@@ -50866,7 +50962,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "0423bbf0-8bd9-4b02-a7ba-bbd50b100649"
+      "id": "0423bbf0-8bd9-4b02-a7ba-bbd50b100649",
+      "isFavorite": false
     },
     {
       "name": "Pallof Press",
@@ -50894,7 +50991,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e5898f7d-bf33-4725-aa0f-1defda58317d"
+      "id": "e5898f7d-bf33-4725-aa0f-1defda58317d",
+      "isFavorite": false
     },
     {
       "name": "Paused Box Squat",
@@ -50922,7 +51020,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1ebeeae6-92a0-47da-a293-4b6dfc17cbaa"
+      "id": "1ebeeae6-92a0-47da-a293-4b6dfc17cbaa",
+      "isFavorite": false
     },
     {
       "name": "Pec Deck",
@@ -50950,7 +51049,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "b820ed48-8b1f-4fdd-aaab-a6acffd2453a"
+      "id": "b820ed48-8b1f-4fdd-aaab-a6acffd2453a",
+      "isFavorite": false
     },
     {
       "name": "Pendlay Row",
@@ -50978,7 +51078,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "08202ac2-92f1-4d25-a04f-99d43600a707"
+      "id": "08202ac2-92f1-4d25-a04f-99d43600a707",
+      "isFavorite": false
     },
     {
       "name": "Plank",
@@ -51006,7 +51107,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d602748b-c5e7-4c09-aee8-801de3e3a509"
+      "id": "d602748b-c5e7-4c09-aee8-801de3e3a509",
+      "isFavorite": true
     },
     {
       "name": "Power Clean",
@@ -51034,7 +51136,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f59db0d2-cc2c-4121-a54a-55a28fda22f8"
+      "id": "f59db0d2-cc2c-4121-a54a-55a28fda22f8",
+      "isFavorite": false
     },
     {
       "name": "Power Snatch",
@@ -51062,7 +51165,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "df9ab132-325e-4c82-a256-ffbd2d82e3b3"
+      "id": "df9ab132-325e-4c82-a256-ffbd2d82e3b3",
+      "isFavorite": false
     },
     {
       "name": "Preacher Curl",
@@ -51090,7 +51194,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "625de117-49b7-4551-a5b9-dc435bcd6b0d"
+      "id": "625de117-49b7-4551-a5b9-dc435bcd6b0d",
+      "isFavorite": false
     },
     {
       "name": "Pull-ups",
@@ -51118,7 +51223,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1ea0c910-ec90-440c-abac-463a7cd7f29b"
+      "id": "1ea0c910-ec90-440c-abac-463a7cd7f29b",
+      "isFavorite": false
     },
     {
       "name": "Push Jerk",
@@ -51146,7 +51252,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "2235ec5a-546d-4e81-a4b8-83a3dfa10791"
+      "id": "2235ec5a-546d-4e81-a4b8-83a3dfa10791",
+      "isFavorite": false
     },
     {
       "name": "Push Press",
@@ -51174,7 +51281,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "eda29b83-91b1-4be3-ad3c-409ad7f6bf7d"
+      "id": "eda29b83-91b1-4be3-ad3c-409ad7f6bf7d",
+      "isFavorite": false
     },
     {
       "name": "Push-ups",
@@ -51202,7 +51310,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "8c53a8a3-48de-4d34-a28d-033bb1f24491"
+      "id": "8c53a8a3-48de-4d34-a28d-033bb1f24491",
+      "isFavorite": false
     },
     {
       "name": "Rear Delt Fly",
@@ -51230,7 +51339,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "92b82665-5317-451f-a6b4-f1c1e7187f50"
+      "id": "92b82665-5317-451f-a6b4-f1c1e7187f50",
+      "isFavorite": false
     },
     {
       "name": "Reverse Crunch",
@@ -51258,7 +51368,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e16fcbb9-d660-4b0c-a793-7ecc00b5cafe"
+      "id": "e16fcbb9-d660-4b0c-a793-7ecc00b5cafe",
+      "isFavorite": false
     },
     {
       "name": "Reverse Lunge",
@@ -51286,7 +51397,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "71149a40-6af8-4fb4-a86a-0879a0afb5bf"
+      "id": "71149a40-6af8-4fb4-a86a-0879a0afb5bf",
+      "isFavorite": false
     },
     {
       "name": "Reverse Pec Deck",
@@ -51314,7 +51426,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7bcca711-c9e6-4061-a379-11f77614e552"
+      "id": "7bcca711-c9e6-4061-a379-11f77614e552",
+      "isFavorite": false
     },
     {
       "name": "Ring Row",
@@ -51342,7 +51455,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1f8d4b46-1ab0-401e-a05c-7f6848ed5a77"
+      "id": "1f8d4b46-1ab0-401e-a05c-7f6848ed5a77",
+      "isFavorite": false
     },
     {
       "name": "Romanian Deadlift",
@@ -51370,7 +51484,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "55dd7118-7154-4f53-a87c-960330a19a0b"
+      "id": "55dd7118-7154-4f53-a87c-960330a19a0b",
+      "isFavorite": false
     },
     {
       "name": "Row Erg",
@@ -51398,7 +51513,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "b1a75631-ac16-401b-ab4e-878585ba8d8b"
+      "id": "b1a75631-ac16-401b-ab4e-878585ba8d8b",
+      "isFavorite": false
     },
     {
       "name": "Ruck",
@@ -51426,7 +51542,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e899ce60-6a0f-4acd-ae92-e0fce9be8ce4"
+      "id": "e899ce60-6a0f-4acd-ae92-e0fce9be8ce4",
+      "isFavorite": false
     },
     {
       "name": "Run-Walk Intervals",
@@ -51454,7 +51571,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "a3427f54-e4e8-4c12-a5a7-ca3677d0e354"
+      "id": "a3427f54-e4e8-4c12-a5a7-ca3677d0e354",
+      "isFavorite": false
     },
     {
       "name": "Seated Cable Row",
@@ -51482,7 +51600,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ed5a2dd2-81bb-40ef-a826-4a0bdc33d2e8"
+      "id": "ed5a2dd2-81bb-40ef-a826-4a0bdc33d2e8",
+      "isFavorite": false
     },
     {
       "name": "Seated Calf Raise",
@@ -51510,7 +51629,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "7ba99413-e741-486e-a1f0-9003cc404be0"
+      "id": "7ba99413-e741-486e-a1f0-9003cc404be0",
+      "isFavorite": false
     },
     {
       "name": "Seated Leg Curl",
@@ -51538,7 +51658,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "5eaf75e6-9ff0-4cb6-a973-a60ae1d77d89"
+      "id": "5eaf75e6-9ff0-4cb6-a973-a60ae1d77d89",
+      "isFavorite": false
     },
     {
       "name": "Seated Upright DB Press",
@@ -51566,7 +51687,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "62913874-c575-4b46-a3a6-1c6cff4af4ee"
+      "id": "62913874-c575-4b46-a3a6-1c6cff4af4ee",
+      "isFavorite": false
     },
     {
       "name": "Side Plank",
@@ -51594,7 +51716,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ee08976f-abfa-43ad-ac9d-cc03d7ad1294"
+      "id": "ee08976f-abfa-43ad-ac9d-cc03d7ad1294",
+      "isFavorite": false
     },
     {
       "name": "Single-arm DB Row",
@@ -51622,7 +51745,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "5ea3c704-4047-4b92-a958-e034a30ff635"
+      "id": "5ea3c704-4047-4b92-a958-e034a30ff635",
+      "isFavorite": false
     },
     {
       "name": "Sit-ups",
@@ -51650,7 +51774,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "344f710e-16f3-4367-a788-e6f64a1df84d"
+      "id": "344f710e-16f3-4367-a788-e6f64a1df84d",
+      "isFavorite": false
     },
     {
       "name": "Ski Erg",
@@ -51678,7 +51803,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f9994ece-be5e-4b46-abe1-544d160fec6e"
+      "id": "f9994ece-be5e-4b46-abe1-544d160fec6e",
+      "isFavorite": false
     },
     {
       "name": "Skull Crusher",
@@ -51706,7 +51832,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6c95c454-48d2-47c5-a9f1-9b3281d86026"
+      "id": "6c95c454-48d2-47c5-a9f1-9b3281d86026",
+      "isFavorite": false
     },
     {
       "name": "Sled Pull",
@@ -51734,7 +51861,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "c66944eb-73b9-42fc-a23e-737ae103b271"
+      "id": "c66944eb-73b9-42fc-a23e-737ae103b271",
+      "isFavorite": false
     },
     {
       "name": "Sled Push",
@@ -51762,7 +51890,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "9a315855-16a8-49d3-af3e-651a84dfc1cb"
+      "id": "9a315855-16a8-49d3-af3e-651a84dfc1cb",
+      "isFavorite": false
     },
     {
       "name": "Snatch",
@@ -51790,7 +51919,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "782b7da5-6e8d-4e62-a3b1-f8d98ab6a11f"
+      "id": "782b7da5-6e8d-4e62-a3b1-f8d98ab6a11f",
+      "isFavorite": false
     },
     {
       "name": "Snatch High Pull",
@@ -51818,7 +51948,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "c6fdde8e-1a57-4f73-ab89-5b249cfb0826"
+      "id": "c6fdde8e-1a57-4f73-ab89-5b249cfb0826",
+      "isFavorite": false
     },
     {
       "name": "Snatch Pull",
@@ -51846,7 +51977,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "95b51b8e-7c8c-494f-ac4c-21ae6aaf753c"
+      "id": "95b51b8e-7c8c-494f-ac4c-21ae6aaf753c",
+      "isFavorite": false
     },
     {
       "name": "Snatch-grip Deadlift",
@@ -51874,7 +52006,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "ef9b6a86-c312-4c99-a1a3-87b2a87c70d7"
+      "id": "ef9b6a86-c312-4c99-a1a3-87b2a87c70d7",
+      "isFavorite": false
     },
     {
       "name": "Speed Bench Press",
@@ -51902,7 +52035,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "0f822e59-0e0e-4d02-adaa-116d4a15e45f"
+      "id": "0f822e59-0e0e-4d02-adaa-116d4a15e45f",
+      "isFavorite": false
     },
     {
       "name": "Speed Box Squat",
@@ -51930,7 +52064,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "e92f7ebb-f388-4822-a55c-fa6e47a240e2"
+      "id": "e92f7ebb-f388-4822-a55c-fa6e47a240e2",
+      "isFavorite": false
     },
     {
       "name": "Speed Deadlift",
@@ -51958,7 +52093,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "c0150e6e-f960-4b9f-a0d9-6bdeabd10b04"
+      "id": "c0150e6e-f960-4b9f-a0d9-6bdeabd10b04",
+      "isFavorite": false
     },
     {
       "name": "Split Jerk",
@@ -51986,7 +52122,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "c20db911-5cc3-46a3-a2cf-4b0c6b808e6b"
+      "id": "c20db911-5cc3-46a3-a2cf-4b0c6b808e6b",
+      "isFavorite": false
     },
     {
       "name": "Stair Climber",
@@ -52014,7 +52151,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6461df8c-cf06-41a8-af7e-55ec6c1cb680"
+      "id": "6461df8c-cf06-41a8-af7e-55ec6c1cb680",
+      "isFavorite": false
     },
     {
       "name": "Standing Calf Raise",
@@ -52042,7 +52180,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d24254b3-f97d-42d2-aef0-8880dd44e11d"
+      "id": "d24254b3-f97d-42d2-aef0-8880dd44e11d",
+      "isFavorite": false
     },
     {
       "name": "Step-up",
@@ -52070,7 +52209,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d89edbe5-5444-4342-abb0-94949cda5263"
+      "id": "d89edbe5-5444-4342-abb0-94949cda5263",
+      "isFavorite": false
     },
     {
       "name": "Straight-arm Pulldown",
@@ -52098,7 +52238,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "974eef3d-e90b-42d5-a195-c8ec5719e96a"
+      "id": "974eef3d-e90b-42d5-a195-c8ec5719e96a",
+      "isFavorite": false
     },
     {
       "name": "Suitcase Carry",
@@ -52126,7 +52267,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "f19fa3c7-76df-4bbb-a64f-e85895c2ff18"
+      "id": "f19fa3c7-76df-4bbb-a64f-e85895c2ff18",
+      "isFavorite": false
     },
     {
       "name": "Sumo Deadlift",
@@ -52154,7 +52296,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "a0510efe-ba19-46ce-afec-38d5d0836404"
+      "id": "a0510efe-ba19-46ce-afec-38d5d0836404",
+      "isFavorite": false
     },
     {
       "name": "Swimming",
@@ -52182,7 +52325,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "d5138c6d-1d54-4f05-a2ca-936e5f925b50"
+      "id": "d5138c6d-1d54-4f05-a2ca-936e5f925b50",
+      "isFavorite": false
     },
     {
       "name": "T-Bar Row",
@@ -52210,7 +52354,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "9d5c7a0c-f437-424d-a736-147dd6c0df91"
+      "id": "9d5c7a0c-f437-424d-a736-147dd6c0df91",
+      "isFavorite": false
     },
     {
       "name": "Trap Bar Deadlift",
@@ -52238,7 +52383,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6213929f-f0b5-4c68-aea2-e215f808a7b6"
+      "id": "6213929f-f0b5-4c68-aea2-e215f808a7b6",
+      "isFavorite": false
     },
     {
       "name": "Triceps Pushdown",
@@ -52266,7 +52412,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "1f6f7262-f538-47ce-ac94-d3703cf1d659"
+      "id": "1f6f7262-f538-47ce-ac94-d3703cf1d659",
+      "isFavorite": false
     },
     {
       "name": "Turkish Get-up",
@@ -52294,7 +52441,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "14dc2c02-a828-4e80-a91c-df8039839a02"
+      "id": "14dc2c02-a828-4e80-a91c-df8039839a02",
+      "isFavorite": false
     },
     {
       "name": "Walk",
@@ -52322,7 +52470,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "6afb0908-9f70-463d-a583-26d9eae7703c"
+      "id": "6afb0908-9f70-463d-a583-26d9eae7703c",
+      "isFavorite": false
     },
     {
       "name": "Walking Lunges",
@@ -52350,7 +52499,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "955e9217-240d-4a8d-ae19-16dbc8424cd0"
+      "id": "955e9217-240d-4a8d-ae19-16dbc8424cd0",
+      "isFavorite": false
     },
     {
       "name": "Weighted Chin-up",
@@ -52378,7 +52528,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "50021c33-3211-4d68-aa73-217868da4e4f"
+      "id": "50021c33-3211-4d68-aa73-217868da4e4f",
+      "isFavorite": false
     },
     {
       "name": "Weighted Pull-up",
@@ -52406,7 +52557,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "47d0bb81-62f6-49a3-ae73-0dab655dc415"
+      "id": "47d0bb81-62f6-49a3-ae73-0dab655dc415",
+      "isFavorite": false
     },
     {
       "name": "Wood Splitting",
@@ -52434,7 +52586,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "id": "05c70564-c15c-4a9c-a107-acd7d11f0e02",
-      "stationDenomination": null
+      "stationDenomination": null,
+      "isFavorite": false
     },
     {
       "name": "Y-T-W Raises",
@@ -52462,7 +52615,8 @@
       "reEntryTestReps": 5,
       "createdAt": "2000-01-01T00:00:00.000Z",
       "stationDenomination": null,
-      "id": "21c20fc3-62b3-45f9-a37c-18ec08722eaf"
+      "id": "21c20fc3-62b3-45f9-a37c-18ec08722eaf",
+      "isFavorite": false
     }
   ],
   "settings": {

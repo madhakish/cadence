@@ -210,7 +210,7 @@ struct ExerciseDetailView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 7) {
@@ -302,7 +302,10 @@ struct ExerciseDetailView: View {
                         .tracking(0.7)
                         .foregroundStyle(.secondary)
                     if performance.recent.isEmpty {
-                        Text("No sessions yet.").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            EquipmentContextImage(category: exercise.category, width: 160)
+                            Text("No sessions yet.").foregroundStyle(.secondary)
+                        }
                     }
                     ForEach(performance.recent) { row in
                         VStack(alignment: .leading, spacing: 2) {
@@ -363,11 +366,15 @@ struct ExerciseDetailView: View {
                                             )
                                     }
                                     Spacer()
-                                    Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
-                                        .font(.subheadline.bold().monospacedDigit())
-                                    Text("\(plan.sets)×\(plan.reps)")
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundStyle(.secondary)
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        Text(plan.weightLb > 0 ? settingsList.unitDisplay.format(lb: plan.weightLb) : "Bodyweight")
+                                            .font(.subheadline.bold().monospacedDigit())
+                                        Text("\(plan.sets)×\(plan.reps)")
+                                            .font(.caption.monospacedDigit())
+                                            .foregroundStyle(.secondary)
+                                            .accessibilityIdentifier("cycle-plan-reps-\(phase.rawValue)")
+                                    }
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }
@@ -562,9 +569,15 @@ struct ExerciseDetailView: View {
 
         }
         .listStyle(.plain)
+        .themeListBackground()
         .accessibilityIdentifier("exercise-detail-screen")
         .plateCalculatorClearance()
         .navigationTitle(exercise.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ExerciseFavoriteButton(exercise: exercise)
+            }
+        }
         .saveChangesOnDisappear(context, operation: "Saving the exercise")
         .sheet(isPresented: $showExpandedContextBar) {
             if let solution = contextualSolution {

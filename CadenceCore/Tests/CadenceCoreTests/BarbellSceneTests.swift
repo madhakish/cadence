@@ -2,6 +2,20 @@ import XCTest
 @testable import CadenceCore
 
 final class BarbellSceneTests: XCTestCase {
+    func testInlineBarKeepsPhysicalProportionsAndTouchingStack() {
+        for bar in [Bar.bar45lb, .bar20kg, .bar35lb, .bar15kg] {
+            let loadout = Loadout(bar: bar, perSide: [PlateCount(plate: Plate(value: 20, unit: .kg), count: 2)])
+            let scene = BarbellScene(loadout: loadout, style: .steel, exploded: false)
+            let discs = scene.discs.filter { $0.side > 0 }.sorted { $0.index < $1.index }
+            let mm = discs[0].radius / 225
+            XCTAssertEqual(scene.shoulder / mm, 685, accuracy: 1e-8)
+            XCTAssertEqual((scene.end - scene.shoulder) / mm,
+                           BarbellInspector.isWomensBar(bar) ? 320 : 415, accuracy: 1e-8)
+            XCTAssertEqual(discs[0].x / scene.axisX / mm, 716, accuracy: 1e-8)
+            XCTAssertEqual((discs[1].x - discs[0].x) / scene.axisX / mm, 22, accuracy: 1e-8)
+        }
+    }
+
     func testPhotographicTintMatchesWeb() throws {
         struct Tint: Decodable { let token: String; let style: String; let matrix: [Double] }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

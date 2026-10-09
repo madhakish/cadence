@@ -7,6 +7,7 @@ import CadenceCore
 /// hands, feet, face, and muscle boundaries.
 struct AnatomyFigureView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let profile: AnatomyData.Profile
     @State private var selectedMuscle: String?
 
@@ -80,7 +81,9 @@ struct AnatomyFigureView: View {
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 6)], alignment: .leading, spacing: 6) {
+            LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize
+                      ? [GridItem(.flexible())]
+                      : [GridItem(.adaptive(minimum: 144), spacing: 6)], alignment: .leading, spacing: 6) {
                 // Legend and VoiceOver walk the body head to toe (shared order).
                 ForEach(AnatomyData.anatomicalSort(ids), id: \.self) { id in
                     let isSelected = selectedMuscle == id
@@ -93,10 +96,12 @@ struct AnatomyFigureView: View {
                                 .frame(width: 4, height: 22)
                             Text(AnatomyData.muscleNames[id] ?? id)
                                 .font(.callout.weight(.semibold))
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                         .frame(minHeight: 44)
                         .background(
                             isSelected ? color.opacity(0.16) : Theme.raised.opacity(0.55),

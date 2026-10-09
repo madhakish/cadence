@@ -57,8 +57,9 @@ soft lighting; surrounding solid rims, sleeve, shaft and collar are lit in 3D.
 
 Only two source images are decoded per web inspector. Native caches tinted
 faces within each renderer. The service worker precaches both files; procedural
-faces remain visible while web textures load or if an image fails. The existing
-54 sprite assets remain the compact-row and no-3D fallback artwork, unchanged.
+faces remain visible while web textures load or if an image fails. At this September 20 checkpoint, 54 sprites supplied compact rows and the
+no-3D fallback. The subsequently expanded runtime family contains 156 sprites;
+[ASSET-INVENTORY.md](ASSET-INVENTORY.md) records the current files and native pairs.
 
 `node web/tests/plate-sprites.test.mjs` checks native/web byte identity and
 offline inclusion. No anatomy or previously approved plate artwork was replaced.

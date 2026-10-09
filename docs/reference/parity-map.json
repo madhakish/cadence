@@ -70,6 +70,7 @@
       "symbols": {
         "BarbellInspector": { "swiftOnly": "namespace enum" },
         "BarbellInspector.boreRadius": "BORE_RADIUS",
+        "BarbellInspector.barDimensions(for:)": "barDimensions",
         "BarbellInspector.BarDimensions": { "swiftOnly": "value type; JS layout object" },
         "BarbellInspector.BarDimensions.shoulderEnd": { "swiftOnly": "JS sets bar.shoulderEnd on the object barbellLayout() builds" },
         "BarbellInspector.Disc": { "swiftOnly": "value type; JS layout object" },

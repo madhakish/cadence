@@ -1,0 +1,149 @@
+Application, 0x10833bc00, pid: 19035, label: 'Cadence' <App element pid: 19035>
+  Window (Main), 0x10833be80, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4398467072.4>
+    Other, 0x10833a440, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4414244352.5>
+      Other, 0x10833a940, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412865536.6>
+        Other, 0x10833a6c0, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4398466048.7>
+          Other, 0x10833a800, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412664768.8>
+            Other, 0x10833af80, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4413298368.9>
+              Other, 0x108339f40, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4414247424.11>
+                Other, 0x10833a300, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4399683264.13>
+                  Other, 0x10833a1c0, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4398474240.119>
+                    Other, 0x108339e00, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412751168.120>
+                      Other, 0x10833a080, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412750720.121>
+                        Other, 0x10833b480, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412703616.122>
+                          NavigationBar, 0x10833b200, {{0.0, 59.0}, {430.0, 54.0}}, identifier: 'Library' <AX element pid: 19035, elementOrHash.elementID: 4504581632.123>
+                            Button, 0x10833b5c0, {{20.0, 59.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Settings' <AX element pid: 19035, elementOrHash.elementID: 4687263168.290>
+                            StaticText, 0x10833b340, {{181.0, 68.3}, {67.7, 25.3}}, label: 'Library' <AX element pid: 19035, elementOrHash.elementID: 4697648512.291>
+                            Button, 0x108339cc0, {{370.0, 63.0}, {36.0, 36.0}}, label: 'New exercise' <AX element pid: 19035, elementOrHash.elementID: 4698110976.292>
+                          Other, 0x10833b980, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412704064.124>
+                            Other, 0x10833b700, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412710784.127>
+                              Other, 0x10833b840, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4697641344.293>
+                                Other, 0x108339b80, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412941056.294>
+                                  CollectionView, 0x10833bac0, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4500630016.295>
+                                    Other, 0x10833b0c0, {{0.0, -36.3}, {430.0, 416.0}} <AX element pid: 19035, elementOrHash.elementID: 4768635904.306>
+                                    Other, 0x10833bd40, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412793600.297>
+                                      Other, 0x11524f700, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4412834240.314>
+                                      Other, 0x11524f840, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4412893248.315>
+                                    Other, 0x11524d040, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412792704.298>
+                                      Other, 0x11524c000, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4782014464.477>
+                                        Image, 0x11524c140, {{-120.0, -163.0}, {670.0, 326.0}}, identifier: 'AdditionalDimmingOverlay' <AX element pid: 19035, elementOrHash.elementID: 4768642560.484>
+                                        Other, 0x11524c280, {{0.0, 0.0}, {430.0, 186.3}} <AX element pid: 19035, elementOrHash.elementID: 4412836032.485>
+                                        Other, 0x11524c8c0, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4700745728.486>
+                                          Other, 0x11524ca00, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4412834688.495>
+                                        Other, 0x11524cb40, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4768641536.487>
+                                          Other, 0x11524cc80, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4412896384.496>
+                                        Other, 0x11524cdc0, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4782015104.488>
+                                          Other, 0x11524cf00, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4412835136.497>
+                                          Other, 0x11524ee40, {{0.0, 0.0}, {430.0, 251.1}} <AX element pid: 19035, elementOrHash.elementID: 4412896832.498>
+                                      Other, 0x11524ef80, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4782017024.316>
+                                        Image, 0x11524f0c0, {{-120.0, 789.0}, {670.0, 286.0}}, identifier: 'AdditionalDimmingOverlay' <AX element pid: 19035, elementOrHash.elementID: 4782312448.330>
+                                        Other, 0x11524f200, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4700748032.331>
+                                          Other, 0x11524f340, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4412894144.343>
+                                        Other, 0x11531b480, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4782017664.332>
+                                          Other, 0x11531b980, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4412894592.344>
+                                          Other, 0x116434000, {{0.0, 784.2}, {430.0, 147.8}} <AX element pid: 19035, elementOrHash.elementID: 4412898176.345>
+                                    Cell, 0x116434140, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4815323136.519>
+                                      Other, 0x116434280, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4782313472.520>
+                                        Other, 0x1164343c0, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413170880.522>
+                                      Other, 0x116434500, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413170432.521>
+                                        Other, 0x116434640, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4832773632.523>
+                                          Other, 0x116434780, {{0.0, 69.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413225408.524>
+                                            Other, 0x1164348c0, {{20.0, 84.0}, {390.0, 280.7}}, identifier: 'exercise-favorites' <AX element pid: 19035, elementOrHash.elementID: 4413226304.525>
+                                              Button, 0x116434a00, {{20.0, 84.0}, {305.0, 280.7}}, label: 'Back Squat, Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4412666560.526>
+                                                StaticText, 0x116434b40, {{20.0, 84.0}, {132.7, 125.3}}, label: 'Back Squat' <AX element pid: 19035, elementOrHash.elementID: 4412665664.528>
+                                                StaticText, 0x116434c80, {{20.0, 211.3}, {248.7, 153.3}}, label: 'Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4412665216.529>
+                                                Image, 0x116434dc0, {{303.3, 205.7}, {21.7, 37.3}}, identifier: 'chevron.forward' <AX element pid: 19035, elementOrHash.elementID: 4412666112.530>
+                                              Button, 0x116434f00, {{341.7, 193.0}, {68.3, 62.7}}, identifier: 'star.fill', label: 'Remove Back Squat from Favorites', value: Favorite <AX element pid: 19035, elementOrHash.elementID: 4412655360.527>
+                                    Cell, 0x116435040, {{0.0, 113.0}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4765988608.308>
+                                      Other, 0x116435180, {{0.0, 113.0}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4768630272.323>
+                                      Other, 0x1164352c0, {{0.0, 113.0}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4412824576.324>
+                                        Other, 0x116435400, {{0.0, 113.0}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4766652416.339>
+                                          Other, 0x116435540, {{0.0, 113.0}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4412891008.349>
+                                            StaticText, 0x116435680, {{0.0, 113.0}, {430.0, 83.3}}, identifier: 'exercise-favorites', label: 'Favorites' <AX element pid: 19035, elementOrHash.elementID: 4412891456.355>
+                                    Other, 0x1164357c0, {{0.0, 379.7}, {430.0, 416.0}} <AX element pid: 19035, elementOrHash.elementID: 4768636928.310>
+                                    Other, 0x116435900, {{20.0, 378.7}, {390.0, 1.0}} <AX element pid: 19035, elementOrHash.elementID: 4768636416.311>
+                                    Cell, 0x116435a40, {{0.0, 401.7}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4781654016.312>
+                                      Other, 0x116435b80, {{0.0, 401.7}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4768631808.327>
+                                      Other, 0x116435cc0, {{0.0, 401.7}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4412825472.328>
+                                        Other, 0x116435e00, {{0.0, 401.7}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4766653952.342>
+                                          Other, 0x116435f40, {{0.0, 401.7}, {430.0, 83.3}} <AX element pid: 19035, elementOrHash.elementID: 4413141696.499>
+                                            StaticText, 0x116436080, {{0.0, 401.7}, {430.0, 83.3}}, label: 'Recent' <AX element pid: 19035, elementOrHash.elementID: 4412794496.503>
+                                    Cell, 0x1164361c0, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4815324416.474>
+                                      Other, 0x116436300, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4783804928.478>
+                                        Other, 0x116436440, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413142592.489>
+                                      Other, 0x116436580, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413144384.479>
+                                        Other, 0x1164366c0, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4766657024.490>
+                                          Other, 0x116436800, {{0.0, 485.0}, {430.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4413257728.500>
+                                            Button, 0x116436940, {{20.0, 500.0}, {305.0, 280.7}}, label: 'Back Squat, Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4413139904.504>
+                                              StaticText, 0x116436a80, {{20.0, 500.0}, {132.7, 125.3}}, label: 'Back Squat' <AX element pid: 19035, elementOrHash.elementID: 4413140352.509>
+                                              StaticText, 0x116436bc0, {{20.0, 627.3}, {248.7, 153.3}}, label: 'Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4413138560.510>
+                                              Image, 0x116436d00, {{303.3, 621.7}, {21.7, 37.3}}, identifier: 'chevron.forward' <AX element pid: 19035, elementOrHash.elementID: 4413139456.511>
+                                            Button, 0x116436e40, {{341.7, 609.0}, {68.3, 62.7}}, identifier: 'star.fill', label: 'Remove Back Squat from Favorites', value: Favorite <AX element pid: 19035, elementOrHash.elementID: 4412794944.505>
+                                    Cell, 0x116436f80, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4815328256.475>
+                                      Other, 0x1164370c0, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4783805440.480>
+                                        Other, 0x116437200, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4413139008.491>
+                                      Other, 0x116437340, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4413140800.481>
+                                        Other, 0x116437480, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4766660096.492>
+                                          Other, 0x1164375c0, {{0.0, 795.7}, {430.0, 93.3}} <AX element pid: 19035, elementOrHash.elementID: 4413166400.501>
+                                            Button, 0x116437700, {{0.0, 795.7}, {430.0, 93.3}}, identifier: 'exercise-category-Main-exercise-category-Main', label: 'Main, 1' <AX element pid: 19035, elementOrHash.elementID: 4413162816.506>
+                                              StaticText, 0x116437840, {{20.0, 810.7}, {115.7, 63.3}}, identifier: 'exercise-category-Main', label: 'Main' <AX element pid: 19035, elementOrHash.elementID: 4412708992.512>
+                                              StaticText, 0x116437980, {{337.3, 810.7}, {32.7, 63.3}}, identifier: 'exercise-category-Main', label: '1' <AX element pid: 19035, elementOrHash.elementID: 4413162368.513>
+                                              Button, 0x116437ac0, {{378.0, 820.0}, {32.0, 44.7}} <AX element pid: 19035, elementOrHash.elementID: 4413161920.514>
+                                                Image, 0x116437c00, {{378.0, 820.0}, {32.0, 44.7}}, identifier: 'expanded' <AX element pid: 19035, elementOrHash.elementID: 4413161472.518>
+                                    Other, 0x116437d40, {{0.0, 795.7}, {430.0, 2319.0}} <AX element pid: 19035, elementOrHash.elementID: 4768632832.296>
+                                    Other, 0x116437e80, {{20.0, 794.7}, {390.0, 1.0}} <AX element pid: 19035, elementOrHash.elementID: 4768634880.305>
+                                    Cell, 0x11643c000, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4815326976.476>
+                                      Other, 0x11643c140, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4783810560.482>
+                                        Other, 0x11643c280, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4413142144.493>
+                                      Other, 0x11643c3c0, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4413137216.483>
+                                        Other, 0x11643c500, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4832772096.494>
+                                          Other, 0x11643c640, {{0.0, 889.0}, {430.0, 361.7}} <AX element pid: 19035, elementOrHash.elementID: 4413169536.502>
+                                            Button, 0x11643c780, {{40.0, 904.0}, {285.0, 331.7}}, label: 'Back Squat, Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4413168192.507>
+                                              StaticText, 0x11643c8c0, {{40.0, 904.0}, {132.7, 125.3}}, label: 'Back Squat' <AX element pid: 19035, elementOrHash.elementID: 4413166848.515>
+                                              StaticText, 0x11643ca00, {{40.0, 1031.3}, {165.0, 204.3}}, label: 'Squat · barbell · Total bar weight' <AX element pid: 19035, elementOrHash.elementID: 4413167296.516>
+                                              Image, 0x11643cb40, {{303.3, 1051.0}, {21.7, 37.3}}, identifier: 'chevron.forward' <AX element pid: 19035, elementOrHash.elementID: 4413167744.517>
+                                            Button, 0x11643cc80, {{341.7, 1038.3}, {68.3, 62.7}}, identifier: 'star.fill', label: 'Remove Back Squat from Favorites', value: Favorite <AX element pid: 19035, elementOrHash.elementID: 4413168640.508>
+                                    Other, 0x11643cdc0, {{20.0, 888.0}, {390.0, 1.0}} <AX element pid: 19035, elementOrHash.elementID: 4768633856.303>
+                                    Other, 0x11643cf00, {{397.0, 113.0}, {30.0, 664.0}}, label: 'Vertical scroll bar, 3 pages', value: 60% <AX element pid: 19035, elementOrHash.elementID: 4767731200.313>
+                                      Other, 0x11643d040, {{424.0, 357.3}, {3.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4412755008.329>
+                                    Other, 0x11643d180, {{397.0, 113.0}, {30.0, 664.0}}, label: 'Vertical scroll bar, 3 pages', value: 60% <AX element pid: 19035, elementOrHash.elementID: 4767731200.313>
+                                      Other, 0x11643d2c0, {{424.0, 357.3}, {3.0, 310.7}} <AX element pid: 19035, elementOrHash.elementID: 4412755008.329>
+                          Other, 0x11643d400, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4698582528.125>
+                            Other, 0x11643d540, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4698584576.128>
+              Other, 0x11643d680, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4413298816.12>
+                Other, 0x11643d7c0, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4413305984.14>
+                  TabBar, 0x11643d900, {{0.0, 849.0}, {430.0, 83.0}}, label: 'Tab Bar' <AX element pid: 19035, elementOrHash.elementID: 4504487168.17>
+                    Other, 0x11643da40, {{21.0, 849.0}, {388.0, 62.0}} <AX element pid: 19035, elementOrHash.elementID: 4413299712.20>
+                      Other, 0x11643db80, {{21.0, 849.0}, {82.6, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4399684160.23>
+                      Other, 0x11643dcc0, {{21.0, 849.0}, {388.0, 62.0}} <AX element pid: 19035, elementOrHash.elementID: 4413300160.24>
+                        Button, 0x11643de00, {{25.0, 853.0}, {82.6, 54.0}}, identifier: 'figure.strengthtraining.traditional', label: 'Today' <AX element pid: 19035, elementOrHash.elementID: 4398423552.29>
+                          Image, 0x11643df40, {{50.0, 857.0}, {33.0, 31.7}}, identifier: 'figure.strengthtraining.traditional', label: 'figure.strengthtraining.traditional' <AX element pid: 19035, elementOrHash.elementID: 4414247936.40>
+                        Button, 0x11643e080, {{99.3, 853.0}, {82.6, 54.0}}, identifier: 'list.bullet.clipboard', label: 'Program' <AX element pid: 19035, elementOrHash.elementID: 4398426112.30>
+                          Image, 0x11643e1c0, {{128.3, 855.0}, {25.3, 33.0}}, identifier: 'list.bullet.clipboard.fill', label: 'list.bullet.clipboard.fill' <AX element pid: 19035, elementOrHash.elementID: 4414249472.41>
+                        Button, 0x11643e300, {{173.7, 853.0}, {82.6, 54.0}}, identifier: 'calendar', label: 'History' <AX element pid: 19035, elementOrHash.elementID: 4398428672.31>
+                          Image, 0x11643e440, {{200.7, 860.3}, {29.0, 25.0}}, identifier: 'calendar', label: 'calendar' <AX element pid: 19035, elementOrHash.elementID: 4414250496.42>
+                        Button, 0x11643e580, {{248.0, 853.0}, {82.6, 54.0}}, identifier: 'scalemass', label: 'Body' <AX element pid: 19035, elementOrHash.elementID: 4523638784.32>
+                          Image, 0x11643e6c0, {{275.0, 858.7}, {28.3, 28.3}}, identifier: 'scalemass.fill', label: 'scalemass.fill' <AX element pid: 19035, elementOrHash.elementID: 4414251520.43>
+                        Button, 0x11643e800, {{322.4, 853.0}, {82.6, 54.0}}, identifier: 'gearshape', label: 'Settings', Selected <AX element pid: 19035, elementOrHash.elementID: 4523641344.33>
+                          Image, 0x11643e940, {{349.4, 859.0}, {28.0, 28.0}}, identifier: 'gearshape.fill', label: 'gearshape.fill' <AX element pid: 19035, elementOrHash.elementID: 4414252544.44>
+                      Other, 0x11643ea80, {{322.4, 853.0}, {82.6, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4504487808.25>
+                        Other, 0x11643ebc0, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413301952.34>
+                          Other, 0x11643ed00, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413300608.45>
+                          Other, 0x11643ee40, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413302400.46>
+                            Other, 0x11643ef80, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413303744.51>
+                              Other, 0x11643f0c0, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413304192.54>
+                                Other, 0x11643f200, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413304640.57>
+                              Other, 0x11643f340, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413302848.55>
+                            Other, 0x11643f480, {{322.4, 853.0}, {82.3, 54.0}} <AX element pid: 19035, elementOrHash.elementID: 4413303296.52>
+                Other, 0x11643f5c0, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4414245888.15>
+                  Other, 0x11643f700, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4399719168.18>
+                    Other, 0x11643f840, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4399684608.21>
+                      Other, 0x11643f980, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4399685056.26>
+                        Other, 0x11643fac0, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4414254592.35>
+                          Other, 0x11643fc00, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4399685504.47>
+                      Other, 0x11643fd40, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4414255104.27>
+                        Other, 0x11643fe80, {{0.0, 849.0}, {430.0, 83.0}} <AX element pid: 19035, elementOrHash.elementID: 4399686400.36>
+            Button, 0x11644c000, {{358.0, 778.0}, {56.0, 56.0}}, identifier: 'plate-calculator-button', label: 'Plate calculator' <AX element pid: 19035, elementOrHash.elementID: 4412664320.10>
+  Window, 0x11644c140, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4781660416.372>
+    Other, 0x11644c280, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412828160.374>
+      Other, 0x11644c3c0, {{0.0, 0.0}, {430.0, 932.0}} <AX element pid: 19035, elementOrHash.elementID: 4412831296.376>

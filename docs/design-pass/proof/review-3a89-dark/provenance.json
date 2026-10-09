@@ -1,0 +1,95 @@
+{
+  "sourceCommit": "3a89d9c9a20e219fcc97695c23d2e80114e5d5e8",
+  "workflowRun": 36936687361,
+  "job": 110619456124,
+  "artifact": 11199163388,
+  "windowPoints": [
+    402,
+    874
+  ],
+  "device": "iPhone 17 Pro",
+  "osAppearance": "dark",
+  "inspection": "All ten original PNGs viewed directly. Fixed palettes remain deliberate: Titanium stays light; System follows the actual dark simulator. The first calculator viewport shows target and complete per-side labels but only the beginning of load summary. These captures do not prove full summary reachability, contrast ratios, largest Dynamic Type, or spoken VoiceOver.",
+  "images": [
+    {
+      "file": "after-19-app-theme-system-calculator-iphone.png",
+      "attachment": "47123D9C-689D-4B65-8280-9378F201B649.png",
+      "label": "after-19-app-theme-system-calculator-iphone",
+      "sha256": "155489d52f1a86746a77cf4a1e5361f5f8b1db883b1238892670d0a84e9d2e84",
+      "bytes": 253566,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-system-settings-iphone.png",
+      "attachment": "48087251-9596-49CC-950B-08E7BE6EBD5E.png",
+      "label": "after-19-app-theme-system-settings-iphone",
+      "sha256": "9ed2cb54fac2f4a043324edd8f60671f0802e4a1d98ac7882e58536a8a6b9d0e",
+      "bytes": 173376,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-slate-calculator-iphone.png",
+      "attachment": "A0D4B7DF-C60B-4BF8-9D40-F41332BD4A55.png",
+      "label": "after-19-app-theme-slate-calculator-iphone",
+      "sha256": "cdabc242b7742c1bb05f1bb85f396af28513ec1d35946a2aee236b1da10ed8a8",
+      "bytes": 253048,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-slate-settings-iphone.png",
+      "attachment": "C73FDEBB-8FC8-452C-BDFE-67BE0FC3B044.png",
+      "label": "after-19-app-theme-slate-settings-iphone",
+      "sha256": "dcba89ba0354efedcbe7f059a8b7470062a26e98df2154d2ba82a22e4e2f6ee2",
+      "bytes": 173897,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-titanium-calculator-iphone.png",
+      "attachment": "E0F769A7-466D-4627-98A0-4A402C9E6106.png",
+      "label": "after-19-app-theme-titanium-calculator-iphone",
+      "sha256": "1c4c036f5a73990d7a0ee50730f4f570ae4e619102ad469da8b8a0f72355f4a5",
+      "bytes": 252797,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-titanium-settings-iphone.png",
+      "attachment": "DE749A8D-4CB4-4FE4-BDD7-57260615EB0E.png",
+      "label": "after-19-app-theme-titanium-settings-iphone",
+      "sha256": "77cc9950df02575e0653eaa2089e9a34ff8d98350cebefde7e75ad3f1c35838e",
+      "bytes": 197520,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-memento-calculator-iphone.png",
+      "attachment": "1373E43A-002B-4465-8B04-6891828059A5.png",
+      "label": "after-19-app-theme-memento-calculator-iphone",
+      "sha256": "6a413ba11fd87362f7f9d4c56603991bea9e9a9c94f5a45d6ac293bcbca23fcb",
+      "bytes": 252485,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-memento-settings-iphone.png",
+      "attachment": "D565579D-1C56-4E32-A609-1B548C953DE7.png",
+      "label": "after-19-app-theme-memento-settings-iphone",
+      "sha256": "76f7249f691bcc4eff44eab7ca5f8315056bae174c0c49907d1faa81c9e8d85b",
+      "bytes": 174068,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-carbon-calculator-iphone.png",
+      "attachment": "82B7098E-A452-4088-B18C-C5FC06F39E75.png",
+      "label": "after-19-app-theme-carbon-calculator-iphone",
+      "sha256": "c06dd36b57d2ca507c4e9c22e880f8facb98b2498cbb31c7b904b98f8b2a2cbb",
+      "bytes": 253690,
+      "inspected": true
+    },
+    {
+      "file": "after-19-app-theme-carbon-settings-iphone.png",
+      "attachment": "92762E34-0551-43E5-B6AD-98FDDCDC058A.png",
+      "label": "after-19-app-theme-carbon-settings-iphone",
+      "sha256": "e517806c3f05f9a1fa90d3a8c08844ea7efa0f8d07717373641cf2fe7b408d8c",
+      "bytes": 172983,
+      "inspected": true
+    }
+  ]
+}

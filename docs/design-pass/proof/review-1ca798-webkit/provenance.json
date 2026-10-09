@@ -1,0 +1,34 @@
+{
+  "sourceCommit": "1ca79898e526f9d2fef4bee7e1ab9af9b573f6fe",
+  "mergeSHA": "5130e99fd2cd01f458ddf398012588cca90ed5a4",
+  "workflowRun": 36942928845,
+  "job": 110638471190,
+  "artifact": 11201380753,
+  "browser": "WebKit",
+  "viewport": [
+    430,
+    844
+  ],
+  "zoom": 1,
+  "precedingViewport": [
+    320,
+    844
+  ],
+  "precedingZoom": 2,
+  "result": "Required WebKit category scrollWidth assertion failed;15 other real-engine cases and full web unit suite passed. Core505 passed. Native gates/captures skipped behind this failure.",
+  "inspection": "Original nonblank delayed-page failure PNG directly inspected. Main/Accessory/Conditioning labels and counts appear within the row. Trace records failure immediately after viewport430 and zoom1. Two animation-frame waits and detailed metrics will distinguish painted responsive layout from stale or persistent overflow; no product fix or false-positive claim established.",
+  "files": [
+    {
+      "file": "category-after-zoom-resize-430.png",
+      "original": "test-failed-2.png",
+      "sha256": "170d5d9638cae4273087e7865644ee8cd3373a2997a71f34d4f221da2845f29e"
+    },
+    {
+      "file": "error-context.md",
+      "original": "error-context.md",
+      "sha256": "6d882d5e7f6f380376cfbd1c890ba16ce67d4dbe8f936e72329996b153cd4525",
+      "originalSHA256": "6e85e4490c30efb4af022ab6379ce95c70bf9a61df9017f618ad8596e459bf9f",
+      "normalization": "Trailing whitespace removed; original raw artifact retained locally."
+    }
+  ]
+}

@@ -1,0 +1,326 @@
+{
+  "sourceSHA": "11895fb95cde9e4b938831098d00dd0350b45bc2",
+  "phase": "before",
+  "fixture": "native-fixture.json exported from the DEBUG-only in-memory VisualProofSeed",
+  "backupSchemaVersion": 12,
+  "captures": [
+    {
+      "surface": "today",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-today-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "ad-hoc-work",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-ad-hoc-work-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "session",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-session-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-pane",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-exercise-pane-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-anatomy",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-exercise-anatomy-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-anatomy-selected",
+      "supported": false,
+      "reason": "The original revision has a static figure and no muscle-selection control."
+    },
+    {
+      "surface": "plate-calculator",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-plate-calculator-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-lb-exact",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-calculator-lb-exact-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-kg-change",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-calculator-kg-change-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-unreachable",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-calculator-unreachable-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-reverse",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-calculator-reverse-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "library",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-library-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 1647,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "settings",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-settings-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "settings-rest",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-settings-rest-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "history",
+      "width": 390,
+      "height": 844,
+      "file": "before-web-history-390.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "today",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-today-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "ad-hoc-work",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-ad-hoc-work-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "session",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-session-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-pane",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-exercise-pane-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-anatomy",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-exercise-anatomy-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "exercise-anatomy-selected",
+      "supported": false,
+      "reason": "The original revision has a static figure and no muscle-selection control."
+    },
+    {
+      "surface": "plate-calculator",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-plate-calculator-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-lb-exact",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-calculator-lb-exact-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-kg-change",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-calculator-kg-change-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-unreachable",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-calculator-unreachable-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "calculator-reverse",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-calculator-reverse-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "library",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-library-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 1447,
+        "overlayY": 0
+      }
+    },
+    {
+      "surface": "settings",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-settings-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "settings-rest",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-settings-rest-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    },
+    {
+      "surface": "history",
+      "width": 1280,
+      "height": 800,
+      "file": "before-web-history-1280.png",
+      "scroll": {
+        "windowX": 0,
+        "windowY": 0,
+        "overlayY": null
+      }
+    }
+  ]
+}

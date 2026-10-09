@@ -110,10 +110,10 @@ struct BarbellView: View {
             let angle = exploded ? "exploded" : "assembled"
             // Rendered sprites (PlateSprites) placed from the shared scene: a bar
             // part maps its two axis reference points onto two scene points.
-            // Thickness comes from the sprite's nominal span (an exploded scene's
-            // longer sleeve stretches along the bar, never fattens).
+            // Stretch the sprite to the physical bar span without changing its
+            // thickness; the selected shaft diameter supplies the cross scale.
             let axisLength = hypot(scene.axisX, scene.axisY)
-            func placeBar(_ name: String, from: CGPoint, to: CGPoint) {
+            func placeBar(_ name: String, from: CGPoint, to: CGPoint, crossScale: Double = 1) {
                 guard case let .bar(_, _, spriteSize, a, b, spanUnits)? = PlateSprites.sprites[name] else { return }
                 let spritePx = hypot(b.x - a.x, b.y - a.y)
                 let k = spanUnits * axisLength / spritePx
@@ -122,7 +122,7 @@ struct BarbellView: View {
                 context.drawLayer { layer in
                     layer.translateBy(x: from.x, y: from.y)
                     layer.rotate(by: .radians(atan2(to.y - from.y, to.x - from.x)))
-                    layer.scaleBy(x: k * stretch, y: k)
+                    layer.scaleBy(x: k * stretch, y: k * crossScale)
                     layer.rotate(by: .radians(-atan2(b.y - a.y, b.x - a.x)))
                     layer.translateBy(x: -a.x, y: -a.y)
                     layer.draw(image, in: CGRect(origin: .zero, size: spriteSize))
@@ -132,11 +132,12 @@ struct BarbellView: View {
             // so the sleeves and shaft show through wherever the plate's thickness lets them. The camera sits at the
             // −x end: the far (+x) collar precedes the plates, the near one follows.
             placeBar("bar-sleeve-\(angle)", from: point(scene.shoulder), to: point(scene.end))
-            placeBar("bar-shaft-\(angle)", from: point(-scene.shoulder), to: point(scene.shoulder))
+            placeBar("bar-shaft-\(angle)", from: point(-scene.shoulder), to: point(scene.shoulder),
+                     crossScale: BarbellInspector.barDimensions(for: solution.loadout.bar).shaftRadius / 14)
             placeBar("bar-sleeve-near-\(angle)", from: point(-scene.end), to: point(-scene.shoulder))
             if solution.loadout.collarLb > 0,
-               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-\(angle)"] {
-                placeBar("bar-collar-\(angle)", from: point(scene.collar - span / 2), to: point(scene.collar + span / 2))
+               case .bar(_, _, _, _, _, _)? = PlateSprites.sprites["bar-collar-\(angle)"] {
+                placeBar("bar-collar-\(angle)", from: point(scene.collar - scene.collarLength / 2), to: point(scene.collar + scene.collarLength / 2))
             }
             for disc in scene.discs.sorted(by: { $0.x > $1.x }) {
                 let token = disc.plate.colorToken(for: plateStyle)
@@ -157,8 +158,9 @@ struct BarbellView: View {
                 guard let name, case let .plate(_, _, _, spriteSize, faceCenter, faceRadius, hubRadius)? = PlateSprites.sprites[name] else { continue }
                 // The sprite's front face is the −x face; the scene's disc extends ±depth/2.
                 let x = disc.x - disc.depth / 2
+                let y = disc.y - disc.depth / 2 * scene.axisY / scene.axisX
                 let k = disc.radius / faceRadius
-                let frame = CGRect(x: x - faceCenter.x * k, y: disc.y - faceCenter.y * k,
+                let frame = CGRect(x: x - faceCenter.x * k, y: y - faceCenter.y * k,
                                    width: spriteSize.width * k, height: spriteSize.height * k)
                 let image = context.resolve(Image(name))
                 let tint = plateTheme == .custom ? PlateFaceTint(token: token, style: plateStyle)
@@ -173,7 +175,7 @@ struct BarbellView: View {
                     tinted.addFilter(.colorMatrix(matrix))
                     tinted.draw(image, in: frame)
                 }
-                let hub = CGRect(x: x - disc.faceRadius * hubRadius, y: disc.y - disc.radius * hubRadius,
+                let hub = CGRect(x: x - disc.faceRadius * hubRadius, y: y - disc.radius * hubRadius,
                                  width: disc.faceRadius * hubRadius * 2, height: disc.radius * hubRadius * 2)
                 context.drawLayer { untinted in
                     untinted.clip(to: Path(ellipseIn: hub))
@@ -183,7 +185,7 @@ struct BarbellView: View {
                 let mm = disc.radius / (PlateTheme.geometry(disc.plate, theme: plateTheme, style: plateStyle).diameter / 2)
                 func ring(radius: Double, width: Double, colour: UInt32) {
                     let rx = disc.faceRadius * radius / disc.radius
-                    context.stroke(Path(ellipseIn: CGRect(x: x - rx, y: disc.y - radius, width: rx * 2, height: radius * 2)),
+                    context.stroke(Path(ellipseIn: CGRect(x: x - rx, y: y - radius, width: rx * 2, height: radius * 2)),
                                    with: .color(Color(hex: colour)), lineWidth: width)
                 }
                 if look.details.contains("colourBand"), let band = PlateTheme.band(disc.plate, theme: plateTheme) {
@@ -199,7 +201,7 @@ struct BarbellView: View {
                                      ? disc.plate.denomination : disc.plate.label)
                             .font(.system(size: exploded ? 14 : 10, weight: .heavy))
                             .foregroundColor(colour.inkColor)
-                        context.draw(label, at: CGPoint(x: x, y: disc.y - disc.radius * 0.48))
+                        context.draw(label, at: CGPoint(x: x, y: y - disc.radius * 0.48))
                     }
                 } else {
                 // The denomination is printed on the face beside the hub, value
@@ -212,7 +214,7 @@ struct BarbellView: View {
                     if scale * printSize * grow * squash >= 12 {
                     var print = context
                 // Centred in the band between the sprite's hub insert and the rim.
-                print.translateBy(x: x + disc.faceRadius * (hubRadius + 0.92) / 2, y: disc.y)
+                print.translateBy(x: x + disc.faceRadius * (hubRadius + 0.92) / 2, y: y)
                 print.scaleBy(x: squash * grow, y: grow)
                 let ink = colour.inkColor.opacity(0.94)
                 let value = Text(disc.plate.denomination)
@@ -232,16 +234,21 @@ struct BarbellView: View {
                     let caption = Text(inspectionPlateLabel(disc.plate))
                         .font(.system(size: inspectionCaptionSize / scale, weight: .semibold).monospacedDigit())
                         .foregroundColor(.primary)
-                    context.draw(caption, at: CGPoint(x: x, y: disc.y + disc.radius + 18 / scale))
+                    context.draw(caption, at: CGPoint(x: x, y: y + disc.radius + 18 / scale))
                 }
             }
             if solution.loadout.collarLb > 0,
-               case let .bar(_, _, _, _, _, span)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
-                placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - span / 2), to: point(-scene.collar + span / 2))
+               case .bar(_, _, _, _, _, _)? = PlateSprites.sprites["bar-collar-near-\(angle)"] {
+                placeBar("bar-collar-near-\(angle)", from: point(-scene.collar - scene.collarLength / 2), to: point(-scene.collar + scene.collarLength / 2))
             }
         }
         VStack(alignment: .leading, spacing: 4) {
-            artwork.frame(height: presentation == .compactSide ? 84 : presentation == .fullBar ? 170 : nil)
+            if presentation == .fullBar {
+                artwork.aspectRatio(CGFloat(scene.width / scene.height), contentMode: .fit)
+                    .frame(maxHeight: 170)
+            } else {
+                artwork.frame(height: presentation == .compactSide ? 84 : nil)
+            }
             if showsReadout && presentation != .inspectionSide && !solution.loadout.perSide.isEmpty {
                 PlateStackReadout(loadout: solution.loadout)
             }

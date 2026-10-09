@@ -6,6 +6,7 @@ import { Programs, Exercises, Sessions, Gyms } from "../db.js";
 import {tfhPlanRow} from "./tfh.js";
 import { openAddProgramSheet, programEditor } from "./settings.js";
 import { planningBase, volumeFallbackSets } from "./session.js";
+import { equipmentContext } from "../equipment-context.js";
 
 const ordered = (items = []) => [...items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
   || String(a.exerciseName || a.name || "").localeCompare(String(b.exerciseName || b.name || "")));
@@ -18,7 +19,9 @@ export async function render(host) {
   const root = ui.h("div");
   const sorted = [...programs].sort((a, b) => Number(b.isActive) - Number(a.isActive));
 
-  if (!sorted.length) root.append(ui.empty("📋", "Start blank, use a template, or import a Cadence program file."));
+  if (!sorted.length) root.append(ui.h("div", { class: "empty equipment-empty" },
+    equipmentContext("Main", { width: 200 }), ui.h("h2", { text: "No program" }),
+    ui.h("p", { text: "Start blank, use a template, or import a Cadence program file." })));
   for (const program of sorted) {
     root.append(ui.h("div", { class: "section-title" },
       ui.h("span", { text: program.name }),

@@ -1,0 +1,109 @@
+{
+  "sourceSHA": "70ce0a05ee8b008560f928c1a0c5cbea857990ed",
+  "run": 36931857429,
+  "artifacts": {
+    "430": 11197337517,
+    "375": 11198095358
+  },
+  "captures": [
+    {
+      "file": "favorites-accessibility-movement-430.png",
+      "device": "iPhone 15 Pro Max",
+      "windowPt": [
+        430,
+        932
+      ],
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "originalExportedFile": "A9BF936D-FD61-469D-ABF3-ED942F055D5C.png",
+      "bytes": 255715,
+      "sha256": "ee8bffb36a3206e10ae2d93c52e5ff01e26183dd5bf6cf7f42ebfbea557b3154"
+    },
+    {
+      "file": "favorites-accessibility-equipment-430.png",
+      "device": "iPhone 15 Pro Max",
+      "windowPt": [
+        430,
+        932
+      ],
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "originalExportedFile": "13C56E9D-B50C-4F84-85FC-FC2FB3AC7B4F.png",
+      "bytes": 255715,
+      "sha256": "ee8bffb36a3206e10ae2d93c52e5ff01e26183dd5bf6cf7f42ebfbea557b3154"
+    },
+    {
+      "file": "favorites-accessibility-search-430.png",
+      "device": "iPhone 15 Pro Max",
+      "windowPt": [
+        430,
+        932
+      ],
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "originalExportedFile": "DF105A0E-B7D0-4414-BD40-2F8967DE0095.png",
+      "bytes": 255715,
+      "sha256": "ee8bffb36a3206e10ae2d93c52e5ff01e26183dd5bf6cf7f42ebfbea557b3154"
+    },
+    {
+      "file": "equipment-program-empty-430.png",
+      "device": "iPhone 15 Pro Max",
+      "windowPt": [
+        430,
+        932
+      ],
+      "testIdentifier": "VisualProofUITests/test20EquipmentContextAndEmptyStates()",
+      "originalExportedFile": "4B98010E-750C-4648-B3F5-635CAB87BE6D.png",
+      "bytes": 267715,
+      "sha256": "754d0de8fb6be4e46dee6afb0da3502100baaf09fcae8c330a59d4a0c99e27d8"
+    },
+    {
+      "file": "favorites-accessibility-movement-375.png",
+      "device": "iPhone SE (3rd generation)",
+      "windowPt": [
+        375,
+        667
+      ],
+      "testIdentifier": "VisualProofUITests/test17FavoritesAtAccessibilityTextSize()",
+      "originalExportedFile": "0562B81C-0717-49FE-8C61-5B649E26B325.png",
+      "bytes": 113332,
+      "sha256": "fbd986df1f19eb27abe8448408f85351e42cd95fc0d9aad02b12d0df3e392f63"
+    }
+  ],
+  "inspection": "Only the five listed original PNGs inspected and retained byte-for-byte on 2026-10-01. Failed runs are evidence, not acceptance.",
+  "failures": {
+    "430": [
+      "test16: Library navigation not reached; link frame y799.3\u2013851.3 was below the y777 calculator-band boundary",
+      "test17: favorite-row-Back Squat identifier absent; actual containing Cell exists",
+      "test20: still on Settings after the same covered Library tap"
+    ],
+    "375": [
+      "test16 passed",
+      "test17: equipment full-frame assertion failed with fixed viewport and coarse scroll",
+      "test20: HStack identifier inherited by image/text/count, making the query ambiguous"
+    ]
+  },
+  "hierarchies": [
+    {
+      "file": "failure-430-library-navigation.txt",
+      "originalExportedFile": "C690C992-D48A-406B-BFC3-68657DF9F00A.txt",
+      "bytes": 33262,
+      "sha256": "482328d757d47e211ca2f669c46bead6a048d862c59f97a7b629e8f1b4d77ab5"
+    },
+    {
+      "file": "failure-430-favorite-row-query.txt",
+      "originalExportedFile": "660D88E0-0E06-4ABB-A4E4-A096A0128BF5.txt",
+      "bytes": 24045,
+      "sha256": "351a22ef6851a008f8a7ac9ba43632b2519ada38fb7a582350ea48ca22162ba1"
+    },
+    {
+      "file": "failure-430-category-navigation.txt",
+      "originalExportedFile": "FED46DB0-227F-4093-944E-44BA5AF528E7.txt",
+      "bytes": 33263,
+      "sha256": "97e5f2904800cae7281fd5512a6c734af3bb4ed1942a3cf9a700ee9ac058f394"
+    },
+    {
+      "file": "failure-375-category-query.txt",
+      "originalExportedFile": "38A6FAFB-DB97-4526-AB8C-F6C5D8215AEB.txt",
+      "bytes": 27612,
+      "sha256": "66e11e7946d47c9978901e92262392b29a9fd6272e4145b13de54ad5eb920485"
+    }
+  ]
+}
