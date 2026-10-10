@@ -839,7 +839,8 @@ final class VisualProofUITests: XCTestCase {
                       "the row pushes the whole-program editor")
         let nextDay = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH 'Next day'")).firstMatch
-        XCTAssertTrue(nextDay.waitForExistence(timeout: 3))
+        // Form rows are lazy: a row below the fold does not exist until it
+        // scrolls on, so scroll until it is hittable rather than waiting.
         for _ in 0..<8 where !nextDay.isHittable { app.swipeUp() }
         XCTAssertTrue(nextDay.isHittable, "the schedule position is on screen in the editor")
         capture("after-21-edit-program-populated-iphone")
@@ -863,7 +864,6 @@ final class VisualProofUITests: XCTestCase {
         blank.tap()
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "a blank program opens its editor")
         let addDay = app.buttons["Add day"]
-        XCTAssertTrue(addDay.waitForExistence(timeout: 3))
         for _ in 0..<8 where !addDay.isHittable { app.swipeUp() }
         XCTAssertTrue(addDay.isHittable, "days can be added to a blank program")
         capture("after-21-edit-program-blank-iphone")
