@@ -279,7 +279,9 @@ enum SessionCompletion {
         entry.prescribedWork
     }
 
-    private static func hasCompletedProgramInstruction(in session: WorkoutSession) -> Bool {
+    /// Shared with RecoveryBridgeService.rotationHasBankedWork so "banked
+    /// work" means exactly what program advancement gates on.
+    static func hasCompletedProgramInstruction(in session: WorkoutSession) -> Bool {
         session.exercises.contains { entry in
             guard entry.programSlotID != nil || entry.programRole != nil else { return false }
             let candidates = entry.orderedSets.filter {

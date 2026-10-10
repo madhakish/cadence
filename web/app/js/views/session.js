@@ -1442,6 +1442,19 @@ export async function completeSession(session) {
   }
 }
 
+// A finished session banked program work only when a scheduled instruction
+// was completed: the gate advanceProgram runs behind. Shared with the program
+// editor's banked-work check. Mirrors SessionCompletion.hasCompletedProgramInstruction.
+export function sessionHasCompletedProgramInstruction(session) {
+  return (session.exercises || []).some((se) => {
+    if (!se.programSlotId && !se.programRole) return false;
+    const candidates = (se.sets || []).filter((set) => !set.isWarmup
+      && C.countsAsProgramInstruction(set.prescriptionBlock));
+    return candidates.slice(0, se.plannedSets ?? candidates.length)
+      .some((set) => set.status === "completed");
+  });
+}
+
 async function completeSessionInner(session) {
   // Work logged inside an ACTIVE-RECOVERY span is real, banked history — and
   // explicitly off-program: it never feeds PR baselines, standalone tracks,
@@ -1536,13 +1549,7 @@ async function completeSessionInner(session) {
     trackByName.set(exerciseName, track);
   }
 
-  const hasCompletedProgramInstruction = session.exercises.some((se) => {
-    if (!se.programSlotId && !se.programRole) return false;
-    const candidates = (se.sets || []).filter((set) => !set.isWarmup
-      && C.countsAsProgramInstruction(set.prescriptionBlock));
-    return candidates.slice(0, se.plannedSets ?? candidates.length)
-      .some((set) => set.status === "completed");
-  });
+  const hasCompletedProgramInstruction = sessionHasCompletedProgramInstruction(session);
   const prog = !offProgram && session.programTag && hasCompletedProgramInstruction
     ? await advanceProgram(session, milestones) : null;
   if (prog) milestoneRecords.push(...prog.noteRecords);

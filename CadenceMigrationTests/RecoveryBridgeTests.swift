@@ -82,53 +82,108 @@ final class RecoveryBridgeTests: XCTestCase {
                      "a valid pointer is left alone")
     }
 
+    /// A tagged session for `program`. `instruction` is the status of its one
+    /// program set; nil banks no program set at all (an empty finished session).
+    @discardableResult
+    private func taggedSession(
+        _ context: ModelContext, program: Program, cycle: Int, week: Int, date: Date,
+        completed: Bool = true, legacyName: Bool = false,
+        instruction: SetStatus? = .completed, block: String = "work", warmup: Bool = false
+    ) -> WorkoutSession {
+        let session = WorkoutSession(date: date)
+        context.insert(session)
+        session.programID = legacyName ? nil : program.id
+        session.programName = program.name
+        session.programCycleNumber = cycle
+        session.programWeek = week
+        session.programDayIndex = 0
+        if completed {
+            session.isCompleted = true
+            session.completedAt = session.date
+        }
+        if let instruction {
+            let entry = SessionExercise(order: 0, exercise: nil)
+            entry.programSlotID = program.orderedDays[0].orderedLifts[0].id
+            entry.programRole = "main"
+            entry.plannedSets = 1
+            context.insert(entry)
+            session.exercises.append(entry)
+            let set = SetEntry(order: 0, weightLb: 135, reps: 5, isWarmup: warmup, status: instruction)
+            set.prescriptionBlockRaw = block
+            context.insert(set)
+            entry.sets.append(set)
+        }
+        return session
+    }
+
     // [INV-UNBANKED-ROTATION-STARTS-FIRST]
-    func testRotationHasBankedWorkCountsOnlyCompletedSessionsOfThisCycleAndRotation() throws {
+    func testRotationHasBankedWorkCountsOnlyCompletedProgramWorkOfThisCycleAndRotation() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let program = makeRecoveryProgram(context)
         program.cycleNumber = 2
         program.currentWeek = 1
         let yesterday = asOf.addingTimeInterval(-86_400)
-        func bank(cycle: Int, week: Int, date: Date, completed: Bool = true, legacyName: Bool = false) {
-            let session = WorkoutSession(date: date)
-            context.insert(session)
-            session.programID = legacyName ? nil : program.id
-            session.programName = program.name
-            session.programCycleNumber = cycle
-            session.programWeek = week
-            session.programDayIndex = 0
-            if completed {
-                session.isCompleted = true
-                session.completedAt = session.date
-            }
-        }
         try context.save()
         XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                        "a program with no sessions has banked nothing")
 
-        bank(cycle: 2, week: 1, date: yesterday, completed: false)
-        bank(cycle: 2, week: 2, date: yesterday)
-        bank(cycle: 1, week: 1, date: yesterday)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, completed: false)
+        taggedSession(context, program: program, cycle: 2, week: 2, date: yesterday)
+        taggedSession(context, program: program, cycle: 1, week: 1, date: yesterday)
         try context.save()
         XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                        "an open session, another rotation, and an earlier cycle do not count")
 
-        // Work inside an active-recovery interval never advanced the rotation
-        // (INV-RECOVERY-WORK-IS-OFF-PROGRAM), so it is not banked work either.
+        // A finished session is banked work only when a program instruction
+        // was completed: the gate SessionCompletion advances behind.
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, instruction: nil)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, instruction: .skipped)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, warmup: true)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, block: "backoff")
+        try context.save()
+        XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                       "empty, all-skipped, warm-up-only and bonus-only sessions never advanced the rotation")
+
+        // Work inside an active-recovery interval never advanced it either
+        // (INV-RECOVERY-WORK-IS-OFF-PROGRAM).
         let recovered = asOf.addingTimeInterval(-10 * 86_400)
         context.insert(TrainingInterval(kindRaw: "activeRecovery",
                                         startDate: recovered.addingTimeInterval(-86_400),
                                         endDate: recovered.addingTimeInterval(86_400)))
-        bank(cycle: 2, week: 1, date: recovered)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: recovered)
         try context.save()
         XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                        "a session inside an active-recovery interval is off-program and does not count")
 
-        bank(cycle: 2, week: 1, date: yesterday, legacyName: true)
+        taggedSession(context, program: program, cycle: 2, week: 1, date: yesterday, legacyName: true)
         try context.save()
         XCTAssertTrue(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
-                      "a completed session of this cycle and rotation counts, through the legacy-name match too")
+                      "a completed program instruction of this cycle and rotation counts, through the legacy-name match too")
+    }
+
+    // [INV-UNBANKED-ROTATION-STARTS-FIRST]
+    func testRotationHasBankedWorkIsNotCrowdedOutByNewerOffProgramSessions() throws {
+        for legacyName in [false, true] {
+            let container = try makeContainer()
+            let context = container.mainContext
+            let program = makeRecoveryProgram(context)
+            program.currentWeek = 1
+            // One real banked completion, then 32 newer completions inside an
+            // active-recovery interval. A bounded newest-first fetch would see
+            // only the recovery rows and call the rotation unbanked.
+            context.insert(TrainingInterval(kindRaw: "activeRecovery",
+                                            startDate: asOf.addingTimeInterval(-35 * 86_400), endDate: asOf))
+            taggedSession(context, program: program, cycle: 1, week: 1,
+                          date: asOf.addingTimeInterval(-40 * 86_400), legacyName: legacyName)
+            for day in 0..<32 {
+                taggedSession(context, program: program, cycle: 1, week: 1,
+                              date: asOf.addingTimeInterval(Double(-34 + day) * 86_400))
+            }
+            try context.save()
+            XCTAssertTrue(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                          "the older real completion is found behind 32 newer off-program rows (legacyName: \(legacyName))")
+        }
     }
 
     func testAnOpenSessionForThisProgramBlocksRepair() throws {

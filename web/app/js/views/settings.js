@@ -15,7 +15,7 @@ import { Sessions, sessionBelongsToProgram } from "../db.js";
 import { equipmentContext } from "../equipment-context.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
-import { manualNextDayOrders, planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
+import { manualNextDayOrders, planningBase, previewProgramPlan, sessionHasCompletedProgramInstruction, volumeFallbackSets } from "./session.js";
 import {tfhEditor,tfhPlanRow} from "./tfh.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
@@ -418,15 +418,17 @@ function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   });
 }
 
-// Whether the current rotation of this cycle has banked a session. Work
-// inside an active-recovery interval never advanced the rotation, so it does
-// not count (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors native
-// RecoveryBridgeService.rotationHasBankedWork.
+// Whether the current rotation of this cycle has banked program work.
+// "Banked" means what program advancement gates on: a completed scheduled
+// instruction, outside an active-recovery interval
+// (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Every completed row is searched. Mirrors
+// native RecoveryBridgeService.rotationHasBankedWork.
 async function rotationHasBankedWork(p) {
   const intervalSnaps = intervalSnapshots(await Intervals.all());
   return (await Sessions.completed()).some((s) => sessionBelongsToProgram(s, p)
     && s.programTag.cycleNumber === p.cycleNumber && s.programTag.week === p.currentWeek
-    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps));
+    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps)
+    && sessionHasCompletedProgramInstruction(s));
 }
 
 // The pointer follows its day only while this rotation has banked work; a
