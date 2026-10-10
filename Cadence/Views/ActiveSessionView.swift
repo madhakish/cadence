@@ -2636,6 +2636,13 @@ private struct SessionSummarySheet: View {
                         }
                     }
                 }
+                if let timing = summary.ruckStepTiming {
+                    RuckStepsSection(timing: timing)
+                } else if summary.ruckStepTimingUnavailable {
+                    Section("Measured steps") {
+                        Text("Steps aren't available because this session has no reliable captured timing. Your ruck is saved in Cadence.")
+                    }
+                }
                 if !summary.coachingNotes.isEmpty {
                     Section("Coach") {
                         ForEach(summary.coachingNotes, id: \.self) { note in

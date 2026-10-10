@@ -48,6 +48,51 @@ final class HealthKitService {
     /// instead of re-typing the literal — a typo in any copy silently forks
     /// a privacy opt-in (the same pattern BackupCheckpointService's keys use).
     static let readEnabledKey = "healthReadEnabled"
+    static let stepsReadEnabledKey = "healthStepsReadEnabled"
+
+    var isStepsReadEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.stepsReadEnabledKey)
+    }
+
+    /// Called only by an explicit step-read opt-in. Prompt completion does not
+    /// establish read permission; Health deliberately keeps denial private.
+    func requestStepsReadAuthorization() async -> Bool {
+        guard isAvailable else { return false }
+        do {
+            try await store.requestAuthorization(toShare: [], read: [HKQuantityType(.stepCount)])
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    enum StepReading {
+        case measured(Double), noData, unavailable, failed, disabled
+    }
+
+    /// Source-merged statistics, never a sum of raw phone/watch samples.
+    /// Whole captured window, including interior pauses. No steps are written.
+    func ruckSteps(timing: HealthWorkoutTiming.Export) async -> StepReading {
+        guard isStepsReadEnabled else { return .disabled }
+        guard isAvailable else { return .unavailable }
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(
+                quantityType: HKQuantityType(.stepCount),
+                quantitySamplePredicate: windowPredicate(start: timing.start, end: timing.end),
+                options: .cumulativeSum
+            ) { _, statistics, error in
+                guard error == nil else {
+                    continuation.resume(returning: .failed)
+                    return
+                }
+                let count = HealthRuckSteps.measuredCount(
+                    statistics?.sumQuantity()?.doubleValue(for: .count())
+                )
+                continuation.resume(returning: count.map(StepReading.measured) ?? .noData)
+            }
+            store.execute(query)
+        }
+    }
 
     var isReadEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Self.readEnabledKey) }
