@@ -92,7 +92,7 @@ enum RecoveryBridgeService {
         ).contains { session in
             !TrainingIntervals.isOffProgramTime(
                 session.date.timeIntervalSince1970 * 1000, intervals: intervals
-            ) && SessionCompletion.hasCompletedProgramInstruction(in: session)
+            ) && session.hasCompletedProgramInstruction
         }
     }
 
