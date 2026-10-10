@@ -834,19 +834,22 @@ final class VisualProofUITests: XCTestCase {
             app.launchArguments.append("--app-theme=\(theme)")
             app.launch()
             XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+            // Five cold relaunches on a slow runner: a launch used its whole
+            // 20s and the Settings tab then missed a 5s wait (#177 follow-up).
+            // Screens get the launch budget, elements half of it.
             app.tabBars.buttons["Settings"].tap()
-            XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts[label].firstMatch.waitForExistence(timeout: 3))
+            XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 20))
+            XCTAssertTrue(app.staticTexts[label].firstMatch.waitForExistence(timeout: 10))
             capture("after-19-app-theme-\(theme)-settings-iphone")
             app.buttons["Plate calculator"].tap()
             let target = app.textFields["plate-target"]
-            XCTAssertTrue(target.waitForExistence(timeout: 5))
+            XCTAssertTrue(target.waitForExistence(timeout: 10))
             target.tap()
             target.typeText("139")
             let done = app.buttons["plate-target-done"]
-            XCTAssertTrue(done.waitForExistence(timeout: 3))
+            XCTAssertTrue(done.waitForExistence(timeout: 10))
             done.tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10))
             capture("after-19-app-theme-\(theme)-calculator-iphone")
         }
     }
