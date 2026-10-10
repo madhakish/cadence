@@ -3125,6 +3125,24 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   ok(program.nextDayIndex === 1,
     "[INV-UNBANKED-ROTATION-STARTS-FIRST] a banked rotation keeps pointing at its day through a move");
   document.getElementById("overlays").replaceChildren();
+
+  // Cover that session with an active-recovery interval: it never advanced
+  // the rotation (INV-RECOVERY-WORK-IS-OFF-PROGRAM), so the rotation counts
+  // as unbanked again and a move of the pointed first day resets to day 1.
+  const today = db.localDayKey(new Date());
+  await db.Intervals.save({ kind: "activeRecovery", startDate: today, endDate: today, enteredAsDays: true, note: name });
+  await db.Programs.save({ ...program, nextDayIndex: 0 });
+  settings.programEditor(await byName()); await tick();
+  move("Fresh Alpha", "↓");
+  await tick(); await tick();
+  program = await byName();
+  ok(program.days.find((day) => day.name === "Fresh Alpha").order === 1, "the move renumbers Alpha second");
+  ok(program.nextDayIndex === 0,
+    "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] an off-program session is not banked work for the pointer");
+  document.getElementById("overlays").replaceChildren();
+  for (const interval of (await db.Intervals.all()).filter((candidate) => candidate.note === name)) {
+    await db.Intervals.del(interval.id);
+  }
 }
 
 // The rep-window steppers never touch the slot's banked target: exploring the

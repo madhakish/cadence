@@ -418,7 +418,30 @@ function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   });
 }
 
+// Whether the current rotation of this cycle has banked a session. Work
+// inside an active-recovery interval never advanced the rotation, so it does
+// not count (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors native
+// RecoveryBridgeService.rotationHasBankedWork.
+async function rotationHasBankedWork(p) {
+  const intervalSnaps = intervalSnapshots(await Intervals.all());
+  return (await Sessions.completed()).some((s) => sessionBelongsToProgram(s, p)
+    && s.programTag.cycleNumber === p.cycleNumber && s.programTag.week === p.currentWeek
+    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps));
+}
+
+// The pointer follows its day only while this rotation has banked work; a
+// rotation with nothing banked starts at the first day, so a program
+// restructured before its first workout never reports day 1 as done. The
+// banked state is read BEFORE the day list is touched, so the edit, the
+// pointer and the save run as one synchronous step: a second edit during
+// the lookup never sees renumbered days with the old pointer. Mirrors
+// ProgramEditorView.repointSchedule.
+function repointSchedule(p, pointed, banked) {
+  p.nextDayIndex = C.editedNextDayOrder(p.days.map((d) => d.order), pointed ? pointed.order : null, banked);
+}
+
 async function removeDay(p, day) {
+  const banked = await rotationHasBankedWork(p);
   // nextDayIndex addresses a day by its ORDER VALUE, not a list position.
   // Remember which day it points at before renumbering — clamping after a
   // renumber silently re-addresses the schedule on sparse-order programs
@@ -426,23 +449,15 @@ async function removeDay(p, day) {
   const pointed = p.days.find((d) => d.order === p.nextDayIndex);
   p.days = p.days.filter((d) => d !== day);
   p.days.sort((a, b) => a.order - b.order).forEach((d, i) => { d.order = i; });
-  await repointSchedule(p, pointed === day ? null : pointed);
+  repointSchedule(p, pointed === day ? null : pointed, banked);
 }
 
-// Whether the current rotation of this cycle has banked a session. Mirrors
-// native RecoveryBridgeService.rotationHasBankedWork.
-async function rotationHasBankedWork(p) {
-  return (await Sessions.completed()).some((s) => sessionBelongsToProgram(s, p)
-    && s.programTag.cycleNumber === p.cycleNumber && s.programTag.week === p.currentWeek);
-}
-
-// The pointer follows its day only while this rotation has banked work; a
-// rotation with nothing banked starts at the first day, so a program
-// restructured before its first workout never reports day 1 as done. Mirrors
-// ProgramEditorView.repointSchedule.
-async function repointSchedule(p, pointed) {
-  p.nextDayIndex = C.editedNextDayOrder(p.days.map((d) => d.order), pointed ? pointed.order : null,
-    await rotationHasBankedWork(p));
+async function moveDay(p, day, delta) {
+  const banked = await rotationHasBankedWork(p);
+  const pointed = p.days.find((d) => d.order === p.nextDayIndex);
+  if (!moveSlot(p.days, day, delta)) return false;
+  repointSchedule(p, pointed, banked);
+  return true;
 }
 
 function orderedSlots(slots = []) {
@@ -716,10 +731,10 @@ export async function programEditor(p) {
                 ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             // The schedule pointer follows ITS day through a renumbering
-            // move only while this rotation has banked work (repointSchedule,
+            // move only while this rotation has banked work (moveDay,
             // mirrors SettingsView.moveDays).
-            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { await repointSchedule(p, pointed); await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { await repointSchedule(p, pointed); await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (await moveDay(p, day, -1)) { await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (await moveDay(p, day, 1)) { await Programs.save(p); draw(); } } }),
             ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { await removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);

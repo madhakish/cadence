@@ -89,8 +89,9 @@ final class RecoveryBridgeTests: XCTestCase {
         let program = makeRecoveryProgram(context)
         program.cycleNumber = 2
         program.currentWeek = 1
-        func session(cycle: Int, week: Int, completed: Bool = true, legacyName: Bool = false) {
-            let session = WorkoutSession(date: asOf.addingTimeInterval(-86_400))
+        let yesterday = asOf.addingTimeInterval(-86_400)
+        func bank(cycle: Int, week: Int, date: Date, completed: Bool = true, legacyName: Bool = false) {
+            let session = WorkoutSession(date: date)
             context.insert(session)
             session.programID = legacyName ? nil : program.id
             session.programName = program.name
@@ -106,14 +107,25 @@ final class RecoveryBridgeTests: XCTestCase {
         XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                        "a program with no sessions has banked nothing")
 
-        session(cycle: 2, week: 1, completed: false)
-        session(cycle: 2, week: 2)
-        session(cycle: 1, week: 1)
+        bank(cycle: 2, week: 1, date: yesterday, completed: false)
+        bank(cycle: 2, week: 2, date: yesterday)
+        bank(cycle: 1, week: 1, date: yesterday)
         try context.save()
         XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                        "an open session, another rotation, and an earlier cycle do not count")
 
-        session(cycle: 2, week: 1, legacyName: true)
+        // Work inside an active-recovery interval never advanced the rotation
+        // (INV-RECOVERY-WORK-IS-OFF-PROGRAM), so it is not banked work either.
+        let recovered = asOf.addingTimeInterval(-10 * 86_400)
+        context.insert(TrainingInterval(kindRaw: "activeRecovery",
+                                        startDate: recovered.addingTimeInterval(-86_400),
+                                        endDate: recovered.addingTimeInterval(86_400)))
+        bank(cycle: 2, week: 1, date: recovered)
+        try context.save()
+        XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                       "a session inside an active-recovery interval is off-program and does not count")
+
+        bank(cycle: 2, week: 1, date: yesterday, legacyName: true)
         try context.save()
         XCTAssertTrue(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
                       "a completed session of this cycle and rotation counts, through the legacy-name match too")

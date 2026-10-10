@@ -78,12 +78,21 @@ enum RecoveryBridgeService {
 
     /// Whether the current rotation of this cycle has banked a session. A
     /// day-list edit keeps the schedule pointer on its day only while it has
-    /// (`ProgramProgression.editedNextDayOrder`). Mirrors web settings.js
+    /// (`ProgramProgression.editedNextDayOrder`). Work inside an active-
+    /// recovery interval never advanced the rotation, so it does not count
+    /// (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Mirrors web settings.js
     /// `rotationHasBankedWork`.
     static func rotationHasBankedWork(for program: Program, context: ModelContext) throws -> Bool {
-        try !recentCompletedSessions(
-            for: program, phase: program.currentWeek, limit: 1, context: context
-        ).isEmpty
+        let intervals = try context.fetch(FetchDescriptor<TrainingInterval>()).map(\.snapshot)
+        // A rotation holds a handful of sessions; the bound only keeps the
+        // shared fetch from reading a whole history.
+        return try recentCompletedSessions(
+            for: program, phase: program.currentWeek, limit: 32, context: context
+        ).contains { session in
+            !TrainingIntervals.isOffProgramTime(
+                session.date.timeIntervalSince1970 * 1000, intervals: intervals
+            )
+        }
     }
 
     private static func lastHardPhaseCompletion(
