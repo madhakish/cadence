@@ -196,6 +196,13 @@ assert_job_contains test "run: node .github/scripts/verify-pages-recovery.mjs"
 assert_job_contains deploy "runs-on: macos-latest"
 workflow=".github/workflows/visual-proof.yml"
 assert_job_contains capture "runs-on: macos-latest"
+# Every capture boots through the script that verifies the device is usable.
+assert_job_contains capture 'bash .github/visual-proof/boot-simulator.sh "$device_id"'
+assert_job_contains edge-widths 'bash .github/visual-proof/boot-simulator.sh "$device_id"'
+assert_job_contains baseline 'bash proof-source/.github/visual-proof/boot-simulator.sh "$device_id"'
+assert_job_not_contains capture "simctl bootstatus"
+assert_job_not_contains edge-widths "simctl bootstatus"
+assert_job_not_contains baseline "simctl bootstatus"
 
 # A merge made with the workflow token starts no push run, so auto-merge must
 # never be enabled with it (#299).
