@@ -11,7 +11,7 @@ import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { historySetPresentationForTest } from "./history.js";
 import { PLATE_THEME_IDS, PLATE_THEME_LABELS, plateThemeSet, plateThemePrimaryUnit, plateThemeInventory } from "../plate-theme.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
-import { Sessions } from "../db.js";
+import { Sessions, sessionBelongsToProgram } from "../db.js";
 import { equipmentContext } from "../equipment-context.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
@@ -418,7 +418,7 @@ function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   });
 }
 
-function removeDay(p, day) {
+async function removeDay(p, day) {
   // nextDayIndex addresses a day by its ORDER VALUE, not a list position.
   // Remember which day it points at before renumbering — clamping after a
   // renumber silently re-addresses the schedule on sparse-order programs
@@ -426,7 +426,23 @@ function removeDay(p, day) {
   const pointed = p.days.find((d) => d.order === p.nextDayIndex);
   p.days = p.days.filter((d) => d !== day);
   p.days.sort((a, b) => a.order - b.order).forEach((d, i) => { d.order = i; });
-  p.nextDayIndex = pointed && pointed !== day ? pointed.order : 0;
+  await repointSchedule(p, pointed === day ? null : pointed);
+}
+
+// Whether the current rotation of this cycle has banked a session. Mirrors
+// native RecoveryBridgeService.rotationHasBankedWork.
+async function rotationHasBankedWork(p) {
+  return (await Sessions.completed()).some((s) => sessionBelongsToProgram(s, p)
+    && s.programTag.cycleNumber === p.cycleNumber && s.programTag.week === p.currentWeek);
+}
+
+// The pointer follows its day only while this rotation has banked work; a
+// rotation with nothing banked starts at the first day, so a program
+// restructured before its first workout never reports day 1 as done. Mirrors
+// ProgramEditorView.repointSchedule.
+async function repointSchedule(p, pointed) {
+  p.nextDayIndex = C.editedNextDayOrder(p.days.map((d) => d.order), pointed ? pointed.order : null,
+    await rotationHasBankedWork(p));
 }
 
 function orderedSlots(slots = []) {
@@ -700,10 +716,11 @@ export async function programEditor(p) {
                 ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             // The schedule pointer follows ITS day through a renumbering
-            // move, never a clamped position (mirrors SettingsView.moveDays).
-            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
+            // move only while this rotation has banked work (repointSchedule,
+            // mirrors SettingsView.moveDays).
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { await repointSchedule(p, pointed); await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { await repointSchedule(p, pointed); await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { await removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {

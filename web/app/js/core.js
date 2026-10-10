@@ -1979,6 +1979,20 @@ export function scheduleAdvance(dayOrders, bankedDayOrder) {
   return { nextDayOrder: sorted[(position + 1) % sorted.length], isLastDay: position === sorted.length - 1 };
 }
 
+// Where the schedule points after the day list is edited (a day moved or
+// deleted). While the rotation has banked work the pointer follows ITS day
+// through a renumbering, so a mid-rotation reorder never re-addresses the next
+// workout. A rotation with nothing banked has no position to preserve: it
+// starts at its first day, because a pointer carried past the first day
+// reports a day as done that was never trained. A pointer at no surviving day
+// also resumes the first day.
+// Mirrored 1:1 in CadenceCore ProgramProgression.editedNextDayOrder.
+export function editedNextDayOrder(dayOrders, pointedDayOrder, rotationHasBankedWork) {
+  const first = dayOrders.length ? Math.min(...dayOrders) : 0;
+  if (!rotationHasBankedWork || pointedDayOrder == null || !dayOrders.includes(pointedDayOrder)) return first;
+  return pointedDayOrder;
+}
+
 // Presentation reads the schedule's orders, including TFH's authored recovery.
 // Mirrored in CadenceCore ProgramProgression.
 export function visibleDayOrders(dayOrders, recoveryDayOrders, rotation) {

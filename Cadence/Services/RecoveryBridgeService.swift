@@ -76,6 +76,16 @@ enum RecoveryBridgeService {
         )
     }
 
+    /// Whether the current rotation of this cycle has banked a session. A
+    /// day-list edit keeps the schedule pointer on its day only while it has
+    /// (`ProgramProgression.editedNextDayOrder`). Mirrors web settings.js
+    /// `rotationHasBankedWork`.
+    static func rotationHasBankedWork(for program: Program, context: ModelContext) throws -> Bool {
+        try !recentCompletedSessions(
+            for: program, phase: program.currentWeek, limit: 1, context: context
+        ).isEmpty
+    }
+
     private static func lastHardPhaseCompletion(
         for program: Program, context: ModelContext
     ) throws -> Date? {

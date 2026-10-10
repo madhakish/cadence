@@ -3079,6 +3079,54 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// Reordering the days of a program that has banked nothing this rotation
+// starts the schedule at the new first day; once a session is banked, the
+// pointer follows ITS day through the move (mirrors SettingsView.moveDays).
+{
+  const name = "Fixture Fresh Reorder";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [
+      { name: "Fresh Alpha", order: 0, accessories: [], lifts: [{ exerciseName: "Back Squat", role: "main",
+        prescription: "wave", baseWeightLb: 185, estimatedMaxLb: 250, stallCount: 0, lastIncrementLb: 0 }] },
+      { name: "Fresh Bravo", order: 1, accessories: [], lifts: [{ exerciseName: "Deadlift", role: "main",
+        prescription: "wave", baseWeightLb: 225, estimatedMaxLb: 300, stallCount: 0, lastIncrementLb: 0 }] },
+    ],
+  });
+  const byName = async () => (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const move = (dayName, arrow) => {
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    const row = [...overlay.querySelectorAll(".row")]
+      .find((candidate) => candidate.querySelector(".title")?.textContent === dayName);
+    [...row.querySelectorAll("button")].find((button) => button.textContent === arrow).click();
+  };
+  let program = await byName();
+  settings.programEditor(program); await tick();
+  move("Fresh Bravo", "↑");
+  await tick(); await tick();
+  program = await byName();
+  ok(program.days.find((day) => day.name === "Fresh Bravo").order === 0, "the move renumbers Bravo first");
+  ok(program.nextDayIndex === 0,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] an unbanked rotation starts at its new first day");
+  document.getElementById("overlays").replaceChildren();
+
+  // Bank a session for this cycle and rotation, then move Bravo (still the
+  // pointed day) back behind Alpha: the pointer goes with it.
+  await db.Sessions.save({ uuid: crypto.randomUUID(), date: new Date().toISOString(), notes: "",
+    isCompleted: true, completedAt: new Date().toISOString(), exercises: [],
+    programTag: { programId: program.uuid, programName: name, cycleNumber: 1, week: 1, dayIndex: 0,
+      planNames: ["Deadlift"] } });
+  settings.programEditor(await byName()); await tick();
+  move("Fresh Bravo", "↓");
+  await tick(); await tick();
+  program = await byName();
+  ok(program.days.find((day) => day.name === "Fresh Bravo").order === 1, "the move renumbers Bravo second again");
+  ok(program.nextDayIndex === 1,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] a banked rotation keeps pointing at its day through a move");
+  document.getElementById("overlays").replaceChildren();
+}
+
 // The rep-window steppers never touch the slot's banked target: exploring the
 // endpoints up and back down must not inject reps the lifter never earned.
 // And a carry updates only the SIBLING stepper node — never a full editor

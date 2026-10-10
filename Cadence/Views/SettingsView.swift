@@ -1287,7 +1287,7 @@ struct ProgramEditorView: View {
         let removed = Set(offsets.map { ordered[$0].id })
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
-        program.nextDayIndex = pointed.flatMap { removed.contains($0.id) ? nil : $0.order } ?? 0
+        repointSchedule(at: pointed.flatMap { removed.contains($0.id) ? nil : $0 })
         PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 
@@ -1298,8 +1298,20 @@ struct ProgramEditorView: View {
         var ordered = program.orderedDays
         ordered.move(fromOffsets: offsets, toOffset: destination)
         for (index, day) in ordered.enumerated() { day.order = index }
-        program.nextDayIndex = pointed?.order ?? min(program.nextDayIndex, max(ordered.count - 1, 0))
+        repointSchedule(at: pointed)
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program days")
+    }
+
+    /// The pointer follows its day only while this rotation has banked work;
+    /// a rotation with nothing banked starts at the first day, so a program
+    /// restructured before its first workout never reports day 1 as done. A
+    /// failed fetch keeps the pointer-follow rule rather than guessing.
+    private func repointSchedule(at pointed: ProgramDay?) {
+        let banked = (try? RecoveryBridgeService.rotationHasBankedWork(for: program, context: context)) ?? true
+        program.nextDayIndex = ProgramProgression.editedNextDayOrder(
+            dayOrders: program.orderedDays.map(\.order),
+            pointedDayOrder: pointed?.order, rotationHasBankedWork: banked
+        )
     }
 
     private func cloneProgram() {

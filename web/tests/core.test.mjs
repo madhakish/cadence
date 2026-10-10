@@ -456,6 +456,18 @@ eq(sa([0, 0, 1], 0), "1", "[INV-SCHEDULE-WALKS-ORDERS] duplicate orders never ad
 eq(sa([0, 1, 1], 1), "0!", "a duplicated last order is still the last day");
 eq(sa([0, 0], 0), "0!", "an all-duplicate program still closes its rotation");
 
+// Editing the day list keeps the pointer on its day only while the rotation
+// has banked work; a program restructured before its first workout starts at
+// its first day instead of reporting day 1 as done.
+eq(C.editedNextDayOrder([0, 1], 1, false), 0,
+  "[INV-UNBANKED-ROTATION-STARTS-FIRST] an unbanked rotation starts at its first day");
+eq(C.editedNextDayOrder([2, 5], 5, false), 2, "the first day is the lowest order, whatever its value");
+eq(C.editedNextDayOrder([], null, false), 0, "an empty program does not crash");
+eq(C.editedNextDayOrder([0, 1, 2], 2, true), 2,
+  "[INV-UNBANKED-ROTATION-STARTS-FIRST] a banked rotation keeps pointing at its day");
+eq(C.editedNextDayOrder([0, 1], null, true), 0, "a deleted pointed day resumes the first day");
+eq(C.editedNextDayOrder([0, 1], 7, true), 0, "a dangling pointer resumes the first day");
+
 // [INV-RECOVERY-IS-A-BRIDGE] Phase 4 selects structural representatives,
 // never day-name substrings, and preserves authored schedule order.
 eq(C.recoveryDayOrders([

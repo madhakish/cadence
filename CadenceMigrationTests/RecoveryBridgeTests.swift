@@ -82,6 +82,43 @@ final class RecoveryBridgeTests: XCTestCase {
                      "a valid pointer is left alone")
     }
 
+    // [INV-UNBANKED-ROTATION-STARTS-FIRST]
+    func testRotationHasBankedWorkCountsOnlyCompletedSessionsOfThisCycleAndRotation() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let program = makeRecoveryProgram(context)
+        program.cycleNumber = 2
+        program.currentWeek = 1
+        func session(cycle: Int, week: Int, completed: Bool = true, legacyName: Bool = false) {
+            let session = WorkoutSession(date: asOf.addingTimeInterval(-86_400))
+            context.insert(session)
+            session.programID = legacyName ? nil : program.id
+            session.programName = program.name
+            session.programCycleNumber = cycle
+            session.programWeek = week
+            session.programDayIndex = 0
+            if completed {
+                session.isCompleted = true
+                session.completedAt = session.date
+            }
+        }
+        try context.save()
+        XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                       "a program with no sessions has banked nothing")
+
+        session(cycle: 2, week: 1, completed: false)
+        session(cycle: 2, week: 2)
+        session(cycle: 1, week: 1)
+        try context.save()
+        XCTAssertFalse(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                       "an open session, another rotation, and an earlier cycle do not count")
+
+        session(cycle: 2, week: 1, legacyName: true)
+        try context.save()
+        XCTAssertTrue(try RecoveryBridgeService.rotationHasBankedWork(for: program, context: context),
+                      "a completed session of this cycle and rotation counts, through the legacy-name match too")
+    }
+
     func testAnOpenSessionForThisProgramBlocksRepair() throws {
         let container = try makeContainer()
         let context = container.mainContext
