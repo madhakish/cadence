@@ -52,6 +52,7 @@ struct ProgramOverviewView: View {
                             Label("Edit program", systemImage: "slider.horizontal.3")
                         }
                         .accessibilityHint("Edits \(program.name): days, position in the cycle, and options")
+                        .accessibilityIdentifier("edit-program")
                     } header: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {

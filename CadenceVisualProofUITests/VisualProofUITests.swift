@@ -824,6 +824,49 @@ final class VisualProofUITests: XCTestCase {
         capture("equipment-exercise-empty-iphone")
     }
 
+    /// The Program tab's "Edit program" row is the only way into the
+    /// whole-program editor on iOS (#307). Prove the tap opens it for the
+    /// seeded program and for a blank one, and that back and reopen work.
+    func test21EditProgramRowOpensEditor() {
+        app.tabBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        let rows = app.descendants(matching: .any).matching(identifier: "edit-program")
+        let populated = rows.firstMatch
+        for _ in 0..<10 where !populated.isHittable { app.swipeUp() }
+        XCTAssertTrue(populated.isHittable, "each program section ends with its editor row")
+        populated.tap()
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].waitForExistence(timeout: 5),
+                      "the row pushes the whole-program editor")
+        let nextDay = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Next day'")).firstMatch
+        for _ in 0..<6 where !nextDay.exists { app.swipeUp() }
+        XCTAssertTrue(nextDay.exists, "the schedule position is reachable from the editor")
+        capture("after-21-edit-program-populated-iphone")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        for _ in 0..<10 where !populated.isHittable { app.swipeUp() }
+        populated.tap()
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].waitForExistence(timeout: 5), "reopening works")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+
+        // A blank program has no day cards, so this row is its only editor.
+        app.navigationBars["Program"].buttons["Add program"].tap()
+        let blankButton = app.buttons["Blank program"]
+        XCTAssertTrue(blankButton.waitForExistence(timeout: 5))
+        blankButton.tap()
+        let blank = rows.element(boundBy: 1)
+        XCTAssertTrue(blank.waitForExistence(timeout: 5), "the new program gets its own editor row")
+        for _ in 0..<10 where !blank.isHittable { app.swipeUp() }
+        XCTAssertTrue(blank.isHittable)
+        blank.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "a blank program opens its editor")
+        let addDay = app.buttons["Add day"]
+        for _ in 0..<6 where !addDay.exists { app.swipeUp() }
+        XCTAssertTrue(addDay.exists, "days can be added to a blank program")
+        capture("after-21-edit-program-blank-iphone")
+    }
+
     /// App palettes are distinct from the ten equipment themes. Retain both
     /// the primary task index and load-entry canvas under every saved palette.
     func test19AppThemeCanvases() {
