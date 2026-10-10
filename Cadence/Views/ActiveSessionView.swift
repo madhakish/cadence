@@ -72,8 +72,6 @@ struct ActiveSessionView: View {
     }
     /// The stopwatch origin lives in WorkoutClock (root-scoped), so it survives
     /// leaving this screen — and, via the Live Activity, app relaunch.
-    /// The real start, or nil when this session was opened but never started.
-    private var sessionStart: Date? { isTimingThisSession ? workoutClock.startDate : nil }
     /// Whether the root stopwatch is timing THIS session. Another workout's
     /// clock must never be reported — or stopped — from here.
     private var isTimingThisSession: Bool { workoutClock.isTracking(sessionID: session.id) }
@@ -191,6 +189,7 @@ struct ActiveSessionView: View {
         // and republish the face.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            workoutClock.synchronize()
             if let entry = currentEntry, !entry.orderedSets.contains(where: { $0.status == .planned }) {
                 // The same rule the logger and the Lock Screen commands use:
                 // advance through authored order from the finished lift.
@@ -547,7 +546,8 @@ struct ActiveSessionView: View {
         guard !banking else { return }
         banking = true
         do {
-            summary = try SessionCompletion.finish(session, context: context, startedAt: sessionStart)
+            summary = try SessionCompletion.finish(session, context: context,
+                                                   healthTiming: workoutClock.healthTiming(for: session.id))
             // Same scoping as discard: banking a leftover session opened over
             // another running workout must not stop that workout's clock,
             // erase its durable record, or kill its rest countdown.
@@ -2607,6 +2607,7 @@ private struct ExercisePickerSheet: View {
 
 private struct SessionSummarySheet: View {
     @Query private var settingsList: [AppSettings]
+    @State private var healthResult: HealthWorkoutSaveResult?
     let summary: SessionSummary
     let onDone: () -> Void
 
@@ -2625,6 +2626,16 @@ private struct SessionSummarySheet: View {
                         }
                     }
                 }
+                if summary.healthExport != nil || summary.healthExportNotice != nil {
+                    Section("Apple Health") {
+                        if let message = healthResult?.message ?? summary.healthExportNotice {
+                            Text(message)
+                        } else {
+                            Label("Saving workout to Apple Health…", systemImage: "heart")
+                                .accessibilityLabel("Session saved in Cadence. Saving workout to Apple Health.")
+                        }
+                    }
+                }
                 if !summary.coachingNotes.isEmpty {
                     Section("Coach") {
                         ForEach(summary.coachingNotes, id: \.self) { note in
@@ -2640,6 +2651,9 @@ private struct SessionSummarySheet: View {
                         }
                     }
                 }
+            }
+            .task {
+                if let task = summary.healthExport { healthResult = await task.value }
             }
             .navigationTitle(Copy.sessionDone)
             .navigationBarTitleDisplayMode(.inline)

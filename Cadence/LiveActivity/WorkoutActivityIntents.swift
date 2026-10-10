@@ -58,6 +58,10 @@ struct ResumeWorkoutIntent: LiveActivityIntent {
 struct EndWorkoutIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "End workout"
     func perform() async throws -> some IntentResult {
+        if let snapshot = WorkoutActivityController.snapshot, !snapshot.isAdHoc,
+           let sessionID = snapshot.state.sessionID {
+            WorkoutClockPersistence.clear(for: sessionID)
+        }
         await WorkoutActivityController.endSession()
         return .result()
     }

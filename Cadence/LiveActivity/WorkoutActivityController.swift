@@ -51,14 +51,20 @@ enum WorkoutActivityController {
             s.currentLift = currentLift
             s.defaultRestSeconds = defaultRestSeconds
             s.currentSet = currentSet
+            if let record = WorkoutClockPersistence.load(), record.sessionID == sessionID {
+                s.stopwatchStart = record.start
+                s.stopwatchPausedAt = record.pausedAt
+            }
             await a.update(content(for: s))
             return
         }
         let carriedRest = current.flatMap { activeRest($0.content.state.rest) }
         await endAllActivities()
+        let record = WorkoutClockPersistence.load().flatMap { $0.sessionID == sessionID ? $0 : nil }
         let state = WorkoutActivityAttributes.ContentState(
             sessionID: sessionID, currentLift: currentLift,
-            defaultRestSeconds: defaultRestSeconds, rest: carriedRest, currentSet: currentSet
+            defaultRestSeconds: defaultRestSeconds, rest: carriedRest,
+            stopwatchStart: record?.start, stopwatchPausedAt: record?.pausedAt, currentSet: currentSet
         )
         _ = try? Activity.request(
             attributes: WorkoutActivityAttributes(startDate: startDate, isAdHoc: false),
@@ -76,6 +82,10 @@ enum WorkoutActivityController {
         s.currentLift = currentLift
         s.defaultRestSeconds = defaultRestSeconds
         s.currentSet = currentSet
+        if let record = WorkoutClockPersistence.load(), record.sessionID == s.sessionID {
+            s.stopwatchStart = record.start
+            s.stopwatchPausedAt = record.pausedAt
+        }
         await a.update(content(for: s))
     }
 
@@ -137,8 +147,18 @@ enum WorkoutActivityController {
     static func updateStopwatch(origin: Date, pausedAt: Date?) async {
         guard let a = current else { return }
         var s = a.content.state
-        s.stopwatchStart = origin
-        s.stopwatchPausedAt = pausedAt
+        // A queued foreground update may be older than a Lock Screen action.
+        // Read the shared durable authority at execution time, not tap time.
+        let record = WorkoutClockPersistence.load().flatMap {
+            $0.sessionID == s.sessionID ? $0 : nil
+        }
+        if let record {
+            s.stopwatchStart = record.start
+            s.stopwatchPausedAt = record.pausedAt
+        } else {
+            s.stopwatchStart = origin
+            s.stopwatchPausedAt = pausedAt
+        }
         await a.update(content(for: s))
     }
 
@@ -164,19 +184,28 @@ enum WorkoutActivityController {
         await applyRest(nil, exerciseName: a.content.state.currentLift)
     }
 
-    /// Pause the workout clock from the Lock Screen / Dynamic Island.
+    /// Lock Screen transitions use the same record as foreground controls,
+    /// including when the app was relaunched to service this intent.
     static func pauseWorkout() async {
-        guard let a = current, a.content.state.stopwatchPausedAt == nil else { return }
-        let origin = a.content.state.stopwatchStart ?? a.attributes.startDate
-        await updateStopwatch(origin: origin, pausedAt: Date())
+        await transitionWorkout { $0.pause(at: Date()) }
     }
 
-    /// Resume it: the origin shifts forward by the paused span, so elapsed
-    /// picks up exactly where it froze.
     static func resumeWorkout() async {
-        guard let a = current, let paused = a.content.state.stopwatchPausedAt else { return }
-        let origin = a.content.state.stopwatchStart ?? a.attributes.startDate
-        await updateStopwatch(origin: origin.addingTimeInterval(Date().timeIntervalSince(paused)), pausedAt: nil)
+        await transitionWorkout { $0.resume(at: Date()) }
+    }
+
+    private static func transitionWorkout(_ change: (inout WorkoutClockRecord) -> Void) async {
+        guard let a = current, !a.attributes.isAdHoc, let sessionID = a.content.state.sessionID else { return }
+        // An old activity can predate the additive export history. Preserve
+        // its stopwatch, but never infer a real start from its shifted origin.
+        if WorkoutClockPersistence.load() == nil {
+            WorkoutClockPersistence.save(WorkoutClockRecord(
+                sessionID: sessionID,
+                start: a.content.state.stopwatchStart ?? a.attributes.startDate,
+                pausedAt: a.content.state.stopwatchPausedAt))
+        }
+        guard let record = WorkoutClockPersistence.update(for: sessionID, change) else { return }
+        await updateStopwatch(origin: record.start, pausedAt: record.pausedAt)
     }
 
     /// One-button rest control (Action Button / Control Center): a live rest →

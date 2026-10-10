@@ -2,6 +2,22 @@ import Foundation
 import HealthKit
 import CadenceCore
 
+enum HealthWorkoutSaveResult {
+    case saved
+    case unavailable
+    case notAuthorized
+    case failed
+
+    var message: String {
+        switch self {
+        case .saved: return "Workout saved to Apple Health."
+        case .unavailable: return "Your session is saved in Cadence. Apple Health is unavailable on this device."
+        case .notAuthorized: return "Your session is saved in Cadence. Allow Cadence to write Workouts in Health to export future sessions."
+        case .failed: return "Your session is saved in Cadence, but its Apple Health export could not be confirmed. Check Health before adding it manually."
+        }
+    }
+}
+
 /// Optional and permission-gated, in two independent halves that are granted
 /// separately and can be used separately:
 ///
@@ -311,15 +327,34 @@ final class HealthKitService {
     /// is why Health showed nothing but a duration. Sets, reps and load have no
     /// HealthKit representation at all and stay in the log.
     func saveWorkout(
-        start: Date, end: Date, modality: WorkoutModality,
+        timing: HealthWorkoutTiming.Export, modality: WorkoutModality,
         milesByBasis: [DistanceBasis: Double] = [:]
-    ) async {
-        guard isAvailable else { return }
+    ) async -> HealthWorkoutSaveResult {
+        guard isAvailable else { return .unavailable }
+        guard store.authorizationStatus(for: HKObjectType.workoutType()) == .sharingAuthorized else {
+            return .notAuthorized
+        }
+        let start = timing.start
+        let end = timing.end
         let config = HKWorkoutConfiguration()
         config.activityType = activityType(for: modality)
         let builder = HKWorkoutBuilder(healthStore: store, configuration: config, device: .local())
         do {
             try await builder.beginCollection(at: start)
+            let events = timing.pauses.flatMap { pause -> [HKWorkoutEvent] in
+                guard let resumed = pause.end else { return [] }
+                return [
+                    HKWorkoutEvent(type: .pause, dateInterval: DateInterval(start: pause.start, duration: 0), metadata: nil),
+                    HKWorkoutEvent(type: .resume, dateInterval: DateInterval(start: resumed, duration: 0), metadata: nil),
+                ]
+            }
+            if !events.isEmpty { try await builder.addWorkoutEvents(events) }
+            // Apple's builder excludes pause/resume intervals from elapsed
+            // time. Verify before saving rather than publishing wrong timing.
+            guard abs(builder.elapsedTime(at: end) - timing.activeDuration) < 0.01 else {
+                builder.discardWorkout()
+                return .failed
+            }
             let samples = milesByBasis.compactMap { basis, miles -> HKSample? in
                 guard miles > 0 else { return nil }
                 return HKQuantitySample(
@@ -330,10 +365,23 @@ final class HealthKitService {
             }
             if !samples.isEmpty { try await builder.addSamples(samples) }
             try await builder.endCollection(at: end)
-            try await builder.finishWorkout()
+            guard try await builder.finishWorkout() != nil else { return .failed }
+            return .saved
         } catch {
-            // Non-fatal: HealthKit is a mirror, never the source of truth.
+            builder.discardWorkout()
+            // The local session is already committed. No automatic retry:
+            // an ambiguous finish must not produce duplicate Health workouts.
+            return .failed
         }
+    }
+
+    /// Quick-logged activities already supply an explicit interval, rather
+    /// than a session stopwatch. Preserve that existing caller's contract.
+    @discardableResult
+    func saveWorkout(start: Date, end: Date, modality: WorkoutModality,
+                     milesByBasis: [DistanceBasis: Double] = [:]) async -> HealthWorkoutSaveResult {
+        guard let timing = HealthWorkoutTiming(start: start).export(endingAt: end) else { return .failed }
+        return await saveWorkout(timing: timing, modality: modality, milesByBasis: milesByBasis)
     }
 
     private func activityType(for modality: WorkoutModality) -> HKWorkoutActivityType {

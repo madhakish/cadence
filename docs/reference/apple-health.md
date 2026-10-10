@@ -20,6 +20,37 @@ are filed as foot distance and a bike cooldown's as cycling distance, even in
 the same workout. Rowing and swimming carry duration only; Cadence does not log
 the units Health wants for those.
 
+### Timing and save status
+
+Banking a timed session preserves its actual start, including across pauses,
+resumes and app relaunches. Paused intervals do not count toward Health workout
+duration. Banking while paused ends the Health interval at the pause; resetting
+the on-screen stopwatch resets only that display, not the workout's history.
+Lock Screen controls and the app use the same device-local timing record.
+
+The bank summary reports whether the Health save succeeded, is still running,
+needs write permission, or could not be confirmed. Your Cadence session is
+saved first and remains safe if Health fails. A session without reliable timing
+for its logged day is kept in Cadence and the summary explains why it was not
+exported. This includes restored stopwatch records from versions that stored
+only an adjusted display origin: their elapsed display survives the upgrade,
+but the original workout start cannot be recovered honestly.
+
+The version-2 stopwatch record keeps its three frozen version-1 fields and
+adds optional export history. Version-1 records upgrade without inventing that
+history; older app versions can still read new records. No SwiftData store or backup format changes. The timing history stays
+on this device and is not restored as a Health permission or health record.
+
+This is a one-shot export. There is no durable retry queue, historical sync,
+or correction reconciliation yet. If the app exits while saving, or a save
+cannot be confirmed, check Health before adding the workout manually. Quick
+activity logging continues to use the explicit start and duration you enter;
+the new save-status display applies to the timed-session bank summary.
+
+The implementation uses Apple's [pause/resume workout events](https://developer.apple.com/documentation/healthkit/hkworkoutevent)
+and checks the builder's [elapsed time](https://developer.apple.com/documentation/healthkit/hkworkoutbuilder/elapsedtime(at:)),
+which excludes paused intervals, before finishing the workout.
+
 ### What Health cannot hold
 
 Health has no schema for sets, reps, or load. `traditionalStrengthTraining`

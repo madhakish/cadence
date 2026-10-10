@@ -249,6 +249,20 @@ exercises only.
 
 ## Health
 
+### INV-HEALTH-WORKOUT-TIMING
+*platforms: native*
+
+A session exported to Apple Health uses its measured wall-clock start and
+pause/resume history, never the stopwatch's shifted or reset display origin.
+Banking while paused ends the export at that pause. Foreground and Lock Screen
+controls update one durable timing record. Resetting the display does not
+rewrite the workout's real history. Old records restore the stopwatch but do
+not invent export timing; an unavailable export is stated in the bank summary.
+
+The workout builder receives the measured pause/resume events and its elapsed
+time is checked before saving. Saving the local session and saving its Health
+mirror are distinct outcomes. An uncertain Health save is not retried blindly.
+
 ### INV-HEALTH-IS-A-SECOND-OPINION
 *platforms: core*
 
@@ -524,8 +538,8 @@ the plan and logged sets intact.
 *platforms: core, web*
 
 A started workout's stopwatch survives an app relaunch. The clock origin is
-mirrored into durable storage (localStorage on web, UserDefaults behind the
-Live Activity snapshot on native) keyed by session, restored when the same
+mirrored into durable storage (localStorage on web, UserDefaults shared with
+Live Activity controls on native) keyed by session, restored when the same
 session reopens, ignored by any other session, and cleared on reset, discard,
 banking, backup import, and wipe. Whether a record may be adopted is one
 shared core rule (`StopwatchRecovery` / `stopwatchRecordUsable`): a RUNNING

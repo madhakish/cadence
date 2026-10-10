@@ -14,6 +14,8 @@ struct SessionSummary {
     let lines: [LiftLine]
     let milestones: [PREvent]
     let coachingNotes: [String]
+    var healthExport: Task<HealthWorkoutSaveResult, Never>? = nil
+    var healthExportNotice: String? = nil
 }
 
 enum SessionCompletion {
@@ -38,12 +40,13 @@ enum SessionCompletion {
     /// SaveFailure, and runs NO side effects, so a retry can't duplicate
     /// milestones, progression, HealthKit workouts, or notifications.
     ///
-    /// `startedAt` is the logger's ephemeral session-clock origin (view-open
-    /// time). The Health workout is written only when that origin falls on the
-    /// session's own day — a session resumed and banked days later is a
-    /// backfill, and a made-up duration is worse than no sample.
+    /// Export uses measured wall-clock timing, never the resettable display
+    /// origin. Freeze its end before saving; backfills and unknown legacy
+    /// timing are reported in the summary rather than exported with guesses.
     @discardableResult
-    static func finish(_ session: WorkoutSession, context: ModelContext, startedAt: Date? = nil) throws -> SessionSummary {
+    static func finish(_ session: WorkoutSession, context: ModelContext,
+                       healthTiming: HealthWorkoutTiming? = nil) throws -> SessionSummary {
+        let exportTiming = healthTiming?.export(endingAt: Date())
         // Idempotence backstop (mirrors web completeSession): finishing twice
         // would duplicate milestones and double-advance tracks/programs.
         guard !session.isCompleted else { return SessionSummary(lines: [], milestones: [], coachingNotes: []) }
@@ -184,14 +187,11 @@ enum SessionCompletion {
             NotificationService.scheduleKneeCheckIn(afterSessionOn: session.date)
         }
 
-        // Mirror to Health only when the session was finished live on its own
-        // day — a session resumed days later would otherwise produce a bogus
-        // seconds-long workout dated today (sessionStart is view-open time).
-        if let start = startedAt,
-           Calendar.current.isDate(start, inSameDayAs: session.date),
-           session.hasCompletedWork,
-           healthKitEnabled(context) {
-            let end = Date()
+        var healthExport: Task<HealthWorkoutSaveResult, Never>?
+        var healthExportNotice: String?
+        let wantsHealthExport = session.hasCompletedWork && healthKitEnabled(context)
+        if wantsHealthExport, let timing = exportTiming,
+           Calendar.current.isDate(timing.start, inSameDayAs: session.date) {
             let completedKinds = session.exercises.compactMap { entry -> CompletedExerciseKind? in
                 guard !entry.workingSets.isEmpty, let exercise = entry.exercise else { return nil }
                 return CompletedExerciseKind(name: exercise.name, type: exercise.typeRaw,
@@ -218,11 +218,13 @@ enum SessionCompletion {
                 let miles = entry.workingSets.compactMap(\.distanceMiles).reduce(0, +)
                 if miles > 0 { milesByBasis[basis, default: 0] += miles }
             }
-            Task {
+            healthExport = Task {
                 await HealthKitService.shared.saveWorkout(
-                    start: start, end: end, modality: modality, milesByBasis: milesByBasis
+                    timing: timing, modality: modality, milesByBasis: milesByBasis
                 )
             }
+        } else if wantsHealthExport {
+            healthExportNotice = "Your session is saved in Cadence. It wasn't sent to Apple Health because reliable timing for this session's day is unavailable."
         }
 
         let allPlannedWork = session.exercises.flatMap(\.plannedWorkingSets)
@@ -255,7 +257,8 @@ enum SessionCompletion {
             // note actually knows. Mirrored in web session.js.
             coachingNotes.append("Next: \(nextDay.name) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek)).")
         }
-        return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes)
+        return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes,
+                              healthExport: healthExport, healthExportNotice: healthExportNotice)
     }
 
     private static func healthKitEnabled(_ context: ModelContext) -> Bool {
