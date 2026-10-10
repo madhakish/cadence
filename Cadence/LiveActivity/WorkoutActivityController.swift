@@ -198,13 +198,11 @@ enum WorkoutActivityController {
         guard let a = current, !a.attributes.isAdHoc, let sessionID = a.content.state.sessionID else { return }
         // An old activity can predate the additive export history. Preserve
         // its stopwatch, but never infer a real start from its shifted origin.
-        if WorkoutClockPersistence.load() == nil {
-            WorkoutClockPersistence.save(WorkoutClockRecord(
-                sessionID: sessionID,
-                start: a.content.state.stopwatchStart ?? a.attributes.startDate,
-                pausedAt: a.content.state.stopwatchPausedAt))
-        }
-        guard let record = WorkoutClockPersistence.update(for: sessionID, change) else { return }
+        let legacy = WorkoutClockRecord(
+            sessionID: sessionID,
+            start: a.content.state.stopwatchStart ?? a.attributes.startDate,
+            pausedAt: a.content.state.stopwatchPausedAt)
+        guard let record = WorkoutClockPersistence.update(for: sessionID, recovering: legacy, change) else { return }
         await updateStopwatch(origin: record.start, pausedAt: record.pausedAt)
     }
 

@@ -23,7 +23,7 @@ final class WorkoutClock {
     /// records still restore their stopwatch but cannot reconstruct that past.
     private static func recoveredState(for sessionID: String) -> WorkoutClockRecord? {
         let record = WorkoutClockPersistence.load().flatMap { $0.sessionID == sessionID ? $0 : nil }
-        if record?.healthTiming != nil { return record }
+        if let record, !record.isLegacy { return record }
         if let snap = WorkoutActivityController.snapshot, !snap.isAdHoc,
            snap.state.sessionID == sessionID {
             return WorkoutClockRecord(sessionID: sessionID,
@@ -107,11 +107,12 @@ final class WorkoutClock {
             return
         }
         let now = Date()
+        let observed = WorkoutClockPersistence.load()
         let record = sessionID == nil ? Self.recoveredState(for: session.id) : nil
-        let state = record ?? WorkoutClockRecord(sessionID: session.id, start: now,
-                                                  healthTiming: HealthWorkoutTiming(start: now))
+        let proposed = record ?? WorkoutClockRecord(sessionID: session.id, start: now,
+                                                     healthTiming: HealthWorkoutTiming(start: now))
+        guard let state = WorkoutClockPersistence.adopt(proposed, replacing: observed) else { return }
         adopt(state)
-        WorkoutClockPersistence.save(state)
         WorkoutActivityController.beginSessionDetached(sessionID: session.id, startDate: state.start,
                                                         currentLift: currentLift, defaultRestSeconds: defaultRestSeconds,
                                                         currentSet: currentSet)
@@ -141,7 +142,7 @@ final class WorkoutClock {
         }
         if sessionID == nil, Self.recoveredState(for: session.id) != nil {
             begin(for: session, currentLift: currentLift, defaultRestSeconds: defaultRestSeconds, currentSet: currentSet)
-            return true
+            return isTracking(sessionID: session.id)
         }
         return false
     }

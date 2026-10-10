@@ -150,6 +150,9 @@ targets:
       - Cadence/Services/ProgramActivationService.swift
       - Cadence/Services/ProgramEquipmentService.swift
       - Cadence/Services/WorkoutCommandService.swift
+      # Foreground/Lock Screen clock recovery is Foundation-only. Exercise its
+      # real UserDefaults transaction boundary with isolated synthetic suites.
+      - Cadence/LiveActivity/WorkoutClockPersistence.swift
       # The milestone projection is the shared owner behind both bank-time
       # PRs and the post-correction rebuild (epic #155 Stage 6).
       - Cadence/Services/MilestoneProjection.swift

@@ -64,6 +64,9 @@ public struct HealthWorkoutTiming: Codable, Equatable {
 /// This device-local record is neither a SwiftData model nor a portable backup.
 public struct WorkoutClockRecord: Codable, Equatable {
     private let version = 2
+    /// Only shipped V1 records defer to an old Live Activity snapshot. Once
+    /// adopted/written by this version, even nil export history is durable.
+    public private(set) var isLegacy = false
     public let sessionID: String
     public var start: Date
     public var pausedAt: Date?
@@ -88,6 +91,7 @@ public struct WorkoutClockRecord: Codable, Equatable {
         start = legacy.start
         pausedAt = legacy.pausedAt
         let storedVersion = (try? values.decode(Int.self, forKey: .version)) ?? 1
+        isLegacy = storedVersion == 1
         // V1 upgrades without inventing history. Corrupt/unknown optional
         // history must not destroy a usable stopwatch's frozen V1 fields.
         if storedVersion == 2 {
