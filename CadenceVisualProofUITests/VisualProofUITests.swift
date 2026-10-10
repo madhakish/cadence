@@ -690,7 +690,9 @@ final class VisualProofUITests: XCTestCase {
         let origin = app.coordinate(withNormalizedOffset: .zero)
         let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
         let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY + delta))
-        start.press(forDuration: 0.01, thenDragTo: end)
+        // No momentum: a flung 80pt drag carried a 362pt row ~280pt on the
+        // 375pt device, overshooting its 438pt viewport in both directions.
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
     }
 
     private func openExerciseLibrary() {
