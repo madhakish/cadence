@@ -865,6 +865,33 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<6 where !addDay.exists { app.swipeUp() }
         XCTAssertTrue(addDay.exists, "days can be added to a blank program")
         capture("after-21-edit-program-blank-iphone")
+
+        // Deleting a program is confirmed, never one tap: cancel keeps it,
+        // back and reopen keep it, confirming removes it.
+        let deleteRow = app.buttons["Delete program"]
+        for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(deleteRow.isHittable)
+        deleteRow.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "deleting a program asks first")
+        cancel.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 3), "cancel keeps the editor open")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        for _ in 0..<10 where !blank.isHittable { app.swipeUp() }
+        XCTAssertTrue(blank.isHittable, "cancel kept the program")
+        blank.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "back and reopen keep the program")
+        for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
+        deleteRow.tap()
+        let confirm = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        capture("after-21-delete-program-confirmation-iphone")
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5),
+                      "confirming deletes the program and returns to the Program tab")
+        XCTAssertTrue(blank.waitForNonExistence(timeout: 5), "the blank program's row is gone")
+        XCTAssertTrue(populated.exists, "the seeded program keeps its row")
     }
 
     /// App palettes are distinct from the ten equipment themes. Retain both

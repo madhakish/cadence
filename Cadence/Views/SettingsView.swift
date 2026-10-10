@@ -904,6 +904,7 @@ struct ProgramEditorView: View {
     /// Surfaces a refused switch (an open session from another program)
     /// instead of letting the toggle silently snap back.
     @State private var activationError: String?
+    @State private var confirmDelete = false
     @Query private var allPrograms: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -1216,12 +1217,21 @@ struct ProgramEditorView: View {
                     Label("Duplicate program", systemImage: "square.on.square")
                 }
                 Button(role: .destructive) {
-                    context.delete(program)
-                    if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
+                    confirmDelete = true
                 } label: {
                     Text("Delete program")
                 }
             }
+        }
+        // Deleting a plan is confirmed, never one tap (mirrors the web
+        // editor's action sheet). Banked sessions keep their history.
+        .confirmationDialog("Delete this program?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                context.delete(program)
+                if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
+            }
+        } message: {
+            Text("Sessions and history are unchanged.")
         }
         .alert("Can't update program", isPresented: Binding(
             get: { activationError != nil }, set: { if !$0 { activationError = nil } }
