@@ -1,0 +1,78 @@
+name: Studio render lab
+
+# Visual QA for the barbell studio renderer (#316). Renders the DEBUG render
+# lab matrix on an iPhone simulator with the production renderer and pushes
+# the PNGs to a proof branch, so review does not depend on artifact download.
+# Scoped to the studio work branch and manual dispatch; never runs on main.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/photoreal-barbell-316]
+    paths:
+      - Cadence/**
+      - CadenceVisualProofUITests/**
+      - project.yml
+      - .github/workflows/render-lab.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lab:
+    name: Render studio matrix
+    if: github.ref != 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Select and boot an iPhone
+        id: simulator
+        run: |
+          device_id="$(python3 .github/visual-proof/select-simulator.py)"
+          echo "device-id=$device_id" >> "$GITHUB_OUTPUT"
+          bash .github/visual-proof/boot-simulator.sh "$device_id"
+      - name: Render the lab matrix
+        run: >-
+          xcodebuild test
+          -project Cadence.xcodeproj
+          -scheme CadenceVisualProof
+          -configuration Debug
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
+          -derivedDataPath build/render-lab
+          -resultBundlePath build/RenderLab.xcresult
+          -only-testing:CadenceVisualProofUITests/RenderLabUITests/testRenderLab
+      - name: Collect renders
+        if: always()
+        run: |
+          mkdir -p dist/render-lab
+          app_data="$(xcrun simctl get_app_container '${{ steps.simulator.outputs.device-id }}' com.madhakish.Cadence data || true)"
+          if [[ -n "$app_data" && -d "$app_data/tmp/render-lab" ]]; then cp "$app_data"/tmp/render-lab/* dist/render-lab/; fi
+          if [[ -d build/RenderLab.xcresult ]]; then
+            xcrun xcresulttool export attachments --path build/RenderLab.xcresult --output-path dist/render-lab || true
+          fi
+          git rev-parse HEAD > dist/render-lab/commit.txt
+          ls -la dist/render-lab
+      - name: Publish to the proof branch
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd dist/render-lab
+          git init -q
+          git checkout -q -b proof
+          git add -A
+          git -c user.name="render-lab" -c user.email="render-lab@users.noreply.github.com" \
+            commit -q -m "render lab $(cat commit.txt)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" proof:refs/heads/render-proof/photoreal-316

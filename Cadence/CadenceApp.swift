@@ -13,7 +13,9 @@ struct CadenceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if let container = bootstrap.container {
+            if RenderLab.isRequested {
+                RenderLabView()
+            } else if let container = bootstrap.container {
                 ThemedRoot()
                     .modelContainer(container)
                     .onChange(of: scenePhase) { _, phase in
