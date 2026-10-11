@@ -99,6 +99,48 @@ extension RenderLab {
     }
 }
 
+extension RenderLab {
+    /// One hero scene through different camera/shadow pipelines, to isolate
+    /// which setting suppresses the environment backdrop and reflections.
+    static func pipelineVariants() async -> [(String, UIImage)] {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let device = MTLCreateSystemDefaultDevice() else { return continuation.resume(returning: []) }
+                let loadout = Loadout(bar: .bar45lb, perSide: [PlateCount(plate: Plate(value: 45, unit: .lb), count: 1)])
+                var out: [(String, UIImage)] = []
+                let variants: [(String, Bool, SCNShadowMode?, Bool)] = [
+                    ("13-var-hdr-deferred-post", true, .deferred, true),
+                    ("14-var-hdr-forward-post", true, .forward, true),
+                    ("15-var-hdr-forward-nopost", true, .forward, false),
+                    ("16-var-ldr-forward", false, .forward, false),
+                    ("17-var-ldr-noshadow", false, nil, false),
+                ]
+                for (name, hdr, shadow, post) in variants {
+                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
+                    studio.frame(.hero, aspect: 1170.0 / 657.0)
+                    if let camera = studio.cameraNode.camera {
+                        camera.wantsHDR = hdr
+                        camera.wantsDepthOfField = post
+                        camera.screenSpaceAmbientOcclusionIntensity = post ? 1.1 : 0
+                        camera.bloomIntensity = post ? 0.18 : 0
+                        camera.vignettingIntensity = post ? 0.35 : 0
+                    }
+                    studio.scene.rootNode.enumerateHierarchy { node, _ in
+                        guard let light = node.light, light.type == .directional else { return }
+                        if let shadow { light.shadowMode = shadow } else { light.castsShadow = false }
+                    }
+                    let renderer = SCNRenderer(device: device, options: nil)
+                    renderer.scene = studio.scene
+                    renderer.pointOfView = studio.cameraNode
+                    out.append((name, renderer.snapshot(atTime: 0, with: CGSize(width: 1170, height: 657),
+                                                        antialiasingMode: .multisampling4X)))
+                }
+                continuation.resume(returning: out)
+            }
+        }
+    }
+}
+
 struct RenderLabView: View {
     @State private var rendered: [(name: String, image: UIImage)] = []
     @State private var done = false
@@ -134,6 +176,10 @@ struct RenderLabView: View {
         if let diag = await RenderLab.environmentProbe() {
             try? diag.pngData()?.write(to: dir.appendingPathComponent("00-diag-environment.png"))
             rendered.append(("00-diag-environment", diag))
+        }
+        for (name, image) in await RenderLab.pipelineVariants() {
+            try? image.pngData()?.write(to: dir.appendingPathComponent("\(name).png"))
+            rendered.append((name, image))
         }
         for item in RenderLab.matrix {
             let start = Date()

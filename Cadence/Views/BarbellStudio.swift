@@ -576,7 +576,7 @@ enum StudioFaces {
             ctx.fill(CGRect(x: 0, y: 0, width: n, height: n))
             let centre = CGPoint(x: Double(n) / 2, y: Double(n) / 2)
             let numberFont = UIFont.systemFont(ofSize: CGFloat(numberSize), weight: .heavy, width: .condensed)
-            arc("\(s.denomination) \(s.unit)", font: numberFont, tracking: 1.04, baseline: mid + numberFont.capHeight / 2,
+            arc("\(s.denomination)\u{2009}\u{2009}\(s.unit)", font: numberFont, tracking: 1.04, baseline: mid + numberFont.capHeight / 2,
                 top: false, centre: centre, in: ctx.cgContext)
             if !s.brand.isEmpty {
                 let brandFont = UIFont.systemFont(ofSize: CGFloat(brandSize), weight: .bold)
@@ -1031,11 +1031,12 @@ enum StudioTextures {
         lock.lock(); defer { lock.unlock() }
         if let t = tyres[fill] { return t }
         let n = 256
-        let streak = Noise.field(size: n, cells: 24, octaves: 4, seed: 41)
+        let streak = Noise.field(size: n, cells: 48, octaves: 3, seed: 41)
         let r = Double((fill >> 16) & 255) / 255, g = Double((fill >> 8) & 255) / 255, b = Double(fill & 255) / 255
         let image = rgb(streak) { v in
-            let s = max(0, min(1, (v - 0.55) / 0.15)) * 0.7
-            func mix(_ c: Double) -> Double { c * (1 - s) + min(1, c * 1.25 + 0.06) * s }
+            // Faint rub marks only: a scuffed tyre, not a camouflage pattern.
+            let s = max(0, min(1, (v - 0.72) / 0.12)) * 0.22
+            func mix(_ c: Double) -> Double { c * (1 - s) + min(1, c * 1.15 + 0.03) * s }
             return (mix(r), mix(g), mix(b))
         }
         tyres[fill] = image

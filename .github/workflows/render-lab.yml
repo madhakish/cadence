@@ -45,7 +45,7 @@ jobs:
       - name: Render the lab matrix
         run: |
           set -o pipefail
-          mkdir -p dist/render-lab
+          mkdir -p dist/render-lab build
           xcodebuild test \
             -project Cadence.xcodeproj \
             -scheme CadenceVisualProof \
