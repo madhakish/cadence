@@ -877,8 +877,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(blankButton.waitForExistence(timeout: 5))
         blankButton.tap()
         let blank = rows.element(boundBy: 1)
-        XCTAssertTrue(blank.waitForExistence(timeout: 5), "the new program gets its own editor row")
-        for _ in 0..<10 where !blank.isHittable { app.swipeUp() }
+        XCTAssertTrue(scrollUntilVisible(blank), "the new program gets its own editor row")
         XCTAssertTrue(blank.isHittable)
         blank.tap()
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "a blank program opens its editor")
