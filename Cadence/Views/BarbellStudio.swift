@@ -282,9 +282,13 @@ enum StudioLathe {
             }
             let ring = Int32(segments + 1)
             let slot = min(max(0, a.m), indices.count - 1)
+            // Front faces wind so their geometric normal agrees with the
+            // explicit normal (tangent × profile direction). SceneKit flips
+            // the normal of a back-facing fragment on a double-sided
+            // material, so a reversed winding inverts all lighting.
             for j in 0..<Int32(segments) {
                 let i0 = base + j, i1 = i0 + 1, i2 = base + ring + j, i3 = i2 + 1
-                indices[slot] += [i0, i2, i1, i1, i2, i3]
+                indices[slot] += [i0, i1, i2, i1, i3, i2]
             }
             travelled += length
         }
@@ -497,8 +501,9 @@ enum StudioFaces {
         }
         for j in 0..<Int32(segments) {
             let i0 = j * 2, i1 = i0 + 1, i2 = i0 + 2, i3 = i0 + 3
-            // Counter-clockwise as seen from the face's side.
-            indices += face < 0 ? [i0, i1, i2, i2, i1, i3] : [i0, i2, i1, i2, i3, i1]
+            // Counter-clockwise as seen from the face's side: radial × tangent
+            // is +x, so the −x face takes the other order.
+            indices += face < 0 ? [i0, i2, i1, i2, i3, i1] : [i0, i1, i2, i2, i1, i3]
         }
         let geometry = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(normals: normals),
                                              SCNGeometrySource(textureCoordinates: uvs)],
@@ -653,11 +658,27 @@ enum StudioPlatform {
             root.addChildNode(matNode)
             root.addChildNode(plane(width: w, length: size, x: x, y: floorY - 0.35, material: StudioMaterials.matTop))
         }
+        let floorY = baseTop - 2 * layer
         let floor = SCNNode(geometry: SCNPlane(width: 24000, height: 24000))
         floor.geometry?.materials = [StudioMaterials.gymFloor]
         floor.eulerAngles.x = -.pi / 2
-        floor.position = SCNVector3(0, Float(baseTop - 2 * layer - 0.5), 0)
+        floor.position = SCNVector3(0, Float(floorY - 0.5), 0)
         root.addChildNode(floor)
+        // The room behind the platform, as in the look-dev scene: a block
+        // wall and a power rack, out of focus in every shot.
+        func box(_ w: Double, _ h: Double, _ l: Double, _ x: Double, _ y: Double, _ z: Double, _ m: SCNMaterial) {
+            let b = SCNBox(width: CGFloat(w), height: CGFloat(h), length: CGFloat(l), chamferRadius: 2)
+            b.materials = [m]
+            let node = SCNNode(geometry: b)
+            node.position = SCNVector3(Float(x), Float(y), Float(z))
+            root.addChildNode(node)
+        }
+        box(24000, 5000, 200, 0, floorY + 2500, -4300, StudioMaterials.blockWall)
+        for x in [-620.0, 620.0] {
+            for z in [-2600.0, -3650.0] { box(76, 2300, 76, x, floorY + 1150, z, StudioMaterials.powderCoat) }
+            box(76, 80, 1126, x, floorY + 2300, -3125, StudioMaterials.powderCoat)
+        }
+        for z in [-2600.0, -3650.0] { box(1316, 80, 76, 0, floorY + 2300, z, StudioMaterials.powderCoat) }
     }
 
     /// A horizontal plane facing up whose texture's top edge points to −z
@@ -903,6 +924,16 @@ enum StudioMaterials {
         return m
     }()
     static let matSide: SCNMaterial = pbr(UIColor(white: 0.05, alpha: 1), metalness: 0, roughness: 0.85)
+    static let powderCoat: SCNMaterial = {
+        let m = pbr(UIColor(white: 0.03, alpha: 1), metalness: 0.1, roughness: 0.45)
+        m.clearCoat.contents = NSNumber(value: 0.2)
+        return m
+    }()
+    static let blockWall: SCNMaterial = {
+        let m = pbr(.white, metalness: 0, roughness: 0.92)
+        tiled(m.diffuse, StudioTextures.blocks, 60, 12.5)
+        return m
+    }()
     static let plywoodEdge: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.75)
         tiled(m.diffuse, StudioTextures.plies, 8, 1)
@@ -977,6 +1008,20 @@ enum StudioTextures {
         }
         guard let out = ctx.makeImage() else { return UIImage(cgImage: oak) }
         return UIImage(cgImage: out)
+    }()
+
+    /// Painted concrete block: 400 × 200 mm courses with recessed mortar.
+    static let blocks: UIImage = {
+        let size = CGSize(width: 200, height: 200)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            UIColor(white: 0.16, alpha: 1).setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            UIColor(white: 0.09, alpha: 1).setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 8))
+            ctx.fill(CGRect(x: 0, y: 100, width: 200, height: 8))
+            ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 100))
+            ctx.fill(CGRect(x: 100, y: 100, width: 4, height: 100))
+        }
     }()
 
     /// Plywood edge: alternating veneer plies.
