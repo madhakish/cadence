@@ -148,7 +148,9 @@ Notes:
 - HealthKit is optional and in two separately granted halves, both off by
   default: writing (workouts + bodyweight), and reading walking/running/cycling
   distance to show beside a logged session. Reading never overwrites a log —
-  it shows both numbers and you choose.
+  it shows both numbers and you choose. A third, separately opted-in step read
+  shows Health-measured steps in timed ruck bank summaries only; no step writes
+  or health readings in backups.
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
 
 ## Contributing

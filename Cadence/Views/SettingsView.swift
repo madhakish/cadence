@@ -162,7 +162,8 @@ struct SettingsView: View {
                                         }
                                     }
                                 ))
-                                Text("Write and compare are separate permissions. Health never edits a logged workout.")
+                                HealthStepsReadToggle()
+                                Text("Write, compare, and steps are separate permissions. Health never edits a logged workout.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             Text("Auto-start off keeps rest manual. The arrival tag appears once per day, then returns to Today.")
