@@ -419,3 +419,21 @@ final class SetEntry {
                              basis: loadBasis, implementCount: resolvedImplementCount)
     }
 }
+
+extension WorkoutSession {
+    /// Whether any scheduled instruction was completed: the gate program
+    /// advancement runs behind (SessionCompletion) and the definition of
+    /// banked work for a day-list edit (RecoveryBridgeService). A model
+    /// member, so the hostless migration target compiles both callers.
+    /// Mirrors web session.js `sessionHasCompletedProgramInstruction`.
+    var hasCompletedProgramInstruction: Bool {
+        exercises.contains { entry in
+            guard entry.programSlotID != nil || entry.programRole != nil else { return false }
+            let candidates = entry.orderedSets.filter {
+                !$0.isWarmup && $0.prescriptionBlock.countsAsProgramInstruction
+            }
+            return candidates.prefix(entry.plannedSets ?? candidates.count)
+                .contains { $0.status == .completed }
+        }
+    }
+}

@@ -3079,6 +3079,99 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   await db.importBundle(parsed);
 }
 
+// Reordering the days of a program that has banked nothing this rotation
+// starts the schedule at the new first day; once program work is banked, the
+// pointer follows ITS day through the move (mirrors SettingsView.moveDays).
+// "Banked" means what advancement gates on: a completed scheduled instruction
+// outside an active-recovery interval, found however many newer rows exist.
+{
+  const name = "Fixture Fresh Reorder";
+  await db.Programs.save({
+    name, focus: "strength", cycleNumber: 1, currentWeek: 1, nextDayIndex: 0,
+    roundingLb: 5, isActive: false,
+    days: [
+      { name: "Fresh Alpha", order: 0, accessories: [], lifts: [{ exerciseName: "Back Squat", role: "main",
+        prescription: "wave", baseWeightLb: 185, estimatedMaxLb: 250, stallCount: 0, lastIncrementLb: 0 }] },
+      { name: "Fresh Bravo", order: 1, accessories: [], lifts: [{ exerciseName: "Deadlift", role: "main",
+        prescription: "wave", baseWeightLb: 225, estimatedMaxLb: 300, stallCount: 0, lastIncrementLb: 0 }] },
+    ],
+  });
+  const byName = async () => (await db.Programs.all()).find((candidate) => candidate.name === name);
+  const move = async (dayName, arrow) => {
+    settings.programEditor(await byName()); await tick();
+    const overlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+    const row = [...overlay.querySelectorAll(".row")]
+      .find((candidate) => candidate.querySelector(".title")?.textContent === dayName);
+    [...row.querySelectorAll("button")].find((button) => button.textContent === arrow).click();
+    await tick(); await tick();
+    document.getElementById("overlays").replaceChildren();
+    return byName();
+  };
+  const orderOf = (program, dayName) => program.days.find((day) => day.name === dayName).order;
+  const created = [];
+  const bank = async (program, { date = new Date().toISOString(), status = "completed", block = "work" } = {}) => {
+    const slot = program.days.find((day) => day.name === "Fresh Bravo").lifts[0];
+    const id = await db.Sessions.save({ uuid: crypto.randomUUID(), date, notes: "", isCompleted: true, completedAt: date,
+      programTag: { programId: program.uuid, programName: name, cycleNumber: 1, week: 1, dayIndex: 0, planNames: ["Deadlift"] },
+      exercises: [{ exerciseName: "Deadlift", programSlotId: slot.id, programRole: "main", plannedSets: 1,
+        sets: [{ weightLb: 225, reps: 3, status, prescriptionBlock: block, isWarmup: false }] }] });
+    created.push(id);
+  };
+
+  let program = await move("Fresh Bravo", "↑");
+  ok(orderOf(program, "Fresh Bravo") === 0, "the move renumbers Bravo first");
+  ok(program.nextDayIndex === 0,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] an unbanked rotation starts at its new first day");
+
+  // A finished session whose only program set was skipped never advanced the
+  // rotation, so it is not banked work: moving the pointed first day resets.
+  await bank(program, { status: "skipped" });
+  program = await move("Fresh Bravo", "↓");
+  ok(orderOf(program, "Fresh Bravo") === 1, "the move renumbers Bravo second");
+  ok(program.nextDayIndex === 0,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] a finished session without a completed instruction is not banked work");
+
+  // A real completion inside an active-recovery interval is off-program
+  // (INV-RECOVERY-WORK-IS-OFF-PROGRAM): still unbanked, still a reset.
+  const today = db.localDayKey(new Date());
+  await db.Intervals.save({ kind: "activeRecovery", startDate: today, endDate: today, enteredAsDays: true, note: name });
+  await bank(program);
+  program = await move("Fresh Alpha", "↓");
+  ok(orderOf(program, "Fresh Alpha") === 1, "the move renumbers Alpha second");
+  ok(program.nextDayIndex === 0,
+    "[INV-RECOVERY-WORK-IS-OFF-PROGRAM] an off-program completion is not banked work for the pointer");
+  for (const interval of (await db.Intervals.all()).filter((candidate) => candidate.note === name)) {
+    await db.Intervals.del(interval.id);
+  }
+
+  // Without the interval the same completion is banked work: the pointer
+  // follows ITS day through the move.
+  program = await move("Fresh Bravo", "↓");
+  ok(orderOf(program, "Fresh Bravo") === 1, "the move renumbers Bravo second again");
+  ok(program.nextDayIndex === 1,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] a banked rotation keeps pointing at its day through a move");
+
+  // 32 newer completions inside a recovery interval must not hide the older
+  // real one (parity with the native existence search).
+  const yesterday = db.localDayKey(new Date(Date.now() - 86_400_000));
+  await db.Intervals.save({ kind: "activeRecovery", startDate: yesterday, endDate: yesterday, enteredAsDays: true, note: name });
+  const realDate = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  for (const id of created) await db.Sessions.del(id);
+  created.length = 0;
+  await bank(program, { date: realDate });
+  for (let i = 0; i < 32; i += 1) await bank(program, { date: new Date(`${yesterday}T12:00:00`).toISOString() });
+  await db.Programs.save({ ...program, nextDayIndex: 0 });
+  program = await move("Fresh Alpha", "↓");
+  ok(orderOf(program, "Fresh Alpha") === 1, "the move renumbers Alpha second again");
+  ok(program.nextDayIndex === 1,
+    "[INV-UNBANKED-ROTATION-STARTS-FIRST] an older real completion counts behind 32 newer off-program rows");
+
+  for (const interval of (await db.Intervals.all()).filter((candidate) => candidate.note === name)) {
+    await db.Intervals.del(interval.id);
+  }
+  for (const id of created) await db.Sessions.del(id);
+}
+
 // The rep-window steppers never touch the slot's banked target: exploring the
 // endpoints up and back down must not inject reps the lifter never earned.
 // And a carry updates only the SIBLING stepper node — never a full editor

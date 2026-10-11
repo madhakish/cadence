@@ -649,6 +649,19 @@ final class VisualProofUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
+    /// Scroll until `element` is realized and inside the window. Lazy Form
+    /// rows do not exist until they scroll on, and a label inside a combined
+    /// row (a picker's title) is never hittable even when it is on screen,
+    /// so hittability cannot judge visibility; the frame can.
+    private func scrollUntilVisible(_ element: XCUIElement, swipes: Int = 10) -> Bool {
+        let visible = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 100)
+        for _ in 0..<swipes {
+            if element.exists, visible.contains(element.frame) { return true }
+            app.swipeUp()
+        }
+        return element.exists && visible.contains(element.frame)
+    }
+
     /// The root List ends above the opaque 72 pt calculator band. XCTest
     /// can report a row below that band as hittable; use its whole frame.
     private var rootListViewport: CGRect {
@@ -822,6 +835,82 @@ final class VisualProofUITests: XCTestCase {
         revealRootListRows([emptyRow])
         XCTAssertTrue(empty.isHittable)
         capture("equipment-exercise-empty-iphone")
+    }
+
+    /// The Program tab's "Edit program" row is the only way into the
+    /// whole-program editor on iOS (#307). Prove the tap opens it for the
+    /// seeded program and for a blank one, and that back and reopen work.
+    func test21EditProgramRowOpensEditor() {
+        app.tabBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        let rows = app.descendants(matching: .any).matching(identifier: "edit-program")
+        let populated = rows.firstMatch
+        for _ in 0..<10 where !populated.isHittable { app.swipeUp() }
+        XCTAssertTrue(populated.isHittable, "each program section ends with its editor row")
+        populated.tap()
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].waitForExistence(timeout: 5),
+                      "the row pushes the whole-program editor")
+        let nextDay = element("next-day-picker")
+        XCTAssertTrue(scrollUntilVisible(nextDay), "the schedule position is on screen in the editor")
+        capture("after-21-edit-program-populated-iphone")
+        // The acceptance is a usable control, not a visible label: open the
+        // picker, choose the day, and come back to the editor.
+        XCTAssertTrue(nextDay.isHittable, "the Next day control can be activated")
+        nextDay.tap()
+        let choice = app.buttons["Lower Forge"].firstMatch
+        XCTAssertTrue(choice.waitForExistence(timeout: 3), "the Next day picker opens its day choices")
+        capture("after-21-next-day-choices-iphone")
+        choice.tap()
+        XCTAssertTrue(choice.waitForNonExistence(timeout: 3), "choosing a day closes the picker")
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].exists, "and returns to the editor")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        for _ in 0..<10 where !populated.isHittable { app.swipeUp() }
+        populated.tap()
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].waitForExistence(timeout: 5), "reopening works")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+
+        // A blank program has no day cards, so this row is its only editor.
+        app.navigationBars["Program"].buttons["Add program"].tap()
+        let blankButton = app.buttons["Blank program"]
+        XCTAssertTrue(blankButton.waitForExistence(timeout: 5))
+        blankButton.tap()
+        let blank = rows.element(boundBy: 1)
+        XCTAssertTrue(scrollUntilVisible(blank), "the new program gets its own editor row")
+        XCTAssertTrue(blank.isHittable)
+        blank.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "a blank program opens its editor")
+        let addDay = app.buttons["Add day"]
+        XCTAssertTrue(scrollUntilVisible(addDay), "days can be added to a blank program")
+        capture("after-21-edit-program-blank-iphone")
+
+        // Deleting a program is confirmed, never one tap: cancel keeps it,
+        // back and reopen keep it, confirming removes it.
+        let deleteRow = app.buttons["Delete program"]
+        for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
+        XCTAssertTrue(deleteRow.isHittable)
+        deleteRow.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "deleting a program asks first")
+        cancel.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 3), "cancel keeps the editor open")
+        app.navigationBars.buttons["Program"].tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
+        for _ in 0..<10 where !blank.isHittable { app.swipeUp() }
+        XCTAssertTrue(blank.isHittable, "cancel kept the program")
+        blank.tap()
+        XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "back and reopen keep the program")
+        for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
+        deleteRow.tap()
+        let confirm = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        capture("after-21-delete-program-confirmation-iphone")
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5),
+                      "confirming deletes the program and returns to the Program tab")
+        XCTAssertTrue(blank.waitForNonExistence(timeout: 5), "the blank program's row is gone")
+        XCTAssertTrue(populated.exists, "the seeded program keeps its row")
     }
 
     /// App palettes are distinct from the ten equipment themes. Retain both

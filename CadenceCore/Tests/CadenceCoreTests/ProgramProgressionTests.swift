@@ -969,6 +969,34 @@ final class ProgramProgressionTests: XCTestCase {
         XCTAssertTrue(allDup.isLastDay, "an all-duplicate program still closes its rotation")
     }
 
+    // [INV-UNBANKED-ROTATION-STARTS-FIRST]
+    func testEditedNextDayOrderStartsAnUnbankedRotationAtItsFirstDay() {
+        // A program restructured before its first workout: the pointed day was
+        // moved to second place. Nothing is banked, so the schedule starts at
+        // the first day instead of reporting day 1 as done.
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [0, 1], pointedDayOrder: 1, rotationHasBankedWork: false), 0)
+        // The first day is the lowest ORDER, whatever its value.
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [2, 5], pointedDayOrder: 5, rotationHasBankedWork: false), 2)
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [], pointedDayOrder: nil, rotationHasBankedWork: false), 0)
+    }
+
+    // [INV-UNBANKED-ROTATION-STARTS-FIRST]
+    func testEditedNextDayOrderFollowsItsDayWhileTheRotationHasBankedWork() {
+        // Mid-rotation the pointer follows ITS day through the renumbering,
+        // never a clamped position.
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [0, 1, 2], pointedDayOrder: 2, rotationHasBankedWork: true), 2)
+        // A pointer whose day was deleted, or that addresses no day, resumes
+        // the first day.
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [0, 1], pointedDayOrder: nil, rotationHasBankedWork: true), 0)
+        XCTAssertEqual(ProgramProgression.editedNextDayOrder(
+            dayOrders: [0, 1], pointedDayOrder: 7, rotationHasBankedWork: true), 0)
+    }
+
     // [INV-RECOVERY-IS-A-BRIDGE]
     func testRecoveryBridgeSelectsOneAuthoredUpperAndLowerExposure() {
         let upperLower = [

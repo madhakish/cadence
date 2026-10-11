@@ -221,6 +221,7 @@
         "ProgramProgression.sessionTagCurrent(tagCycle:tagWeek:tagDayIndex:cycleNumber:currentWeek:nextDayIndex:)": "sessionTagCurrent",
         "ProgramProgression.canResumeSession(tagCycle:tagWeek:tagDayIndex:cycleNumber:currentWeek:dayIndex:sessionPlanNames:dayPlanNames:)": "canResumeSession",
         "ProgramProgression.scheduleAdvance(dayOrders:bankedDayOrder:)": "scheduleAdvance",
+        "ProgramProgression.editedNextDayOrder(dayOrders:pointedDayOrder:rotationHasBankedWork:)": "editedNextDayOrder",
         "ProgramProgression.visibleDayOrders(dayOrders:recoveryDayOrders:rotation:)": "visibleDayOrders",
         "ProgramProgression.workoutDayLabel(name:rotation:)": "workoutDayLabel",
         "ProgramProgression.recoveryAccessorySets(ordinarySets:rotation:)": "recoveryAccessorySets",

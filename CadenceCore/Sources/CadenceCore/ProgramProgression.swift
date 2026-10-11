@@ -429,6 +429,24 @@ public enum ProgramProgression {
         return (sorted[(position + 1) % sorted.count], position == sorted.count - 1)
     }
 
+    /// Where the schedule points after the day list is edited (a day moved or
+    /// deleted). While the rotation has banked work the pointer follows ITS
+    /// day through a renumbering, so a mid-rotation reorder never re-addresses
+    /// the next workout. A rotation with nothing banked has no position to
+    /// preserve: it starts at its first day, because a pointer carried past
+    /// the first day reports a day as done that was never trained. A pointer
+    /// at no surviving day also resumes the first day.
+    /// Mirrored 1:1 in web/app/js/core.js `editedNextDayOrder`.
+    public static func editedNextDayOrder(
+        dayOrders: [Int], pointedDayOrder: Int?, rotationHasBankedWork: Bool
+    ) -> Int {
+        let first = dayOrders.min() ?? 0
+        guard rotationHasBankedWork, let pointed = pointedDayOrder, dayOrders.contains(pointed) else {
+            return first
+        }
+        return pointed
+    }
+
     /// Presentation reads the same authored/representative orders as scheduling.
     /// TFH callers supply the cohort's recovery orders instead of legacy inference.
     public static func visibleDayOrders(dayOrders: [Int], recoveryDayOrders: [Int], rotation: Int) -> [Int] {

@@ -42,6 +42,17 @@ struct ProgramOverviewView: View {
                             }
                             .accessibilityHint("Edits \(day.name)")
                         }
+                        // The whole-program editor (days, position in the
+                        // cycle, equipment, duplicate, export, delete) lost its
+                        // only entry when the day card started opening the day
+                        // (7bb8b4f); this row is that entry.
+                        NavigationLink {
+                            ProgramEditorView(program: program)
+                        } label: {
+                            Label("Edit program", systemImage: "slider.horizontal.3")
+                        }
+                        .accessibilityHint("Edits \(program.name): days, position in the cycle, and options")
+                        .accessibilityIdentifier("edit-program")
                     } header: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {

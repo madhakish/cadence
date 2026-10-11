@@ -14,21 +14,22 @@ enum RecoveryBridgeService {
         let message: String
     }
 
-    /// Fetch only the newest completed sessions for one phase of this cycle.
-    /// Stable-ID and legacy-name matching use separate descriptors so Swift's
-    /// predicate macro never has to type-check the combined fallback. The
-    /// legacy query runs only when stable rows have not filled the requested
-    /// limit, so the total number of returned rows remains bounded by `limit`.
+    /// Fetch the newest completed sessions for one phase of this cycle, or
+    /// every such row when `limit` is nil. Stable-ID and legacy-name matching
+    /// use separate descriptors so Swift's predicate macro never has to
+    /// type-check the combined fallback. The legacy query runs only when
+    /// stable rows have not filled the requested limit, so the total number
+    /// of returned rows remains bounded by `limit`.
     private static func recentCompletedSessions(
         for program: Program,
         phase: Int,
-        limit: Int,
+        limit: Int?,
         context: ModelContext
     ) throws -> [WorkoutSession] {
         let stableProgramID = program.id
         let legacyProgramName = program.name
         let cycleNumber = program.cycleNumber
-        guard limit > 0 else { return [] }
+        if let limit, limit <= 0 { return [] }
 
         let identifiedPredicate = #Predicate<WorkoutSession> { session in
             session.isCompleted
@@ -41,9 +42,9 @@ enum RecoveryBridgeService {
             predicate: identifiedPredicate,
             sortBy: newestFirst
         )
-        identifiedDescriptor.fetchLimit = limit
+        if let limit { identifiedDescriptor.fetchLimit = limit }
         let identified = try context.fetch(identifiedDescriptor)
-        guard identified.count < limit else { return identified }
+        if let limit, identified.count >= limit { return identified }
 
         let legacyPredicate = #Predicate<WorkoutSession> { session in
             session.isCompleted
@@ -56,7 +57,7 @@ enum RecoveryBridgeService {
             predicate: legacyPredicate,
             sortBy: newestFirst
         )
-        legacyDescriptor.fetchLimit = limit - identified.count
+        if let limit { legacyDescriptor.fetchLimit = limit - identified.count }
         let legacy = try context.fetch(legacyDescriptor)
         return (identified + legacy)
             .sorted { $0.date > $1.date }
@@ -74,6 +75,25 @@ enum RecoveryBridgeService {
             limit: Swift.max(ProgramProgression.recoverySessionLimit, selectedExposureCount),
             context: context
         )
+    }
+
+    /// Whether the current rotation of this cycle has banked program work. A
+    /// day-list edit keeps the schedule pointer on its day only while it has
+    /// (`ProgramProgression.editedNextDayOrder`). "Banked" means what program
+    /// advancement gates on: a completed scheduled instruction, outside an
+    /// active-recovery interval (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Every row
+    /// of the rotation is searched, so newer off-program or empty sessions
+    /// cannot crowd out an older real one. Mirrors web settings.js
+    /// `rotationHasBankedWork`.
+    static func rotationHasBankedWork(for program: Program, context: ModelContext) throws -> Bool {
+        let intervals = try context.fetch(FetchDescriptor<TrainingInterval>()).map(\.snapshot)
+        return try recentCompletedSessions(
+            for: program, phase: program.currentWeek, limit: nil, context: context
+        ).contains { session in
+            !TrainingIntervals.isOffProgramTime(
+                session.date.timeIntervalSince1970 * 1000, intervals: intervals
+            ) && session.hasCompletedProgramInstruction
+        }
     }
 
     private static func lastHardPhaseCompletion(

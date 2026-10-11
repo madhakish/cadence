@@ -904,6 +904,7 @@ struct ProgramEditorView: View {
     /// Surfaces a refused switch (an open session from another program)
     /// instead of letting the toggle silently snap back.
     @State private var activationError: String?
+    @State private var confirmDelete = false
     @Query private var allPrograms: [Program]
     @Query private var settingsList: [AppSettings]
     @Query private var exercises: [Exercise]
@@ -1147,6 +1148,7 @@ struct ProgramEditorView: View {
                             Text(day.name).tag(day.order)
                         }
                     }
+                    .accessibilityIdentifier("next-day-picker")
                 }
             } header: {
                 Text("Where you are")
@@ -1216,12 +1218,21 @@ struct ProgramEditorView: View {
                     Label("Duplicate program", systemImage: "square.on.square")
                 }
                 Button(role: .destructive) {
-                    context.delete(program)
-                    if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
+                    confirmDelete = true
                 } label: {
                     Text("Delete program")
                 }
             }
+        }
+        // Deleting a plan is confirmed, never one tap (mirrors the web
+        // editor's action sheet). Banked sessions keep their history.
+        .confirmationDialog("Delete this program?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                context.delete(program)
+                if PersistenceErrorCenter.shared.save(context, operation: "Deleting the program") { dismiss() }
+            }
+        } message: {
+            Text("Sessions and history are unchanged.")
         }
         .alert("Can't update program", isPresented: Binding(
             get: { activationError != nil }, set: { if !$0 { activationError = nil } }
@@ -1287,7 +1298,7 @@ struct ProgramEditorView: View {
         let removed = Set(offsets.map { ordered[$0].id })
         for i in offsets { context.delete(ordered[i]) }
         for (i, day) in program.orderedDays.enumerated() { day.order = i }
-        program.nextDayIndex = pointed.flatMap { removed.contains($0.id) ? nil : $0.order } ?? 0
+        repointSchedule(at: pointed.flatMap { removed.contains($0.id) ? nil : $0 })
         PersistenceErrorCenter.shared.save(context, operation: "Deleting the program day")
     }
 
@@ -1298,8 +1309,20 @@ struct ProgramEditorView: View {
         var ordered = program.orderedDays
         ordered.move(fromOffsets: offsets, toOffset: destination)
         for (index, day) in ordered.enumerated() { day.order = index }
-        program.nextDayIndex = pointed?.order ?? min(program.nextDayIndex, max(ordered.count - 1, 0))
+        repointSchedule(at: pointed)
         PersistenceErrorCenter.shared.save(context, operation: "Reordering program days")
+    }
+
+    /// The pointer follows its day only while this rotation has banked work;
+    /// a rotation with nothing banked starts at the first day, so a program
+    /// restructured before its first workout never reports day 1 as done. A
+    /// failed fetch keeps the pointer-follow rule rather than guessing.
+    private func repointSchedule(at pointed: ProgramDay?) {
+        let banked = (try? RecoveryBridgeService.rotationHasBankedWork(for: program, context: context)) ?? true
+        program.nextDayIndex = ProgramProgression.editedNextDayOrder(
+            dayOrders: program.orderedDays.map(\.order),
+            pointedDayOrder: pointed?.order, rotationHasBankedWork: banked
+        )
     }
 
     private func cloneProgram() {

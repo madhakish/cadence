@@ -280,14 +280,7 @@ enum SessionCompletion {
     }
 
     private static func hasCompletedProgramInstruction(in session: WorkoutSession) -> Bool {
-        session.exercises.contains { entry in
-            guard entry.programSlotID != nil || entry.programRole != nil else { return false }
-            let candidates = entry.orderedSets.filter {
-                !$0.isWarmup && $0.prescriptionBlock.countsAsProgramInstruction
-            }
-            return candidates.prefix(entry.plannedSets ?? candidates.count)
-                .contains { $0.status == .completed }
-        }
+        session.hasCompletedProgramInstruction
     }
 
     private static func completedProgramInstructionsMatch(

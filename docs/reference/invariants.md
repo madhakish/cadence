@@ -342,6 +342,17 @@ to; renumbering would strand those sessions and misattribute their work.
 `nextDayIndex` names a day's **order**, so it is validated as a member of the
 day orders — never range-checked against the day count.
 
+### INV-UNBANKED-ROTATION-STARTS-FIRST
+*platforms: core, native*
+
+Editing the day list (a move or a delete) keeps `nextDayIndex` on the same day
+only while the current cycle's rotation has banked a session. A rotation with
+nothing banked points at its first remaining day afterwards.
+
+> The pointer-follows-its-day rule is right mid-rotation, but on a program
+> restructured before its first workout it carried the pointer past day 1,
+> and Home then reported a day as done that was never trained.
+
 ### INV-SLOT-ID-IS-UNIQUE
 *platforms: core*
 

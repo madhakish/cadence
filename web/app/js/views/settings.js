@@ -11,11 +11,11 @@ import { muscleProfile, figureSVG, muscleLegend } from "../anatomy.js";
 import { historySetPresentationForTest } from "./history.js";
 import { PLATE_THEME_IDS, PLATE_THEME_LABELS, plateThemeSet, plateThemePrimaryUnit, plateThemeInventory } from "../plate-theme.js";
 import { barbellSVG, barbellStage, loadoutSummary, mixedEquipmentNote, stationPlates } from "../barbell.js";
-import { Sessions } from "../db.js";
+import { Sessions, sessionBelongsToProgram } from "../db.js";
 import { equipmentContext } from "../equipment-context.js";
 // Module cycle with session.js is safe: these are hoisted function exports
 // used only at runtime (session.js likewise imports exerciseDetail from here).
-import { manualNextDayOrders, planningBase, previewProgramPlan, volumeFallbackSets } from "./session.js";
+import { manualNextDayOrders, planningBase, previewProgramPlan, sessionHasCompletedProgramInstruction, volumeFallbackSets } from "./session.js";
 import {tfhEditor,tfhPlanRow} from "./tfh.js";
 
 // Move a program to a rotation. Placing at/after Peak (rotation 3) with no banked
@@ -418,7 +418,32 @@ function pickExerciseSheet(onPick, equipmentPolicy = "any") {
   });
 }
 
-function removeDay(p, day) {
+// Whether the current rotation of this cycle has banked program work.
+// "Banked" means what program advancement gates on: a completed scheduled
+// instruction, outside an active-recovery interval
+// (INV-RECOVERY-WORK-IS-OFF-PROGRAM). Every completed row is searched. Mirrors
+// native RecoveryBridgeService.rotationHasBankedWork.
+async function rotationHasBankedWork(p) {
+  const intervalSnaps = intervalSnapshots(await Intervals.all());
+  return (await Sessions.completed()).some((s) => sessionBelongsToProgram(s, p)
+    && s.programTag.cycleNumber === p.cycleNumber && s.programTag.week === p.currentWeek
+    && !C.isOffProgramTime(new Date(s.date).getTime(), intervalSnaps)
+    && sessionHasCompletedProgramInstruction(s));
+}
+
+// The pointer follows its day only while this rotation has banked work; a
+// rotation with nothing banked starts at the first day, so a program
+// restructured before its first workout never reports day 1 as done. The
+// banked state is read BEFORE the day list is touched, so the edit, the
+// pointer and the save run as one synchronous step: a second edit during
+// the lookup never sees renumbered days with the old pointer. Mirrors
+// ProgramEditorView.repointSchedule.
+function repointSchedule(p, pointed, banked) {
+  p.nextDayIndex = C.editedNextDayOrder(p.days.map((d) => d.order), pointed ? pointed.order : null, banked);
+}
+
+async function removeDay(p, day) {
+  const banked = await rotationHasBankedWork(p);
   // nextDayIndex addresses a day by its ORDER VALUE, not a list position.
   // Remember which day it points at before renumbering — clamping after a
   // renumber silently re-addresses the schedule on sparse-order programs
@@ -426,7 +451,15 @@ function removeDay(p, day) {
   const pointed = p.days.find((d) => d.order === p.nextDayIndex);
   p.days = p.days.filter((d) => d !== day);
   p.days.sort((a, b) => a.order - b.order).forEach((d, i) => { d.order = i; });
-  p.nextDayIndex = pointed && pointed !== day ? pointed.order : 0;
+  repointSchedule(p, pointed === day ? null : pointed, banked);
+}
+
+async function moveDay(p, day, delta) {
+  const banked = await rotationHasBankedWork(p);
+  const pointed = p.days.find((d) => d.order === p.nextDayIndex);
+  if (!moveSlot(p.days, day, delta)) return false;
+  repointSchedule(p, pointed, banked);
+  return true;
 }
 
 function orderedSlots(slots = []) {
@@ -700,10 +733,11 @@ export async function programEditor(p) {
                 ui.h("span", { class: "pill accent", text: C.DAY_TRAINING_INTENT_LABELS[day.trainingIntent || "general"] })),
               ui.h("span", { class: "sub", text: orderedSlots(day.lifts).map((l) => l.exerciseName).join(" + ") || "empty" })),
             // The schedule pointer follows ITS day through a renumbering
-            // move, never a clamped position (mirrors SettingsView.moveDays).
-            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, -1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { const pointed = p.days.find((d) => d.order === p.nextDayIndex); if (moveSlot(p.days, day, 1)) { if (pointed) p.nextDayIndex = pointed.order; await Programs.save(p); draw(); } } }),
-            ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { removeDay(p, day); await Programs.save(p); draw(); } })));
+            // move only while this rotation has banked work (moveDay,
+            // mirrors SettingsView.moveDays).
+            ui.h("button", { class: "btn sm ghost", text: "↑", ariaLabel: `Move ${day.name} earlier`, onClick: async () => { if (await moveDay(p, day, -1)) { await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost", text: "↓", ariaLabel: `Move ${day.name} later`, onClick: async () => { if (await moveDay(p, day, 1)) { await Programs.save(p); draw(); } } }),
+            ui.h("button", { class: "btn sm ghost danger", text: "Delete", onClick: async () => { await removeDay(p, day); await Programs.save(p); draw(); } })));
         }
         body.append(list);
         body.append(ui.h("button", { class: "btn ghost wide", text: "+ Add day", onClick: async () => {
