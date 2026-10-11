@@ -145,12 +145,10 @@ Notes:
   installable artifacts; see the [engineering guide](docs/AGENT-GUIDE.md) for
   safety contracts and [TestFlight guide](docs/TESTFLIGHT.md) for distribution
   and recovery.
-- HealthKit is optional and in two separately granted halves, both off by
-  default: writing (workouts + bodyweight), and reading walking/running/cycling
-  distance to show beside a logged session. Reading never overwrites a log —
-  it shows both numbers and you choose. A third, separately opted-in step read
-  shows Health-measured steps in timed ruck bank summaries only; no step writes
-  or health readings in backups.
+- HealthKit has three independent app opt-ins, all off by default: writing
+  workouts/bodyweight, reading Health comparisons, and reading measured steps
+  for timed ruck bank summaries. Reading never overwrites a log — it shows both
+  numbers and you choose. No step writes or Health readings in backups.
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
 
 ## Contributing
