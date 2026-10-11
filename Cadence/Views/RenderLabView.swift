@@ -100,40 +100,72 @@ extension RenderLab {
 }
 
 extension RenderLab {
-    /// One hero scene through different camera/shadow pipelines, to isolate
-    /// which setting suppresses the environment backdrop and reflections.
+    /// Bisects why the studio scene drops its environment while the probe
+    /// scene shows it: camera clip planes, camera settings, scene content.
     static func pipelineVariants() async -> [(String, UIImage)] {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 guard let device = MTLCreateSystemDefaultDevice() else { return continuation.resume(returning: []) }
                 let loadout = Loadout(bar: .bar45lb, perSide: [PlateCount(plate: Plate(value: 45, unit: .lb), count: 1)])
-                var out: [(String, UIImage)] = []
-                let variants: [(String, Bool, SCNShadowMode?, Bool)] = [
-                    ("13-var-hdr-deferred-post", true, .deferred, true),
-                    ("14-var-hdr-forward-post", true, .forward, true),
-                    ("15-var-hdr-forward-nopost", true, .forward, false),
-                    ("16-var-ldr-forward", false, .forward, false),
-                    ("17-var-ldr-noshadow", false, nil, false),
-                ]
-                for (name, hdr, shadow, post) in variants {
-                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
-                    studio.frame(.hero, aspect: 1170.0 / 657.0)
-                    if let camera = studio.cameraNode.camera {
-                        camera.wantsHDR = hdr
-                        camera.wantsDepthOfField = post
-                        camera.screenSpaceAmbientOcclusionIntensity = post ? 1.1 : 0
-                        camera.bloomIntensity = post ? 0.18 : 0
-                        camera.vignettingIntensity = post ? 0.35 : 0
-                    }
-                    studio.scene.rootNode.enumerateHierarchy { node, _ in
-                        guard let light = node.light, light.type == .directional else { return }
-                        if let shadow { light.shadowMode = shadow } else { light.castsShadow = false }
-                    }
+                let size = CGSize(width: 585, height: 328)
+                func snap(_ scene: SCNScene, _ pov: SCNNode) -> UIImage {
                     let renderer = SCNRenderer(device: device, options: nil)
-                    renderer.scene = studio.scene
-                    renderer.pointOfView = studio.cameraNode
-                    out.append((name, renderer.snapshot(atTime: 0, with: CGSize(width: 1170, height: 657),
-                                                        antialiasingMode: .multisampling4X)))
+                    renderer.scene = scene
+                    renderer.pointOfView = pov
+                    return renderer.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+                }
+                func mirrorBall(radius: CGFloat) -> SCNNode {
+                    let ball = SCNSphere(radius: radius)
+                    ball.segmentCount = 96
+                    ball.firstMaterial = StudioMaterials.pbr(UIColor(white: 0.95, alpha: 1), metalness: 1, roughness: 0.02)
+                    return SCNNode(geometry: ball)
+                }
+                var out: [(String, UIImage)] = []
+                // 13: plain probe scene, studio clip planes.
+                do {
+                    let scene = SCNScene()
+                    scene.background.contents = StudioTextures.environment
+                    scene.lightingEnvironment.contents = StudioTextures.environment
+                    scene.rootNode.addChildNode(mirrorBall(radius: 220))
+                    let cam = SCNNode(); cam.camera = SCNCamera()
+                    cam.camera?.zNear = 40; cam.camera?.zFar = 40000; cam.camera?.fieldOfView = 70
+                    cam.position = SCNVector3(0, 0, 1200)
+                    scene.rootNode.addChildNode(cam)
+                    out.append(("13-bisect-probe-near40", snap(scene, cam)))
+                }
+                // 14: studio scene, studio camera, zNear 1.
+                do {
+                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
+                    studio.frame(.hero, aspect: 585.0 / 328.0)
+                    studio.cameraNode.camera?.zNear = 1
+                    out.append(("14-bisect-studio-near1", snap(studio.scene, studio.cameraNode)))
+                }
+                // 15: studio scene, a default camera at the hero position.
+                do {
+                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
+                    studio.frame(.hero, aspect: 585.0 / 328.0)
+                    let cam = SCNNode(); cam.camera = SCNCamera()
+                    cam.camera?.fieldOfView = 44; cam.camera?.zFar = 50000; cam.camera?.zNear = 10
+                    cam.transform = studio.cameraNode.transform
+                    studio.scene.rootNode.addChildNode(cam)
+                    out.append(("15-bisect-studio-defaultcam", snap(studio.scene, cam)))
+                }
+                // 16: studio scene plus a mirror ball beside the bar.
+                do {
+                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
+                    studio.frame(.hero, aspect: 585.0 / 328.0)
+                    let ball = mirrorBall(radius: 160)
+                    ball.position = SCNVector3(-300, 300, 400)
+                    studio.scene.rootNode.addChildNode(ball)
+                    out.append(("16-bisect-studio-ball", snap(studio.scene, studio.cameraNode)))
+                }
+                // 17: studio scene with environment reassigned just before rendering.
+                do {
+                    let studio = BarbellStudio(loadout: loadout, style: .bumper, theme: .lbColourBumpers)
+                    studio.frame(.hero, aspect: 585.0 / 328.0)
+                    studio.scene.background.contents = StudioTextures.environment
+                    studio.scene.lightingEnvironment.contents = StudioTextures.environment
+                    out.append(("17-bisect-studio-reassigned", snap(studio.scene, studio.cameraNode)))
                 }
                 continuation.resume(returning: out)
             }
