@@ -16,6 +16,8 @@ struct SessionSummary {
     let coachingNotes: [String]
     var healthExport: Task<HealthWorkoutSaveResult, Never>? = nil
     var healthExportNotice: String? = nil
+    var ruckStepTiming: HealthWorkoutTiming.Export? = nil
+    var ruckStepTimingUnavailable = false
 }
 
 enum SessionCompletion {
@@ -257,8 +259,21 @@ enum SessionCompletion {
             // note actually knows. Mirrored in web session.js.
             coachingNotes.append("Next: \(nextDay.name) · \(ProgramEngine.rotationLabel(rotation: program.currentWeek)).")
         }
+        let completedKinds = session.exercises.compactMap { entry -> CompletedExerciseKind? in
+            guard !entry.workingSets.isEmpty else { return nil }
+            // Missing exercise metadata must not turn mixed work into a ruck.
+            return CompletedExerciseKind(name: entry.exercise?.name ?? "",
+                                         type: entry.exercise?.typeRaw ?? "",
+                                         category: entry.exercise?.categoryRaw ?? "")
+        }
+        let ruckOnly = HealthRuckSteps.isRuckOnly(completedKinds)
+        let ruckTiming = exportTiming.flatMap {
+            Calendar.current.isDate($0.start, inSameDayAs: session.date) ? $0 : nil
+        }
         return SessionSummary(lines: lines, milestones: allEvents, coachingNotes: coachingNotes,
-                              healthExport: healthExport, healthExportNotice: healthExportNotice)
+                              healthExport: healthExport, healthExportNotice: healthExportNotice,
+                              ruckStepTiming: ruckOnly ? ruckTiming : nil,
+                              ruckStepTimingUnavailable: ruckOnly && ruckTiming == nil)
     }
 
     private static func healthKitEnabled(_ context: ModelContext) -> Bool {

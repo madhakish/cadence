@@ -263,6 +263,20 @@ The workout builder receives the measured pause/resume events and its elapsed
 time is checked before saving. Saving the local session and saving its Health
 mirror are distinct outcomes. An uncertain Health save is not retried blindly.
 
+### INV-HEALTH-RUCK-STEPS-ARE-MEASURED
+*platforms: native*
+
+- **Rule:** Ruck steps require a separate device-local read opt-in and reliable
+  captured timing. Only completed conditioning work named Ruck qualifies, with no mixed work. Health
+  cumulative statistics provide the reading; no raw-source summation,
+  distance conversion or step writes. Whole-window results are labeled as
+  including pauses and overlapping boundary samples. Missing/zero data is not
+  a measured zero or proof of denial. Readings are transient and never enter
+  stored training data, backups, logs or progression.
+- **Evidence:** `HealthRuckStepsTests` covers eligibility, invalid/no readings,
+  and the pause-aware window. Native HealthKit permission, source merging,
+  refresh, dismissal and visual behavior still require integration acceptance.
+
 ### INV-HEALTH-IS-A-SECOND-OPINION
 *platforms: core*
 

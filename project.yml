@@ -54,7 +54,8 @@ targets:
         NSHealthShareUsageDescription: >-
           Optionally reads walking, running, and cycling distance, workout
           energy, bodyweight, body fat percentage, heart rate variability,
-          resting heart rate, and sleep, so Cadence can show them beside what
+          resting heart rate, sleep, and separately opted-in measured ruck steps,
+          so Cadence can show them beside what
           you logged. Off by default and separate from writing. Cadence never
           changes your log on its own — it shows both numbers and you decide,
           and it ignores the data it wrote to Health itself.

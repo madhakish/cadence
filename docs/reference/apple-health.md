@@ -4,7 +4,8 @@
 
 Cadence exchanges data with Apple Health in two directions. They are
 **separate permissions**, both **off by default**, and granting one does not
-grant the other. Turn either on in **Settings → HealthKit**.
+grant the other. Settings also offers a **separate, off-by-default Steps read
+opt-in** for timed ruck summaries. Turn these on under **Settings → Rest & training behavior → Profile & Health**.
 
 ## What Cadence writes
 
@@ -67,10 +68,38 @@ than silence.
 
 | | Where it appears | What it does |
 |---|---|---|
+| Measured steps (separate opt-in) | Timed ruck bank summary | Health statistics for the captured ruck window; display only |
 | Conditioning distance | History → session detail | Compared against the session's logged distance |
 | Workout energy | History → session detail | Shown for the session window |
 | Bodyweight and body fat | Body | Offered as a weigh-in to log, on an explicit tap |
 | HRV, resting heart rate, sleep | Body | Displayed only |
+
+### Measured steps after a ruck
+
+Enable **Read measured ruck steps** in Settings or the bank summary. This asks
+only for step-read access, independently of workout writes and the existing
+Health comparison. A completed permission prompt does not prove access was
+granted: Health keeps read-denial status private.
+
+The summary uses HealthKit's cumulative statistics across sources, not a raw
+sum of phone and watch samples. It queries Health records overlapping the
+actual captured start/end window. The displayed window includes interior
+pauses and may include samples straddling a boundary; it is **not an exact
+active-only step count**. Banking while paused ends the window at that pause.
+Cadence never converts miles to steps and never writes step samples.
+
+Only sessions whose completed working exercises are all conditioning exercises
+named **Ruck** qualify (case and surrounding whitespace are ignored). Mixed
+sessions and exercises with other names are deferred rather than claiming all
+session steps belong to a ruck. Missing reliable timing is
+explained; a backdated or legacy session does not get a guessed window.
+
+The session saves before any step lookup and Done remains available. No data,
+zero, denied access and delayed sensor sync do not become measured zeros. Use
+**Refresh steps** while the summary is open to retry a read. Turning the
+separate toggle off removes the reading. The quantity is transient: no history,
+backup, export, log, analytics or server receives it. Closing the summary ends
+this display; persistent history and retry queues are outside this slice.
 
 ### Reading suggests; it never merges
 
@@ -114,8 +143,8 @@ report ten hours to someone who slept five.
 
 ## Turning it off
 
-Revoking either permission in the iOS Health app stops the corresponding half
-immediately. Data already written to Health stays there and is managed in
-Health, not in Cadence. The read opt-in is stored on the device and is
+Revoking a permission in the iOS Health app stops further access to that type.
+Turning off a Cadence read toggle hides its display. Data already written to Health stays there and is managed in
+Health, not in Cadence. The read opt-ins are stored on the device and are
 deliberately **not** included in a backup — restoring on a new phone would
 otherwise imply a Health grant that phone never gave.
