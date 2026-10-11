@@ -1,5 +1,11 @@
 # Equipment imagery inventory — 1 October 2026
 
+> **iOS update (#316, October 2026).** iOS no longer ships the sprite family
+> or the two face-detail textures. Every native bar view now renders the
+> SceneKit studio, whose assets are listed in
+> [STUDIO-RENDERER.md](STUDIO-RENDERER.md). The tables below describe the
+> web client, which keeps them.
+
 This records the equipment artwork already shipped on main at `20058600` and
 consumed by the #177 candidate. PR #271 also adds the three original category
 cutouts documented in [EQUIPMENT-CONTEXT.md](EQUIPMENT-CONTEXT.md). Screenshot
@@ -43,7 +49,7 @@ extends this map without repeating the gorilla or placing images behind text.
 
 ## Size, availability and layout
 
-The 158 web PNGs total **9,594,989 bytes**; every native twin is byte-identical.
+The 158 web PNGs total **9,594,989 bytes**. Before #316, each had a byte-identical native twin.
 The face details are 768 × 768 RGBA. Sprite shapes share compact, fixed-size
 canvases and placement metadata; the largest sprite is listed below. All files
 ship locally and are precached for offline use. The inspector retains fixed
@@ -52,9 +58,9 @@ retain the same solution. `plate-sprites.test.mjs`, renderer/inspection tests,
 and browser offline acceptance check pairing, assets and behavior. These
 checks do not substitute for inspecting the actual captures.
 
-Web paths below map to native
-`Cadence/Assets.xcassets/PlateSprites/<file-stem>.imageset/<file>` except the two
-face details, which map to `PlateBumperFaceDetail` and `PlateSteelFaceDetail`.
+Before #316, web paths below mapped to native
+`Cadence/Assets.xcassets/PlateSprites/<file-stem>.imageset/<file>`, except the two
+face details, which mapped to `PlateBumperFaceDetail` and `PlateSteelFaceDetail`.
 
 | Web file | Bytes | Pixels | SHA-256 | Source |
 | --- | ---: | --- | --- | --- |

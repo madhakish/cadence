@@ -1,95 +1,24 @@
-// The rendered loaded-bar sprites ship to both clients from one install step:
-// every web sprite has a byte-identical twin in the asset catalog, the two
-// generated placement manifests name the same sprites, the precache lists
-// them, and every plate shape both geometry tables know has a sprite at each
-// scene angle. Run: node tests/plate-sprites.test.mjs
+// The rendered loaded-bar sprites ship to the web client from one install
+// step: the generated placement manifest names every sprite, the precache
+// lists them, and every plate shape the geometry tables know has a sprite at
+// each scene angle. iOS renders the SceneKit studio instead (#316) and ships
+// no sprites. Run: node tests/plate-sprites.test.mjs
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { PLATE_SPRITES } from "../app/js/plate-sprites.js";
 import { plateGeometry } from "../app/js/barbell-scene.js";
 
 const root = new URL("../../", import.meta.url);
 const webDir = new URL("web/app/assets/plates/", root);
-const iosDir = new URL("Cadence/Assets.xcassets/PlateSprites/", root);
-const sha = (buffer) => createHash("sha256").update(buffer).digest("hex");
-const toNumber = (value) => Number.parseFloat(value);
-const parseNativeManifest = (source) => {
-  const unitMatch = source.match(/static let unit: Double = ([0-9.]+)/);
-  assert.ok(unitMatch, "native manifest declares scene unit");
-  const plates = Object.fromEntries([...source.matchAll(/^ {8}"([^"]+)": "([^"]+)",$/gm)].map(([, key, value]) => [key, value]));
-  const sprites = {};
-  const barEntry = /"([^"]+)": \.bar\(kind: "([^"]+)", angle: "([^"]+)", size: CGSize\(width: ([0-9.]+), height: ([0-9.]+)\), axisStart: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), axisEnd: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), spanUnits: ([0-9.]+)\),/g;
-  for (const [, key, kind, angle, width, height, axisStartX, axisStartY, axisEndX, axisEndY, spanUnits] of source.matchAll(barEntry)) {
-    sprites[key] = {
-      kind,
-      angle,
-      size: [toNumber(width), toNumber(height)],
-      axisStart: [toNumber(axisStartX), toNumber(axisStartY)],
-      axisEnd: [toNumber(axisEndX), toNumber(axisEndY)],
-      spanUnits: toNumber(spanUnits),
-    };
-  }
-  const plateEntry = /"([^"]+)": \.plate\(family: "([^"]+)", shape: "([^"]+)", angle: "([^"]+)", size: CGSize\(width: ([0-9.]+), height: ([0-9.]+)\), faceCenter: CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\), faceRadius: ([0-9.]+), hubRadius: ([0-9.]+)\),/g;
-  for (const [, key, family, shape, angle, width, height, faceCenterX, faceCenterY, faceRadius, hubRadius] of source.matchAll(plateEntry)) {
-    sprites[key] = {
-      family,
-      shape,
-      angle,
-      size: [toNumber(width), toNumber(height)],
-      faceCenter: [toNumber(faceCenterX), toNumber(faceCenterY)],
-      faceRadius: toNumber(faceRadius),
-      hubRadius: toNumber(hubRadius),
-    };
-  }
-  const shapeEntry = /Shape\(family: "([^"]+)", diameter: ([0-9.]+), thickness: ([0-9.]+), key: "([^"]+)"\),/g;
-  const shapes = [...source.matchAll(shapeEntry)].map(([, family, diameter, thickness, key]) => ({ family, diameter: toNumber(diameter), thickness: toNumber(thickness), key }));
-  return { unit: toNumber(unitMatch[1]), plates, shapes, sprites };
-};
-
 const files = readdirSync(webDir).filter((f) => f.endsWith(".png")).sort();
-const faceDetails = { "bumper-face-detail.png": "PlateBumperFaceDetail", "steel-face-detail.png": "PlateSteelFaceDetail" };
+const faceDetails = { "bumper-face-detail.png": true, "steel-face-detail.png": true };
 assert.ok(files.length >= 16, "the sprite family is installed");
-const swift = readFileSync(new URL("Cadence/Views/PlateSprites.swift", root), "utf8");
-const native = parseNativeManifest(swift);
 for (const file of files) {
-  const name = file.replace(/\.png$/, "");
-  const faceAsset = faceDetails[file];
-  const twin = faceAsset ? new URL(`Cadence/Assets.xcassets/${faceAsset}.imageset/${file}`, root)
-    : new URL(`${name}.imageset/${file}`, iosDir);
-  assert.ok(existsSync(twin), `${file} has an asset-catalog twin`);
-  assert.equal(sha(readFileSync(twin)), sha(readFileSync(new URL(file, webDir))), `${file} is byte-identical on both clients`);
-  if (!faceAsset) assert.ok(PLATE_SPRITES.sprites[name], `${file} is in the web manifest`);
+  if (!faceDetails[file]) assert.ok(PLATE_SPRITES.sprites[file.replace(/\.png$/, "")], `${file} is in the web manifest`);
 }
 for (const file of Object.keys(faceDetails)) assert.ok(files.includes(file), `${file} photographic detail is installed`);
-assert.deepEqual(Object.keys(native.sprites).sort(), Object.keys(PLATE_SPRITES.sprites).sort(), "native/web manifests share the exact sprite key set");
-assert.deepEqual(native.plates, PLATE_SPRITES.plates, "native/web manifests share plate-to-shape mapping");
-assert.equal(native.unit, PLATE_SPRITES.unit, "both manifests share the scene unit");
-assert.deepEqual(native.shapes, PLATE_SPRITES.shapes, "native/web manifests share the shape list");
-for (const [key, meta] of Object.entries(PLATE_SPRITES.sprites)) {
-  const nativeMeta = native.sprites[key];
-  assert.ok(nativeMeta, `${key} is in the native manifest`);
-  if (meta.kind) {
-    assert.deepEqual(nativeMeta, {
-      kind: meta.kind,
-      angle: meta.angle,
-      size: meta.size,
-      axisStart: meta.axisStart,
-      axisEnd: meta.axisEnd,
-      spanUnits: meta.spanUnits,
-    }, `${key} placement metadata matches native`);
-  } else {
-    assert.deepEqual(nativeMeta, {
-      family: meta.family,
-      shape: meta.shape,
-      angle: meta.angle,
-      size: meta.size,
-      faceCenter: meta.faceCenter,
-      faceRadius: meta.faceRadius,
-      hubRadius: meta.hubRadius,
-    }, `${key} placement metadata matches native`);
-  }
-}
+assert.ok(!existsSync(new URL("Cadence/Assets.xcassets/PlateSprites", root)), "iOS ships no sprite family");
+assert.ok(!existsSync(new URL("Cadence/Views/PlateSprites.swift", root)), "iOS has no sprite manifest");
 const worker = readFileSync(new URL("web/app/sw.js", root), "utf8");
 for (const file of files) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} is precached`);
 
@@ -161,4 +90,4 @@ for (const [key, shape] of Object.entries(PLATE_SPRITES.plates)) assert.ok(PLATE
 // Byte budget for the rendered family (the face-detail textures are separate).
 const spriteBytes = files.filter((f) => /^(plate|bar)-/.test(f)).reduce((sum, f) => sum + readFileSync(new URL(f, webDir)).length, 0);
 assert.ok(spriteBytes <= 9_000_000, `sprite PNGs total ${spriteBytes} bytes, within 9 MB`);
-console.log(`plate sprites: ${files.length} sprites, byte-identical on both clients, manifests aligned`);
+console.log(`plate sprites: ${files.length} web sprites, manifest aligned`);
