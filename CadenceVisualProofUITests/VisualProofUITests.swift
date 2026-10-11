@@ -891,8 +891,15 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
         XCTAssertTrue(deleteRow.isHittable)
         deleteRow.tap()
+        // The confirmation is an action sheet. Give its presentation a real
+        // budget and capture BEFORE asserting, so the artifact shows the
+        // state that was judged whether the sheet is there or not.
+        let sheet = app.sheets.firstMatch
         let cancel = app.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "deleting a program asks first")
+        let asked = sheet.waitForExistence(timeout: 5) || cancel.waitForExistence(timeout: 2)
+        capture("after-21-delete-program-asks-iphone")
+        XCTAssertTrue(asked, "deleting a program asks first")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "the confirmation offers Cancel")
         cancel.tap()
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 3), "cancel keeps the editor open")
         app.navigationBars.buttons["Program"].tap()
@@ -904,7 +911,7 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
         deleteRow.tap()
         let confirm = app.buttons["Delete"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         capture("after-21-delete-program-confirmation-iphone")
         confirm.tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5),
