@@ -649,19 +649,30 @@ final class VisualProofUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
-    /// An action inside a presented confirmation sheet, by label. When it is
-    /// missing, the sheet's element tree is attached so the artifact says
-    /// how the actions are exposed instead of only that one was not found.
+    /// An action inside a presented confirmation, by label. When it is
+    /// missing, both element trees go to the job log so the run says how
+    /// the actions are exposed instead of only that one was not found.
     private func sheetButton(_ sheet: XCUIElement, _ label: String) -> XCUIElement {
         let scoped = sheet.descendants(matching: .button)[label].firstMatch
         if scoped.waitForExistence(timeout: 3) { return scoped }
-        // Print both trees so the job log, not only the artifact, says how
-        // the actions are exposed, then fall back to any element carrying
-        // the label anywhere on screen.
         print("delete-sheet-tree-\(label.lowercased()):\n\(sheet.debugDescription)")
         print("delete-app-tree-\(label.lowercased()):\n\(app.debugDescription)")
         return app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+
+    /// Cancel a confirmation the way its presentation offers: an action
+    /// sheet has a Cancel button; a popover (the 430 pt capture) has only
+    /// its destructive action and dismisses on a tap outside its frame.
+    private func dismissConfirmation(_ sheet: XCUIElement) {
+        let cancel = sheet.descendants(matching: .button)["Cancel"].firstMatch
+        if cancel.waitForExistence(timeout: 2) { cancel.tap(); return }
+        let appWide = app.buttons["Cancel"].firstMatch
+        if appWide.exists { appWide.tap(); return }
+        let frame = sheet.frame
+        let window = app.windows.firstMatch.frame
+        let outside = CGVector(dx: window.midX, dy: min(window.maxY - 60, frame.maxY + 80))
+        app.coordinate(withNormalizedOffset: .zero).withOffset(outside).tap()
     }
 
     /// Scroll until `element` is realized and inside the window. Lazy Form
@@ -919,11 +930,9 @@ final class VisualProofUITests: XCTestCase {
         let asked = sheet.waitForExistence(timeout: 5)
         capture("after-21-delete-program-asks-iphone")
         XCTAssertTrue(asked, "deleting a program asks first")
-        // The sheet's actions are its own descendants; an app-wide button
-        // query missed Cancel on 430 pt while the sheet was on screen.
-        let cancel = sheetButton(sheet, "Cancel")
-        XCTAssertTrue(cancel.exists, "the confirmation offers Cancel")
-        cancel.tap()
+        XCTAssertTrue(sheetButton(sheet, "Delete").exists, "the confirmation offers Delete")
+        dismissConfirmation(sheet)
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 3), "cancelling dismisses the confirmation")
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 3), "cancel keeps the editor open")
         app.navigationBars.buttons["Program"].tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
