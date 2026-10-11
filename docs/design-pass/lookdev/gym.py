@@ -19,6 +19,10 @@ FT = 0.3048
 PLAT = 8 * FT                  # 2.438 m square
 CENTRE_W = 4 * FT              # oak centre, along the bar axis
 LAYER = 0.019                  # 3/4" plywood / stall mat
+# The existing Vitruvian artwork, used byte-for-byte as an engraving mask.
+LOGO = os.environ.get("LOGO", os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../Cadence/Assets.xcassets/VitruvianFront.imageset/vitruvian-front.jpeg")
+LOGO_SIZE = 0.95               # metres across, centred on the oak
+LOGO_Y = 0.0
 
 
 # ---------------------------------------------------------------- node helpers
@@ -161,7 +165,7 @@ def mat_chrome_used(name="chrome", tint=(0.93, 0.94, 0.95), rough=0.05):
     S.set_in(b, "Metallic", 1.0)
     tc, _ = obj_coords(n)
     sm = n.noise(22.0, 3.0, 0.6, tc.outputs["Object"])
-    n.link(n.op("ADD", rough, n.op("MULTIPLY", n.smooth(sm.outputs["Fac"], 0.5, 0.8), 0.13)), b.inputs["Roughness"])
+    n.link(n.op("ADD", rough, n.op("MULTIPLY", n.smooth(sm.outputs["Fac"], 0.55, 0.8), 0.04)), b.inputs["Roughness"])
     return m
 
 
@@ -198,7 +202,7 @@ def mat_shaft_chalked():
     n.link(col, b.inputs["Base Color"])
     metal = n.op("SUBTRACT", 1.0, chalkmask)
     n.link(metal, b.inputs["Metallic"])
-    n.link(n.op("ADD", 0.14, n.op("ADD", n.op("MULTIPLY", zone, 0.16), n.op("MULTIPLY", chalkmask, 0.6))), b.inputs["Roughness"])
+    n.link(n.op("ADD", 0.19, n.op("ADD", n.op("MULTIPLY", zone, 0.11), n.op("MULTIPLY", chalkmask, 0.5))), b.inputs["Roughness"])
     return m
 
 
@@ -208,7 +212,7 @@ def mat_oak():
     m, n, b = base("oak")
     tc, sep = obj_coords(n)
     mp = n.nt.nodes.new("ShaderNodeMapping")
-    mp.inputs["Scale"].default_value = (5.5, 0.35, 1.0)
+    mp.inputs["Scale"].default_value = (7.0, 0.22, 1.0)
     n.link(tc.outputs["Object"], mp.inputs["Vector"])
     wave = n.nt.nodes.new("ShaderNodeTexWave")
     wave.wave_type = "BANDS"
@@ -221,19 +225,42 @@ def mat_oak():
     n.link(mp.outputs["Vector"], wave.inputs["Vector"])
     fine = n.noise(260.0, 3.0, 0.6, mp.outputs["Vector"])
     g = n.op("ADD", n.op("MULTIPLY", wave.outputs["Fac"], 0.75), n.op("MULTIPLY", fine.outputs["Fac"], 0.25))
-    light, dark = (0.27, 0.155, 0.075), (0.12, 0.065, 0.03)
+    light, dark = (0.24, 0.15, 0.08), (0.10, 0.058, 0.03)
     col = n.mix(n.smooth(g, 0.25, 0.85), light, dark)
     big = n.noise(1.3, 3.0, 0.5, tc.outputs["Object"])
     col = n.mix(n.op("MULTIPLY", big.outputs["Fac"], 0.3), col, (0.2, 0.11, 0.045))
+    # Laser-branded logo: the exact Vitruvian artwork, burned and slightly
+    # recessed into the oak. Dark engraving lines burn; the cream ground does not.
+    ink = None
+    if LOGO and os.path.exists(LOGO):
+        uvmap = n.nt.nodes.new("ShaderNodeMapping")
+        uvmap.inputs["Location"].default_value = (0.5, 0.5 + LOGO_Y / LOGO_SIZE, 0.0)
+        uvmap.inputs["Scale"].default_value = (1 / LOGO_SIZE, 1 / LOGO_SIZE, 1.0)
+        n.link(tc.outputs["Object"], uvmap.inputs["Vector"])
+        tex = n.nt.nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(LOGO)
+        tex.image.colorspace_settings.name = "sRGB"
+        tex.extension = "CLIP"
+        tex.interpolation = "Cubic"
+        n.link(uvmap.outputs["Vector"], tex.inputs["Vector"])
+        bw = n.nt.nodes.new("ShaderNodeRGBToBW")
+        n.link(tex.outputs["Color"], bw.inputs["Color"])
+        ink = n.op("MULTIPLY", n.smooth(n.op("SUBTRACT", 1.0, bw.outputs["Val"]), 0.24, 0.62), tex.outputs["Alpha"])
+        col = n.mix(n.op("MULTIPLY", ink, 0.88), col, (0.028, 0.014, 0.007))
     chalk = n.noise(3.2, 6.0, 0.62, tc.outputs["Object"])
     footzone = n.op("SUBTRACT", 1.0, n.smooth(n.op("ABSOLUTE", sep.outputs["Y"]), 0.15, 0.75))
     cm = n.op("MULTIPLY", footzone, n.op("MULTIPLY", n.smooth(chalk.outputs["Fac"], 0.6, 0.8), 0.16))
     col = n.mix(cm, col, (0.62, 0.6, 0.57))
     n.link(col, b.inputs["Base Color"])
-    n.link(n.op("ADD", 0.34, n.op("MULTIPLY", cm, 0.5)), b.inputs["Roughness"])
-    S.set_in(b, "Coat Weight", 0.25)
+    rough = n.op("ADD", 0.46, n.op("MULTIPLY", cm, 0.4))
+    height = n.op("MULTIPLY", fine.outputs["Fac"], 0.1)
+    if ink is not None:
+        rough = n.op("ADD", rough, n.op("MULTIPLY", ink, 0.22))
+        height = n.op("SUBTRACT", height, ink)
+    n.link(rough, b.inputs["Roughness"])
+    S.set_in(b, "Coat Weight", 0.1)
     S.set_in(b, "Coat Roughness", 0.3)
-    bump_into(n, b, fine.outputs["Fac"], 0.08, 0.0003)
+    bump_into(n, b, height, 0.35, 0.0005)
     return m
 
 
@@ -247,10 +274,10 @@ def mat_stallmat():
     bump_into(n, b, peb.outputs["Distance"], 0.25, 0.0006)
     blot = n.noise(2.5, 6.0, 0.65, tc.outputs["Object"])
     cm = n.op("MULTIPLY", n.smooth(blot.outputs["Fac"], 0.62, 0.8), 0.12)
-    col = n.mix(cm, (0.008, 0.008, 0.009), (0.12, 0.12, 0.115))
+    col = n.mix(cm, (0.0045, 0.0045, 0.005), (0.09, 0.09, 0.088))
     n.link(col, b.inputs["Base Color"])
-    n.link(n.op("ADD", 0.78, n.op("MULTIPLY", cm, 0.3)), b.inputs["Roughness"])
-    S.set_in(b, "Specular IOR Level", 0.3)
+    n.link(n.op("ADD", 0.82, n.op("MULTIPLY", cm, 0.15)), b.inputs["Roughness"])
+    S.set_in(b, "Specular IOR Level", 0.22)
     return m
 
 
@@ -346,6 +373,8 @@ def platform(top_z, mats):
     box("floor", -12, 12, -12, 12, base_top - 2 * LAYER - 0.02, base_top - 2 * LAYER, mats["gymfloor"])
     fz = base_top - 2 * LAYER
     box("wall", -12, 12, 4.2, 4.4, fz, fz + 5, mats["wall"])
+    # A lit white ceiling: what real chrome mirrors between the light panels.
+    box("ceiling", -12, 12, -12, 12, fz + 3.6, fz + 3.7, mats["ceiling"])
     for x in (-0.62, 0.62):
         for y in (2.6, 3.65):
             box("upright", x - 0.038, x + 0.038, y - 0.038, y + 0.038, fz, fz + 2.3, mats["powder"])
@@ -403,6 +432,10 @@ def materials():
         R = S.BUMPER[w][0] / 2000.0
         m[f"rubber{w}"] = mat_rubber_worn(f"rubber{w}", c, R)
     m["oak"] = mat_oak()
+    cm, cn, cb = base("ceiling")
+    S.set_in(cb, "Base Color", (0.55, 0.55, 0.55, 1)); S.set_in(cb, "Roughness", 0.9)
+    S.set_in(cb, "Emission Color", (1, 1, 1, 1)); S.set_in(cb, "Emission Strength", 0.035)
+    m["ceiling"] = cm
     m["stallmat"] = mat_stallmat()
     m["plyedge"] = mat_plyedge()
     m["gymfloor"] = mat_gymfloor()
@@ -413,12 +446,85 @@ def materials():
     return m
 
 
+def mat_crumb(name):
+    """Recycled crumb rubber (hi-temp style): coarse grey granules, dead matte."""
+    m, n, b = base(name)
+    tc, _ = obj_coords(n)
+    v = n.nt.nodes.new("ShaderNodeTexVoronoi")
+    v.inputs["Scale"].default_value = 420.0
+    n.link(tc.outputs["Object"], v.inputs["Vector"])
+    g = n.nt.nodes.new("ShaderNodeSeparateColor")
+    n.link(v.outputs["Color"], g.inputs[0])
+    col = n.mix(n.smooth(g.outputs["Red"], 0.2, 0.9), (0.012, 0.012, 0.013), (0.07, 0.07, 0.072))
+    n.link(col, b.inputs["Base Color"])
+    S.set_in(b, "Roughness", 0.92)
+    bump_into(n, b, v.outputs["Distance"], 0.6, 0.0007)
+    return m
+
+
+def mat_machined():
+    """Raw turned steel: concentric tool marks, light oil."""
+    m = S.mat_brushed_hub("machined")
+    b = m.node_tree.nodes["Principled BSDF"]
+    S.set_in(b, "Base Color", (0.55, 0.56, 0.58, 1))
+    S.set_in(b, "Roughness", 0.3)
+    return m
+
+
+def calibrated_plate(colour_mat, ink, mats, R=0.225, T=0.027, name="cal"):
+    """IPF-style calibrated steel: painted face recessed inside a raised lip,
+    chrome hub collar, white numerals."""
+    ht = T / 2
+    lip, lipw = 0.0022, 0.012
+    hub = 0.052
+    prof = [(hub, -ht + 0.0004), (hub + 0.004, -ht + lip), (R - lipw - 0.004, -ht + lip), (R - lipw, -ht), (R - 0.0012, -ht), (R, -ht + 0.0012),
+            (R, ht - 0.0012), (R - 0.0012, ht), (R - lipw, ht), (R - lipw - 0.004, ht - lip), (hub + 0.004, ht - lip), (hub, ht - 0.0004)]
+    body = S.lathe(name, prof, segments=192, material=colour_mat)
+    hp = [(S.BORE, -ht - 0.001), (hub, -ht - 0.001), (hub, ht + 0.001), (S.BORE, ht + 0.001), (S.BORE, -ht - 0.001)]
+    S.lathe(name + "hub", hp, segments=128, material=mats["chrome"]).parent = body
+    for face in (-1, 1):
+        fx = face * (ht - lip + 0.00008)
+        me = S.arc_text("20", S.FONT_NUM, 0.085, 0.0002, radius=0.13, top=False, spacing=1.05)
+        S.place_on_face(me, body, fx, face, ink, name + "n")
+        me = S.arc_text("KG", S.FONT_BRAND, 0.022, 0.0002, radius=0.135, top=True, spacing=1.4)
+        S.place_on_face(me, body, fx, face, ink, name + "u")
+    return body
+
+
+def theme_lineup(mats, top):
+    """One 45 lb / 20 kg plate per finish, standing on the platform."""
+    plates = []
+    def with_mats(**over):
+        d = dict(mats); d.update(over); return d
+    black = mat_rubber_worn("blackbumper", (0.012, 0.012, 0.013), 0.225, rough=0.62)
+    fleck = mat_rubber_worn("fleck", (0.01, 0.01, 0.011), 0.225, flecks=True, rough=0.6)
+    crumb = mat_crumb("crumb")
+    moulded = S.mat_paint("moulded", (0.016, 0.016, 0.017), rough=0.45, coat=0.0)
+    # competition colour, black training, fleck, crumb (thick), calibrated, iron, machined
+    plates.append(S.bumper_plate(45, mats)[0])
+    plates.append(S.bumper_plate(45, with_mats(rubber45=black, ink=moulded))[0])
+    plates.append(S.bumper_plate(45, with_mats(rubber45=fleck))[0])
+    keep = S.BUMPER[45]; S.BUMPER[45] = (450, 86)
+    plates.append(S.bumper_plate(45, with_mats(rubber45=crumb, ink=mats["ink"]))[0])
+    S.BUMPER[45] = keep
+    red = S.mat_paint("ipfred", (0.30, 0.012, 0.014), rough=0.22, coat=0.7)
+    plates.append(calibrated_plate(red, mats["ink"], mats))
+    plates.append(S.iron_plate(45, with_mats(iron=S.mat_paint("blackiron", (0.006, 0.006, 0.0065), rough=0.4, coat=0.25, metallic=0.2, hammer=0.4)))[0])
+    plates.append(S.iron_plate(45, with_mats(iron=mat_machined()))[0])
+    x = -1.05
+    for i, body in enumerate(plates):
+        body.rotation_euler = (0, 0, math.radians(-90 + 20))
+        body.location = (x, 0.25, top + 0.225)
+        x += 0.36
+    return plates
+
+
 def gym_lights():
     """Overhead LED panels in rows, like a real gym ceiling: they are what the
     chrome reflects. A dim bounce from the far wall and a soft front fill."""
     for x in (-1.6, 0.0, 1.6):
         for y in (-1.2, 0.6, 2.4):
-            S.area(f"panel{x}{y}", 1.2, 260, (x, y, 3.3), (x, y, 0.0), size_y=0.3, colour=(1.0, 0.97, 0.92), spread=110)
+            S.area(f"panel{x}{y}", 1.2, 260, (x, y, 3.05), (x, y, 0.0), size_y=0.3, colour=(1.0, 0.97, 0.92), spread=110)
     S.area("bounce", 6.0, 160, (0.0, 4.0, 1.4), (0.0, 0.0, 0.0), size_y=2.0, colour=(0.9, 0.93, 1.0), spread=100)
     S.area("fill", 4.0, 70, (0.0, -4.5, 1.2), (0.0, 0.0, 0.0), size_y=1.5, spread=70)
     S.reflector("cardFront", (-0.3, -2.8, 1.9), (-0.2, 0, 0.0), 2.4, 0.5, 0.35)
@@ -428,7 +534,7 @@ def shot(name):
     s = S.reset()
     s.world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.012, 0.012, 0.013, 1)
     mats = materials()
-    if name != "p_macro":
+    if name not in ("p_macro", "p_themes"):
         S.build_bar(mats)
     R = 0.225
     top = -R
@@ -452,6 +558,10 @@ def shot(name):
         load([45, 25, 10, 5, 2.5], mats, explode=0.17, sides=(-1,), collars=False)
         platform(top, mats); gym_lights()
         S.camera((-1.55, -1.7, 0.30), (-1.02, 0.0, -0.05), lens=40, fstop=7.1)
+    elif name == "p_themes":
+        platform(top, mats); gym_lights()
+        theme_lineup(mats, top)
+        S.camera((0.05, -1.95, 0.62), (0.03, 0.25, -0.05), lens=30, fstop=7.1)
     elif name == "p_macro":
         body, T, Rp = S.bumper_plate(45, mats)
         body.rotation_euler = (0, 0, math.radians(-90 + 26))
