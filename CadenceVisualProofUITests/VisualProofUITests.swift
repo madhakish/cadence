@@ -649,15 +649,50 @@ final class VisualProofUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
+    /// An action inside a presented confirmation, by label. When it is
+    /// missing, both element trees go to the job log so the run says how
+    /// the actions are exposed instead of only that one was not found.
+    private func sheetButton(_ sheet: XCUIElement, _ label: String) -> XCUIElement {
+        let scoped = sheet.descendants(matching: .button)[label].firstMatch
+        if scoped.waitForExistence(timeout: 3) { return scoped }
+        print("delete-sheet-tree-\(label.lowercased()):\n\(sheet.debugDescription)")
+        print("delete-app-tree-\(label.lowercased()):\n\(app.debugDescription)")
+        return app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+
+    /// Cancel a confirmation the way its presentation offers: an action
+    /// sheet has a Cancel button; a popover (the 430 pt capture) has only
+    /// its destructive action and dismisses on a tap outside its frame.
+    private func dismissConfirmation(_ sheet: XCUIElement) {
+        let cancel = sheet.descendants(matching: .button)["Cancel"].firstMatch
+        if cancel.waitForExistence(timeout: 2) { cancel.tap(); return }
+        let appWide = app.buttons["Cancel"].firstMatch
+        if appWide.exists { appWide.tap(); return }
+        // Above the popover when there is room, else below: the 375 pt
+        // popover sits at the bottom, where a point clamped into the window
+        // would land on its Delete button.
+        let frame = sheet.frame
+        let window = app.windows.firstMatch.frame
+        let y = frame.minY - 60 > window.minY + 100 ? frame.minY - 60 : frame.maxY + 60
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: window.midX, dy: y)).tap()
+    }
+
     /// Scroll until `element` is realized and inside the window. Lazy Form
     /// rows do not exist until they scroll on, and a label inside a combined
     /// row (a picker's title) is never hittable even when it is on screen,
     /// so hittability cannot judge visibility; the frame can.
-    private func scrollUntilVisible(_ element: XCUIElement, swipes: Int = 10) -> Bool {
-        let visible = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 100)
-        for _ in 0..<swipes {
+    private func scrollUntilVisible(_ element: XCUIElement, drags: Int = 16) -> Bool {
+        let window = app.windows.firstMatch.frame
+        let visible = window.insetBy(dx: 0, dy: 100)
+        for _ in 0..<drags {
             if element.exists, visible.contains(element.frame) { return true }
-            app.swipeUp()
+            // No momentum: a swipeUp fling carried the row past the inset
+            // window on every attempt at 375 pt; a slow third-of-a-screen
+            // drag lands it. The press starts on the left, over labels.
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.4))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
         }
         return element.exists && visible.contains(element.frame)
     }
@@ -891,9 +926,16 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
         XCTAssertTrue(deleteRow.isHittable)
         deleteRow.tap()
-        let cancel = app.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "deleting a program asks first")
-        cancel.tap()
+        // The confirmation is an action sheet. Give its presentation a real
+        // budget and capture BEFORE asserting, so the artifact shows the
+        // state that was judged whether the sheet is there or not.
+        let sheet = app.sheets.firstMatch
+        let asked = sheet.waitForExistence(timeout: 5)
+        capture("after-21-delete-program-asks-iphone")
+        XCTAssertTrue(asked, "deleting a program asks first")
+        XCTAssertTrue(sheetButton(sheet, "Delete").exists, "the confirmation offers Delete")
+        dismissConfirmation(sheet)
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 3), "cancelling dismisses the confirmation")
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 3), "cancel keeps the editor open")
         app.navigationBars.buttons["Program"].tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
@@ -903,9 +945,10 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "back and reopen keep the program")
         for _ in 0..<12 where !deleteRow.isHittable { app.swipeUp() }
         deleteRow.tap()
-        let confirm = app.buttons["Delete"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "deleting a program asks first, every time")
+        let confirm = sheetButton(sheet, "Delete")
         capture("after-21-delete-program-confirmation-iphone")
+        XCTAssertTrue(confirm.exists, "the confirmation offers Delete")
         confirm.tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5),
                       "confirming deletes the program and returns to the Program tab")
