@@ -669,10 +669,13 @@ final class VisualProofUITests: XCTestCase {
         if cancel.waitForExistence(timeout: 2) { cancel.tap(); return }
         let appWide = app.buttons["Cancel"].firstMatch
         if appWide.exists { appWide.tap(); return }
+        // Above the popover when there is room, else below: the 375 pt
+        // popover sits at the bottom, where a point clamped into the window
+        // would land on its Delete button.
         let frame = sheet.frame
         let window = app.windows.firstMatch.frame
-        let outside = CGVector(dx: window.midX, dy: min(window.maxY - 60, frame.maxY + 80))
-        app.coordinate(withNormalizedOffset: .zero).withOffset(outside).tap()
+        let y = frame.minY - 60 > window.minY + 100 ? frame.minY - 60 : frame.maxY + 60
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: window.midX, dy: y)).tap()
     }
 
     /// Scroll until `element` is realized and inside the window. Lazy Form
