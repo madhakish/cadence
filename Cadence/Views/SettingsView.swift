@@ -1148,6 +1148,7 @@ struct ProgramEditorView: View {
                             Text(day.name).tag(day.order)
                         }
                     }
+                    .accessibilityIdentifier("next-day-picker")
                 }
             } header: {
                 Text("Where you are")

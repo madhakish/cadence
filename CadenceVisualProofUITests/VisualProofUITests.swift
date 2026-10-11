@@ -850,10 +850,19 @@ final class VisualProofUITests: XCTestCase {
         populated.tap()
         XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].waitForExistence(timeout: 5),
                       "the row pushes the whole-program editor")
-        let nextDay = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH 'Next day'")).firstMatch
+        let nextDay = element("next-day-picker")
         XCTAssertTrue(scrollUntilVisible(nextDay), "the schedule position is on screen in the editor")
         capture("after-21-edit-program-populated-iphone")
+        // The acceptance is a usable control, not a visible label: open the
+        // picker, choose the day, and come back to the editor.
+        XCTAssertTrue(nextDay.isHittable, "the Next day control can be activated")
+        nextDay.tap()
+        let choice = app.buttons["Lower Forge"].firstMatch
+        XCTAssertTrue(choice.waitForExistence(timeout: 3), "the Next day picker opens its day choices")
+        capture("after-21-next-day-choices-iphone")
+        choice.tap()
+        XCTAssertTrue(choice.waitForNonExistence(timeout: 3), "choosing a day closes the picker")
+        XCTAssertTrue(app.navigationBars["Foundry Hypertrophy"].exists, "and returns to the editor")
         app.navigationBars.buttons["Program"].tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
         for _ in 0..<10 where !populated.isHittable { app.swipeUp() }
