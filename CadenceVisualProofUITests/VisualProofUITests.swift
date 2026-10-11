@@ -653,13 +653,15 @@ final class VisualProofUITests: XCTestCase {
     /// missing, the sheet's element tree is attached so the artifact says
     /// how the actions are exposed instead of only that one was not found.
     private func sheetButton(_ sheet: XCUIElement, _ label: String) -> XCUIElement {
-        let button = sheet.descendants(matching: .button)[label].firstMatch
-        if !button.waitForExistence(timeout: 3) {
-            let tree = XCTAttachment(string: sheet.debugDescription)
-            tree.name = "delete-sheet-tree-\(label.lowercased())"; tree.lifetime = .keepAlways
-            add(tree)
-        }
-        return button
+        let scoped = sheet.descendants(matching: .button)[label].firstMatch
+        if scoped.waitForExistence(timeout: 3) { return scoped }
+        // Print both trees so the job log, not only the artifact, says how
+        // the actions are exposed, then fall back to any element carrying
+        // the label anywhere on screen.
+        print("delete-sheet-tree-\(label.lowercased()):\n\(sheet.debugDescription)")
+        print("delete-app-tree-\(label.lowercased()):\n\(app.debugDescription)")
+        return app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 
     /// Scroll until `element` is realized and inside the window. Lazy Form
