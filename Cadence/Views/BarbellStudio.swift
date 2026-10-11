@@ -34,7 +34,7 @@ final class BarbellStudio {
     /// Height of the platform surface below the bar axis (mm).
     let floorDrop: Double
 
-    static let blowupGap = 170.0
+    static let blowupGap = 95.0
 
     init(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) {
         self.loadout = loadout
@@ -81,7 +81,9 @@ final class BarbellStudio {
         }
         camera.fieldOfView = CGFloat(fov)
         cameraNode.position = eye
-        cameraNode.look(at: target)
+        // Explicit world up: look(at:) alone reuses the node's current up,
+        // which rolls the camera after the first reframe.
+        cameraNode.look(at: target, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
         let dx = Double(eye.x - target.x), dy = Double(eye.y - target.y), dz = Double(eye.z - target.z)
         camera.focusDistance = CGFloat((dx * dx + dy * dy + dz * dz).squareRoot())
         camera.fStop = CGFloat(fStop)
@@ -113,7 +115,8 @@ final class BarbellStudio {
             let mat = knurled ? (oxide ? StudioMaterials.oxideKnurl : StudioMaterials.knurl)
                               : (oxide ? StudioMaterials.oxideShaft : StudioMaterials.shaft)
             let node = SCNNode(geometry: StudioLathe.geometry(
-                [.init(bar.shaftRadius, a), .init(bar.shaftRadius, b)], segments: 64, materials: [mat]))
+                [.init(bar.shaftRadius, a), .init(bar.shaftRadius, b)], segments: 64, materials: [mat],
+                uvMillimetres: StudioMaterials.knurlTileMillimetres))
             root.addChildNode(node)
         }
         for s in [-1.0, 1.0] {
@@ -223,7 +226,8 @@ final class BarbellStudio {
         ]
         let node = SCNNode(geometry: StudioLathe.geometry(p, segments: 96, materials: [StudioMaterials.chrome]))
         let grip = StudioLathe.geometry([.init(radius - 2.8, -h + 22), .init(radius - 1.5, -h + 23), .init(radius - 1.5, h - 17),
-                                         .init(radius - 2.8, h - 16)], segments: 96, materials: [StudioMaterials.knurledRing])
+                                         .init(radius - 2.8, h - 16)], segments: 96, materials: [StudioMaterials.knurledRing],
+                                        uvMillimetres: StudioMaterials.knurlTileMillimetres)
         node.addChildNode(SCNNode(geometry: grip))
         let lever = SCNBox(width: 28, height: 34, length: 12, chamferRadius: 3)
         lever.firstMaterial = StudioMaterials.lever
@@ -249,7 +253,10 @@ enum StudioLathe {
         init(_ r: Double, _ x: Double, _ m: Int = 0) { self.r = r; self.x = x; self.m = m }
     }
 
-    static func geometry(_ profile: [P], segments: Int, materials: [SCNMaterial]) -> SCNGeometry {
+    /// `uvMillimetres` maps texture space to physical size: v runs along the
+    /// profile in units of that many mm, u wraps a whole number of tiles
+    /// around the circumference. Nil keeps 0...1 in both directions.
+    static func geometry(_ profile: [P], segments: Int, materials: [SCNMaterial], uvMillimetres: Double? = nil) -> SCNGeometry {
         var vertices: [SCNVector3] = [], normals: [SCNVector3] = [], uvs: [CGPoint] = []
         var indices = Array(repeating: [Int32](), count: max(1, materials.count))
         let total = zip(profile, profile.dropFirst()).reduce(0.0) { $0 + hypot($1.1.r - $1.0.r, $1.1.x - $1.0.x) }
@@ -262,13 +269,15 @@ enum StudioLathe {
             // rim, back along the +x face; mirrored profiles are reversed.
             let nr = dx / length, nx = -dr / length
             let base = Int32(vertices.count)
-            for (point, v) in [(a, travelled / total), (b, (travelled + length) / total)] {
+            let around = uvMillimetres.map { max(1, (2 * .pi * profile[0].r / $0).rounded()) } ?? 1
+            for (point, distance) in [(a, travelled), (b, travelled + length)] {
+                let v = uvMillimetres.map { distance / $0 } ?? distance / total
                 for j in 0...segments {
                     let t = Double(j) / Double(segments) * 2 * .pi
                     let c = cos(t), s = sin(t)
                     vertices.append(SCNVector3(Float(point.x), Float(point.r * c), Float(point.r * s)))
                     normals.append(SCNVector3(Float(nx), Float(nr * c), Float(nr * s)))
-                    uvs.append(CGPoint(x: Double(j) / Double(segments), y: v))
+                    uvs.append(CGPoint(x: around * Double(j) / Double(segments), y: v))
                 }
             }
             let ring = Int32(segments + 1)
@@ -333,119 +342,98 @@ enum StudioPlates {
         let body = StudioMaterials.plateBody(finish, fill: colour.fill)
         let tyre = StudioMaterials.plateTyre(finish, fill: colour.fill)
         let hubMat = StudioMaterials.hub(look.hubFinish)
-        let ink = StudioMaterials.ink(colour.ink)
         let small = R < 120
-        let kind = disc.family
         let scale = R / 225
+        let unit = plate.unit.rawValue.uppercased()
 
+        func lathe(_ p: [StudioLathe.P], _ materials: [SCNMaterial], segments: Int = 192) {
+            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(p, segments: segments, materials: materials)))
+        }
         func addHub(_ hubR: Double, proud: Double) {
             let h = ht + proud
-            let p: [StudioLathe.P] = [
-                .init(bore, -h + 0.8), .init(bore + 0.8, -h), .init(hubR - 1.5, -h), .init(hubR, -h + 1.5),
-                .init(hubR, h - 1.5), .init(hubR - 1.5, h), .init(bore + 0.8, h), .init(bore, h - 0.8), .init(bore, -h + 0.8),
-            ]
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(p, segments: 128, materials: [hubMat])))
+            lathe([.init(bore, -h + 0.8), .init(bore + 0.8, -h), .init(hubR - 1.5, -h), .init(hubR, -h + 1.5),
+                   .init(hubR, h - 1.5), .init(hubR - 1.5, h), .init(bore + 0.8, h), .init(bore, h - 0.8), .init(bore, -h + 0.8)],
+                  [hubMat], segments: 128)
+        }
+        /// Both flat faces, printed or cast, from `inner` to `outer` at ±x.
+        func addFaces(inner: Double, outer: Double, x: Double, print: StudioFaces.Print) {
+            let material = StudioMaterials.face(StudioFaces.Spec(
+                fill: colour.fill, ink: print.cast ? nil : colour.ink, finish: finish.finish, roughness: finish.roughness,
+                metal: finish.metal, radius: R, small: small, textInner: print.inner, textOuter: print.outer,
+                denomination: plate.denomination, unit: unit, brand: print.brand, relief: print.relief))
+            for face in [-1.0, 1.0] {
+                root.addChildNode(SCNNode(geometry: StudioFaces.annulus(inner: inner, outer: outer, x: face * x, face: face,
+                                                                         radius: R, material: material)))
+            }
         }
 
-        var faceX = ht
-        func addPrint(hubR: Double, outer: Double, ink: SCNMaterial) {
-            let band = (hubR + outer) / 2
-            for face in [-1.0, 1.0] {
-                if small {
-                    root.addChildNode(StudioLettering.arc("\(plate.denomination) \(plate.unit.rawValue.uppercased())",
-                                                          size: R * 0.3, radius: (hubR + R) / 2 - 4, top: false, extrude: 0.2,
-                                                          material: ink, condensed: true, face: face, faceX: faceX))
-                } else {
-                    root.addChildNode(StudioLettering.arc("\(plate.denomination) \(plate.unit.rawValue.uppercased())",
-                                                          size: min(74 * scale, (outer - hubR) * 0.62), radius: band + 2,
-                                                          top: false, extrude: 0.25, material: ink, condensed: true,
-                                                          face: face, faceX: faceX))
-                    root.addChildNode(StudioLettering.arc(look.brand, size: 30 * scale, radius: band - 4, top: true,
-                                                          extrude: 0.25, material: ink, condensed: false, tracking: 1.35,
-                                                          face: face, faceX: faceX))
-                }
-            }
-        }
-        switch kind {
+        switch disc.family {
         case "iron", "machined":
+            // Cast or turned steel: a sunken dish between a raised boss and a rim lip.
             let boss = max(bore + 22, R * 0.27), lip = max(14, R * 0.075)
             let dish = ht - min(7, T * 0.22), f = 3.5
-            var p: [StudioLathe.P] = [.init(boss, -ht - 1.5), .init(boss + 4, -dish), .init(R - lip - 4, -dish), .init(R - lip, -ht + 0.5),
-                                      .init(R - f, -ht, 1)]
-            p += StudioLathe.fillet(R - f, -ht + f, f, from: -.pi / 2, to: 0, steps: 4, m: 1).dropFirst()
-            p += StudioLathe.fillet(R - f, ht - f, f, from: 0, to: .pi / 2, steps: 4, m: 0)
-            p += [.init(R - lip, ht - 0.5), .init(R - lip - 4, dish), .init(boss + 4, dish), .init(boss, ht + 1.5)]
-            let castMat = kind == "machined" ? StudioMaterials.machinedSteel : body
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(p, segments: 160, materials: [castMat, castMat])))
-            let hub: [StudioLathe.P] = [.init(bore, -ht - 1.5), .init(boss, -ht - 1.5), .init(boss, ht + 1.5), .init(bore, ht + 1.5), .init(bore, -ht - 1.5)]
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(hub, segments: 128, materials: [castMat])))
-            faceX = dish
-            for face in [-1.0, 1.0] {
-                let radius = (boss + R - lip) / 2
-                root.addChildNode(StudioLettering.arc(plate.denomination, size: R > 170 ? 90 : R * 0.4, radius: radius, top: false,
-                                                      extrude: 2.2, material: castMat, condensed: true, face: face, faceX: faceX))
-                if R > 150 {
-                    root.addChildNode(StudioLettering.arc("\(look.brand)  ·  \(plate.unit.rawValue.uppercased())", size: 24 * scale,
-                                                          radius: radius, top: true, extrude: 1.5, material: castMat,
-                                                          condensed: false, tracking: 1.3, face: face, faceX: faceX))
-                }
-            }
+            let castMat = disc.family == "machined" ? StudioMaterials.machinedSteel : body
+            var rim: [StudioLathe.P] = [.init(R - lip - 4, -dish), .init(R - lip, -ht + 0.5), .init(R - f, -ht)]
+            rim += StudioLathe.fillet(R - f, -ht + f, f, from: -.pi / 2, to: 0, steps: 4, m: 0).dropFirst()
+            rim += StudioLathe.fillet(R - f, ht - f, f, from: 0, to: .pi / 2, steps: 4, m: 0)
+            rim += [.init(R - lip, ht - 0.5), .init(R - lip - 4, dish)]
+            lathe(rim, [castMat])
+            lathe([.init(boss, -ht - 1.5), .init(boss + 4, -dish)], [castMat])
+            lathe([.init(boss + 4, dish), .init(boss, ht + 1.5)], [castMat])
+            lathe([.init(bore, -ht - 1.5), .init(boss, -ht - 1.5), .init(boss, ht + 1.5), .init(bore, ht + 1.5), .init(bore, -ht - 1.5)],
+                  [castMat], segments: 128)
+            addFaces(inner: boss + 4, outer: R - lip - 4, x: dish,
+                     print: .init(inner: boss + 4, outer: R - lip - 4, brand: R > 150 ? "\(look.brand)  ·  \(unit)" : "",
+                                  cast: true, relief: 2.0))
         case "steel", "ipf":
+            // Calibrated or dished steel: painted face recessed inside a raised lip.
             let lip = min(2.2, 0.12 * T), lipW = 12 * scale
             let hubR = max(bore + 8, R * ratios.hub)
-            var p: [StudioLathe.P] = [.init(hubR, -ht + 0.4), .init(hubR + 4, -ht + lip), .init(R - lipW - 4, -ht + lip),
-                                      .init(R - lipW, -ht, 1)]
-            p += [.init(R - 1.2, -ht, 1), .init(R, -ht + 1.2, 1), .init(R, ht - 1.2, 1), .init(R - 1.2, ht, 1), .init(R - lipW, ht, 0)]
-            p += [.init(R - lipW - 4, ht - lip), .init(hubR + 4, ht - lip), .init(hubR, ht - 0.4)]
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(p, segments: 160, materials: [body, tyre])))
+            lathe([.init(R - lipW - 4, -ht + lip), .init(R - lipW, -ht, 1), .init(R - 1.2, -ht, 1), .init(R, -ht + 1.2, 1),
+                   .init(R, ht - 1.2, 1), .init(R - 1.2, ht, 1), .init(R - lipW, ht, 0), .init(R - lipW - 4, ht - lip)], [body, tyre])
+            lathe([.init(hubR, -ht + 0.4), .init(hubR + 4, -ht + lip)], [body])
+            lathe([.init(hubR + 4, ht - lip), .init(hubR, ht - 0.4)], [body])
             addHub(hubR, proud: 1.0)
-            faceX = ht - lip + 0.08
-            addPrint(hubR: hubR, outer: R - lipW, ink: ink)
+            addFaces(inner: hubR + 4, outer: R - lipW - 4, x: ht - lip,
+                     print: .init(inner: hubR + 4, outer: R - lipW - 4, brand: look.brand, cast: false, relief: 0.25))
         default:
-            // Rubber: competition/training bumpers and rubber change plates.
+            // Rubber bumpers and rubber change plates: flat faces, a shallow
+            // ring groove, a rounded tyre.
             let hubR = small ? max(bore + 12, R * 0.42) : max(bore + 30, R * min(0.5, look.hubRatio ?? 0.48))
             let f = min(8, T * 0.22), gR = R * 0.8
-            var p: [StudioLathe.P] = [.init(hubR, -ht + 0.8)]
-            if !small {
-                p += [.init(gR - 4, -ht), .init(gR - 2, -ht + 1.2), .init(gR + 2, -ht + 1.2), .init(gR + 4, -ht)]
-            }
+            let faceOuter = small ? R - f : gR - 4
+            var p: [StudioLathe.P] = []
+            if !small { p += [.init(gR - 4, -ht), .init(gR - 2, -ht + 1.2), .init(gR + 2, -ht + 1.2), .init(gR + 4, -ht)] }
             p += [.init(R - f, -ht, 1)]
             p += StudioLathe.fillet(R - f, -ht + f, f, from: -.pi / 2, to: 0, m: 1).dropFirst()
             p += StudioLathe.fillet(R - f, ht - f, f, from: 0, to: .pi / 2, m: 1)
-            if !small {
-                p += [.init(gR + 4, ht), .init(gR + 2, ht - 1.2), .init(gR - 2, ht - 1.2), .init(gR - 4, ht)]
-            }
-            p += [.init(hubR, ht - 0.8)]
-            // The last fillet point starts the inner face; give it the body material.
-            if let i = p.indices.last(where: { p[$0].m == 1 }) { p[i] = .init(p[i].r, p[i].x, 0) }
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(p, segments: 192, materials: [body, tyre])))
+            if let i = p.indices.last { p[i] = .init(p[i].r, p[i].x, 0) }
+            if !small { p += [.init(gR + 4, ht), .init(gR + 2, ht - 1.2), .init(gR - 2, ht - 1.2), .init(gR - 4, ht)] }
+            lathe(p, [body, tyre])
             addHub(hubR, proud: 1.2)
-            if !small && (look.details.contains("boltedHub") || theme == .custom || finish.finish == .rubber) {
+            if !small {
                 for i in 0..<6 {
                     let a = Double(i) / 6 * 2 * .pi + .pi / 6
                     for face in [-1.0, 1.0] {
                         let head: [StudioLathe.P] = [.init(0, 0), .init(8.5, 0), .init(9.2, 0.8), .init(9.2, 3), .init(8, 4), .init(0, 4)]
-                        let bolt = StudioLathe.geometry(StudioLathe.mirrored(head, face), segments: 32,
-                                                        materials: [StudioMaterials.bolt])
-                        let node = SCNNode(geometry: bolt)
-                        node.position = SCNVector3(Float(face * (ht + 1.2)), Float(79 * scale * cos(a)), Float(79 * scale * sin(a)))
-                        root.addChildNode(node)
-                        let socket = StudioLathe.geometry(StudioLathe.mirrored([.init(4, 4.05), .init(0, 4.05)], face),
-                                                          segments: 6, materials: [StudioMaterials.darkSteel])
-                        let s = SCNNode(geometry: socket)
-                        s.position = node.position
-                        root.addChildNode(s)
+                        let bolt = SCNNode(geometry: StudioLathe.geometry(StudioLathe.mirrored(head, face), segments: 32,
+                                                                          materials: [StudioMaterials.bolt]))
+                        bolt.position = SCNVector3(Float(face * (ht + 1.2)), Float(79 * scale * cos(a)), Float(79 * scale * sin(a)))
+                        root.addChildNode(bolt)
+                        let socket = SCNNode(geometry: StudioLathe.geometry(StudioLathe.mirrored([.init(4, 4.05), .init(0, 4.05)], face),
+                                                                            segments: 6, materials: [StudioMaterials.darkSteel]))
+                        socket.position = bolt.position
+                        root.addChildNode(socket)
                     }
                 }
             }
-            faceX = ht + 0.05
-            addPrint(hubR: hubR, outer: small ? R : gR, ink: ink)
+            addFaces(inner: hubR, outer: faceOuter, x: ht,
+                     print: .init(inner: hubR, outer: faceOuter, brand: small ? "" : look.brand, cast: false, relief: 0.3))
         }
 
         if let band = PlateTheme.band(plate, theme: theme) {
             let w = max(6, 0.34 * T)
-            root.addChildNode(SCNNode(geometry: StudioLathe.geometry(
-                [.init(R + 0.4, -w / 2), .init(R + 0.4, w / 2)], segments: 192, materials: [StudioMaterials.band(band)])))
+            lathe([.init(R + 0.4, -w / 2), .init(R + 0.4, w / 2)], [StudioMaterials.band(band)])
         }
         let flat = root.flattenedClone()
         flat.name = plate.id
@@ -453,63 +441,182 @@ enum StudioPlates {
     }
 }
 
-// MARK: - Lettering
+// MARK: - Plate faces
 
-/// Raised lettering laid on an arc of the plate face, like real moulded or
-/// printed plates. Text sits in the face plane (y up, z across); `face` −1 is
-/// the −x face read from −x, +1 the +x face read from +x.
-enum StudioLettering {
-    private static var glyphs: [String: SCNText] = [:]
+/// The printed (or cast) face of a plate, baked to textures: the body colour
+/// with fine mottling, the denomination and unit along the lower arc and the
+/// brand along the upper arc, and a normal map that raises the lettering the
+/// way paint or a casting stands proud of the face.
+enum StudioFaces {
+    struct Print {
+        let inner: Double, outer: Double, brand: String, cast: Bool, relief: Double
+    }
+
+    struct Spec: Hashable {
+        let fill: UInt32
+        /// Paint colour; nil for cast lettering in the body material.
+        let ink: UInt32?
+        let finish: PlateFinish
+        let roughness: Double
+        let metal: Double
+        let radius: Double
+        let small: Bool
+        let textInner: Double, textOuter: Double
+        let denomination: String, unit: String, brand: String
+        let relief: Double
+    }
+
+    struct Maps { let diffuse: UIImage; let normal: UIImage }
+
+    private static var cache: [Spec: Maps] = [:]
     private static let lock = NSLock()
 
-    static func arc(_ string: String, size: Double, radius: Double, top: Bool, extrude: Double, material: SCNMaterial,
-                    condensed: Bool, tracking: Double = 1.06, face: Double, faceX: Double) -> SCNNode {
-        let font = condensed
-            ? UIFont.systemFont(ofSize: CGFloat(size), weight: .heavy, width: .condensed)
-            : UIFont.systemFont(ofSize: CGFloat(size), weight: .bold)
-        let chars = string.map(String.init)
-        let advances = chars.map { advance($0, font: font) * tracking }
-        let total = advances.reduce(0, +)
-        let group = SCNNode()
-        var cursor = -total / 2
-        for (ch, adv) in zip(chars, advances) {
-            defer { cursor += adv }
-            guard ch != " " else { continue }
-            let s = cursor + adv / 2
-            let a = s / radius
-            let node = SCNNode(geometry: glyph(ch, font: font, extrude: extrude, material: material))
-            let (minB, maxB) = node.boundingBox
-            node.pivot = SCNMatrix4MakeTranslation((minB.x + maxB.x) / 2, Float(font.capHeight / 2), 0)
-            if top {
-                node.position = SCNVector3(Float(radius * sin(a)), Float(radius * cos(a)), 0)
-                node.eulerAngles.z = Float(-a)
-            } else {
-                node.position = SCNVector3(Float(radius * sin(a)), Float(-radius * cos(a)), 0)
-                node.eulerAngles.z = Float(a)
+    static func maps(_ spec: Spec) -> Maps {
+        lock.lock()
+        if let hit = cache[spec] { lock.unlock(); return hit }
+        lock.unlock()
+        let made = bake(spec)
+        lock.lock(); cache[spec] = made; lock.unlock()
+        return made
+    }
+
+    /// A flat ring facing ±x whose texture covers the plate's full diameter:
+    /// u to the reader's right, v down, as seen from that face.
+    static func annulus(inner: Double, outer: Double, x: Double, face: Double, radius: Double, material: SCNMaterial) -> SCNGeometry {
+        let segments = 160
+        var vertices: [SCNVector3] = [], normals: [SCNVector3] = [], uvs: [CGPoint] = [], indices: [Int32] = []
+        for j in 0...segments {
+            let t = Double(j) / Double(segments) * 2 * .pi
+            for r in [inner, outer] {
+                let y = r * cos(t), z = r * sin(t)
+                vertices.append(SCNVector3(Float(x), Float(y), Float(z)))
+                normals.append(SCNVector3(Float(face), 0, 0))
+                // From −x the reader's right is +z; from +x it is −z.
+                uvs.append(CGPoint(x: 0.5 + (face < 0 ? z : -z) / (2 * radius), y: 0.5 - y / (2 * radius)))
             }
-            group.addChildNode(node)
         }
-        // Text +z → face normal, text +y → up, text +x → right as seen from that face.
-        group.eulerAngles.y = Float(face < 0 ? -Double.pi / 2 : Double.pi / 2)
-        group.position = SCNVector3(Float(face * faceX), 0, 0)
-        return group
+        for j in 0..<Int32(segments) {
+            let i0 = j * 2, i1 = i0 + 1, i2 = i0 + 2, i3 = i0 + 3
+            // Counter-clockwise as seen from the face's side.
+            indices += face < 0 ? [i0, i1, i2, i2, i1, i3] : [i0, i2, i1, i2, i3, i1]
+        }
+        let geometry = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(normals: normals),
+                                             SCNGeometrySource(textureCoordinates: uvs)],
+                                   elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
+        geometry.materials = [material]
+        return geometry
     }
 
-    private static func advance(_ ch: String, font: UIFont) -> Double {
-        Double((ch as NSString).size(withAttributes: [.font: font]).width)
+    /// Linear → 8-bit sRGB through a table; a face bakes a million pixels.
+    private static let srgbTable: [UInt8] = (0...4095).map { UInt8((pow(Double($0) / 4095, 1 / 2.2) * 255).rounded()) }
+    private static func toSRGB(_ v: Double) -> UInt8 { srgbTable[Int(max(0, min(1, v)) * 4095)] }
+
+    private static func bake(_ s: Spec) -> Maps {
+        let n = s.small ? 512 : 1024
+        let pxPerMM = Double(n) / (2 * s.radius)
+        let mask = lettering(s, size: n, pxPerMM: pxPerMM)
+        let mottle = StudioTextures.mottleField, grain = StudioTextures.grainField
+        let m = 256
+        func linear(_ c: UInt32, _ shift: UInt32) -> Double { pow(Double((c >> shift) & 255) / 255, 2.2) }
+        let fill = (linear(s.fill, 16), linear(s.fill, 8), linear(s.fill, 0))
+        let ink = s.ink.map { (linear($0, 16), linear($0, 8), linear($0, 0)) }
+        let mottleAmount = s.finish == .rubber ? 0.08 : 0.04
+        var colour = [UInt8](repeating: 255, count: n * n * 4)
+        var height = [Double](repeating: 0, count: n * n)
+        let grainAmount = s.finish == .rubber ? 0.06 : s.finish == .castIron || s.finish == .hammertone ? 0.25 : 0.02
+        for y in 0..<n {
+            for x in 0..<n {
+                let i = y * n + x
+                let k = Double(mask[i]) / 255
+                let mo = 1 - mottleAmount + mottleAmount * 2 * mottle[(y % m) * m + x % m]
+                var r = fill.0 * mo, g = fill.1 * mo, b = fill.2 * mo
+                if let ink {
+                    r = r * (1 - k) + ink.0 * k; g = g * (1 - k) + ink.1 * k; b = b * (1 - k) + ink.2 * k
+                } else {
+                    // Cast lettering catches a little more light on its crown.
+                    r *= 1 + 0.25 * k; g *= 1 + 0.25 * k; b *= 1 + 0.25 * k
+                }
+                colour[i * 4] = toSRGB(r)
+                colour[i * 4 + 1] = toSRGB(g)
+                colour[i * 4 + 2] = toSRGB(b)
+                height[i] = k * s.relief + grain[(y * 3 % m) * m + (x * 3) % m] * grainAmount
+            }
+        }
+        // Height in mm → normal. Rows run down the image; tangent-space y is up.
+        var normal = [UInt8](repeating: 255, count: n * n * 4)
+        let mmPerPx = 1 / pxPerMM
+        for y in 0..<n {
+            for x in 0..<n {
+                let xl = max(0, x - 1), xr = min(n - 1, x + 1), yu = max(0, y - 1), yd = min(n - 1, y + 1)
+                let dx = (height[y * n + xr] - height[y * n + xl]) / (2 * mmPerPx)
+                let dy = (height[yd * n + x] - height[yu * n + x]) / (2 * mmPerPx)
+                let nx = -dx, ny = dy, nz = 1.0
+                let l = (nx * nx + ny * ny + nz * nz).squareRoot()
+                let i = (y * n + x) * 4
+                normal[i] = UInt8((nx / l * 0.5 + 0.5) * 255)
+                normal[i + 1] = UInt8((ny / l * 0.5 + 0.5) * 255)
+                normal[i + 2] = UInt8((nz / l * 0.5 + 0.5) * 255)
+            }
+        }
+        return Maps(diffuse: StudioTextures.image(colour, n), normal: StudioTextures.image(normal, n))
     }
 
-    private static func glyph(_ ch: String, font: UIFont, extrude: Double, material: SCNMaterial) -> SCNText {
-        let key = "\(ch)|\(font.fontName)|\(font.pointSize)|\(extrude)|\(ObjectIdentifier(material).hashValue)"
-        lock.lock(); defer { lock.unlock() }
-        if let cached = glyphs[key] { return cached }
-        let text = SCNText(string: ch, extrusionDepth: CGFloat(extrude))
-        text.font = font
-        text.flatness = 0.08
-        text.chamferRadius = CGFloat(min(extrude * 0.3, 0.35))
-        text.materials = [material]
-        glyphs[key] = text
-        return text
+    /// White lettering on black: the denomination and unit on the lower arc
+    /// (tops toward the centre), the brand on the upper arc (tops outward).
+    private static func lettering(_ s: Spec, size n: Int, pxPerMM: Double) -> [UInt8] {
+        let band = s.textOuter - s.textInner
+        let numberSize = (s.small ? band * 0.62 : min(74 * s.radius / 225, band * 0.62)) * pxPerMM
+        let brandSize = 30 * s.radius / 225 * pxPerMM
+        let mid = (s.textInner + s.textOuter) / 2 * pxPerMM
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let image = UIGraphicsImageRenderer(size: CGSize(width: n, height: n), format: format).image { ctx in
+            UIColor.black.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: n, height: n))
+            let centre = CGPoint(x: Double(n) / 2, y: Double(n) / 2)
+            let numberFont = UIFont.systemFont(ofSize: CGFloat(numberSize), weight: .heavy, width: .condensed)
+            arc("\(s.denomination) \(s.unit)", font: numberFont, tracking: 1.04, baseline: mid + numberFont.capHeight / 2,
+                top: false, centre: centre, in: ctx.cgContext)
+            if !s.brand.isEmpty {
+                let brandFont = UIFont.systemFont(ofSize: CGFloat(brandSize), weight: .bold)
+                arc(s.brand, font: brandFont, tracking: 1.32, baseline: mid - brandFont.capHeight / 2,
+                    top: true, centre: centre, in: ctx.cgContext)
+            }
+        }
+        guard let cg = image.cgImage else { return [UInt8](repeating: 0, count: n * n) }
+        var gray = [UInt8](repeating: 0, count: n * n)
+        let space = CGColorSpaceCreateDeviceGray()
+        if let read = CGContext(data: &gray, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n, space: space,
+                                bitmapInfo: CGImageAlphaInfo.none.rawValue) {
+            read.draw(cg, in: CGRect(x: 0, y: 0, width: n, height: n))
+        }
+        return gray
+    }
+
+    /// Glyph by glyph along a circle. `baseline` is the baseline radius in px.
+    private static func arc(_ text: String, font: UIFont, tracking: Double, baseline: Double, top: Bool,
+                            centre: CGPoint, in cg: CGContext) {
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+        let chars = text.map(String.init)
+        let widths = chars.map { Double(($0 as NSString).size(withAttributes: attrs).width) * tracking }
+        var cursor = -widths.reduce(0, +) / 2
+        for (ch, w) in zip(chars, widths) {
+            defer { cursor += w }
+            let theta = (cursor + w / 2) / baseline
+            cg.saveGState()
+            if top {
+                cg.translateBy(x: centre.x + baseline * sin(theta), y: centre.y - baseline * cos(theta))
+                cg.rotate(by: theta)
+            } else {
+                cg.translateBy(x: centre.x - baseline * sin(-theta), y: centre.y + baseline * cos(theta))
+                cg.rotate(by: -theta)
+            }
+            let glyph = NSAttributedString(string: ch, attributes: attrs)
+            let size = glyph.size()
+            glyph.draw(at: CGPoint(x: -size.width / 2, y: -font.ascender))
+            cg.restoreGState()
+        }
     }
 }
 
@@ -571,8 +678,9 @@ enum StudioPlatform {
 /// reflects; one soft overhead key casts the contact shadows.
 enum StudioLighting {
     static let exposure: CGFloat = 0.0
-    static let environmentIntensity: CGFloat = 1.0
-    static let keyIntensity: CGFloat = 900
+    /// The environment was baked one stop under (docs/design-pass/lookdev/bake.py).
+    static let environmentIntensity: CGFloat = 2.0
+    static let keyIntensity: CGFloat = 650
 
     static func apply(to scene: SCNScene, floorY: Double) {
         let environment = StudioTextures.environment
@@ -618,7 +726,20 @@ enum StudioMaterials {
         property.wrapS = .repeat
         property.wrapT = .repeat
         property.contentsTransform = SCNMatrix4MakeScale(su, sv, 1)
+        filtered(property)
     }
+
+    /// Mipmapped, anisotropic sampling: fine grain, knurl and wood must
+    /// average out with distance instead of shimmering into moiré.
+    static func filtered(_ property: SCNMaterialProperty) {
+        property.mipFilter = .linear
+        property.minificationFilter = .linear
+        property.magnificationFilter = .linear
+        property.maxAnisotropy = 16
+    }
+
+    /// Knurl and grip textures tile at this physical size (lathe uvMillimetres).
+    static let knurlTileMillimetres = 24.0
 
     static let chrome: SCNMaterial = {
         let m = pbr(UIColor(white: 0.93, alpha: 1), metalness: 1, roughness: 0.06)
@@ -632,10 +753,10 @@ enum StudioMaterials {
     }()
     static let shaft: SCNMaterial = pbr(UIColor(white: 0.9, alpha: 1), metalness: 1, roughness: 0.19)
     static let knurl: SCNMaterial = {
-        let m = pbr(UIColor(white: 0.86, alpha: 1), metalness: 1, roughness: 0.32)
-        tiled(m.normal, StudioTextures.knurlNormal, 26, 3)
-        m.normal.intensity = 0.9
-        tiled(m.diffuse, StudioTextures.chalk, 6, 1)
+        let m = pbr(UIColor(white: 0.86, alpha: 1), metalness: 1, roughness: 0.34)
+        tiled(m.normal, StudioTextures.knurlNormal, 1, 1)
+        m.normal.intensity = 0.8
+        tiled(m.diffuse, StudioTextures.chalk, 0.25, 0.25)
         return m
     }()
     static let oxideShaft: SCNMaterial = pbr(UIColor(white: 0.2, alpha: 1), metalness: 1, roughness: 0.36)
@@ -650,7 +771,7 @@ enum StudioMaterials {
     static let bolt: SCNMaterial = pbr(UIColor(white: 0.78, alpha: 1), metalness: 1, roughness: 0.2)
     static let knurledRing: SCNMaterial = {
         let m = pbr(UIColor(white: 0.62, alpha: 1), metalness: 1, roughness: 0.38)
-        tiled(m.normal, StudioTextures.knurlNormal, 30, 2)
+        tiled(m.normal, StudioTextures.knurlNormal, 1, 1)
         return m
     }()
     static let lever: SCNMaterial = pbr(UIColor(white: 0.03, alpha: 1), metalness: 0, roughness: 0.4)
@@ -678,9 +799,8 @@ enum StudioMaterials {
             switch finish.finish {
             case .rubber:
                 m.roughness.contents = NSNumber(value: max(0.5, min(0.66, finish.roughness)))
-                tiled(m.multiply, StudioTextures.mottle, 2, 2)
                 tiled(m.normal, StudioTextures.grainNormal, 14, 14)
-                m.normal.intensity = 0.35
+                m.normal.intensity = 0.3
             case .powder:
                 tiled(m.normal, StudioTextures.grainNormal, 10, 10)
                 m.normal.intensity = 0.15
@@ -710,9 +830,7 @@ enum StudioMaterials {
         cached("tyre|\(finish.finish.rawValue)|\(fill)|\(finish.roughness)") {
             let m = plateBody(finish, fill: fill).copy() as! SCNMaterial
             if finish.finish == .rubber {
-                m.diffuse.contents = StudioTextures.scuffedTyre(fill: fill)
-                m.diffuse.wrapS = .repeat
-                m.diffuse.contentsTransform = SCNMatrix4MakeScale(3, 1, 1)
+                tiled(m.diffuse, StudioTextures.scuffedTyre(fill: fill), 3, 1)
                 m.roughness.contents = NSNumber(value: 0.66)
             }
             return m
@@ -740,13 +858,25 @@ enum StudioMaterials {
         }
     }
 
-    /// Paint for printed lettering: satin, slightly worn.
-    static func ink(_ colour: UInt32) -> SCNMaterial {
-        cached("ink|\(colour)") {
-            let m = pbr(UIColor(rgb: colour), metalness: 0, roughness: 0.55)
-            tiled(m.multiply, StudioTextures.mottle, 6, 6)
-            return m
+    /// A printed or cast plate face: baked colour and lettering relief.
+    static func face(_ spec: StudioFaces.Spec) -> SCNMaterial {
+        let maps = StudioFaces.maps(spec)
+        let m = pbr(.white, metalness: spec.metal, roughness: spec.finish == .rubber ? 0.58 : spec.roughness)
+        m.diffuse.contents = maps.diffuse
+        m.normal.contents = maps.normal
+        filtered(m.diffuse)
+        filtered(m.normal)
+        switch spec.finish {
+        case .powder, .gloss:
+            m.clearCoat.contents = NSNumber(value: spec.finish == .gloss ? 0.8 : 0.35)
+            m.clearCoatRoughness.contents = NSNumber(value: spec.finish == .gloss ? 0.05 : 0.2)
+        case .castIron:
+            m.clearCoat.contents = NSNumber(value: 0.25)
+            m.clearCoatRoughness.contents = NSNumber(value: 0.35)
+        default:
+            break
         }
+        return m
     }
 
     static func band(_ colour: UInt32) -> SCNMaterial {
@@ -756,15 +886,18 @@ enum StudioMaterials {
     static let oakTop: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.48)
         m.diffuse.contents = StudioTextures.brandedOak
-        m.normal.contents = UIImage(named: "PlatformOakNormal")
+        m.normal.contents = StudioTextures.decoded("PlatformOakNormal")
         m.normal.intensity = 0.6
+        filtered(m.diffuse)
+        filtered(m.normal)
         m.isDoubleSided = false
         return m
     }()
     static let matTop: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.84)
-        m.diffuse.contents = UIImage(named: "PlatformMat")
-        tiled(m.normal, UIImage(named: "PlatformMatNormal") ?? UIImage(), 2, 8)
+        m.diffuse.contents = StudioTextures.decoded("PlatformMat")
+        filtered(m.diffuse)
+        tiled(m.normal, StudioTextures.decoded("PlatformMatNormal"), 2, 8)
         m.normal.intensity = 0.5
         m.isDoubleSided = false
         return m
@@ -772,15 +905,12 @@ enum StudioMaterials {
     static let matSide: SCNMaterial = pbr(UIColor(white: 0.05, alpha: 1), metalness: 0, roughness: 0.85)
     static let plywoodEdge: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.75)
-        m.diffuse.contents = StudioTextures.plies
-        m.diffuse.wrapS = .repeat
-        m.diffuse.wrapT = .repeat
-        m.diffuse.contentsTransform = SCNMatrix4MakeScale(8, 1, 1)
+        tiled(m.diffuse, StudioTextures.plies, 8, 1)
         return m
     }()
     static let gymFloor: SCNMaterial = {
         let m = pbr(UIColor(white: 0.06, alpha: 1), metalness: 0, roughness: 0.86)
-        tiled(m.normal, UIImage(named: "PlatformMatNormal") ?? UIImage(), 30, 30)
+        tiled(m.normal, StudioTextures.decoded("PlatformMatNormal"), 30, 30)
         m.normal.intensity = 0.3
         m.isDoubleSided = false
         return m
@@ -792,13 +922,25 @@ enum StudioMaterials {
 /// Deterministic textures: baked platform maps from the asset catalog, the
 /// runtime-branded oak, and tileable noise maps for wear and grain.
 enum StudioTextures {
-    static let environment: UIImage = UIImage(named: "StudioGym") ?? UIImage()
+    static let environment: UIImage = decoded("StudioGym")
+
+    /// An asset-catalog image redrawn into a plain RGBA bitmap, so SceneKit
+    /// receives ordinary CGImage-backed contents.
+    static func decoded(_ name: String) -> UIImage {
+        guard let source = UIImage(named: name)?.cgImage else { return UIImage() }
+        let w = source.width, h = source.height
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return UIImage(cgImage: source) }
+        ctx.draw(source, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage().map { UIImage(cgImage: $0) } ?? UIImage(cgImage: source)
+    }
 
     /// The oak centre with the Vitruvian artwork laser-burned in: dark
     /// engraving lines char the wood; the paper ground leaves it untouched.
     /// The artwork asset is read as-is and never modified.
     static let brandedOak: UIImage = {
-        guard let oak = UIImage(named: "PlatformOak")?.cgImage else { return UIImage() }
+        guard let oak = decoded("PlatformOak").cgImage else { return UIImage() }
         let w = oak.width, h = oak.height
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         let space = CGColorSpaceCreateDeviceRGB()
@@ -848,7 +990,9 @@ enum StudioTextures {
         }
     }()
 
-    static let mottle = gray(Noise.field(size: 256, cells: 6, octaves: 4, seed: 11), lo: 0.86, hi: 1.0)
+    /// Face mottling and moulding grain, sampled by the plate-face baker.
+    static let mottleField = Noise.field(size: 256, cells: 8, octaves: 4, seed: 11)
+    static let grainField = Noise.field(size: 256, cells: 64, octaves: 2, seed: 3)
     static let chalk: UIImage = {
         let n = Noise.field(size: 256, cells: 16, octaves: 4, seed: 23)
         return rgb(n) { v in
@@ -858,7 +1002,7 @@ enum StudioTextures {
         }
     }()
     static let smudgeRoughness = gray(Noise.field(size: 256, cells: 4, octaves: 3, seed: 5), lo: 0.03, hi: 0.1)
-    static let grainNormal = normal(Noise.field(size: 256, cells: 64, octaves: 2, seed: 3), strength: 2.0)
+    static let grainNormal = normal(grainField, strength: 2.0)
     static let hammerNormal = normal(Noise.field(size: 256, cells: 20, octaves: 3, seed: 9), strength: 6.0)
     static let brushedNormal: UIImage = {
         let n = 256
@@ -933,7 +1077,7 @@ enum StudioTextures {
         return image(px, n)
     }
 
-    private static func image(_ px: [UInt8], _ n: Int) -> UIImage {
+    static func image(_ px: [UInt8], _ n: Int) -> UIImage {
         guard let provider = CGDataProvider(data: Data(px) as CFData),
               let cg = CGImage(width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4,
                                space: CGColorSpaceCreateDeviceRGB(),

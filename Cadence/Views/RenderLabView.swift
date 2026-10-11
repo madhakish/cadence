@@ -1,4 +1,6 @@
 import CadenceCore
+import Metal
+import SceneKit
 import SwiftUI
 import UIKit
 
@@ -60,6 +62,43 @@ enum RenderLab {
     }
 }
 
+extension RenderLab {
+    /// The gym environment alone around a mirror ball and a grey ball:
+    /// proves the backdrop draws and the lighting environment reflects.
+    static func environmentProbe() async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let device = MTLCreateSystemDefaultDevice() else { return continuation.resume(returning: nil) }
+                let scene = SCNScene()
+                scene.background.contents = StudioTextures.environment
+                scene.lightingEnvironment.contents = StudioTextures.environment
+                scene.lightingEnvironment.intensity = StudioLighting.environmentIntensity
+                for (x, metal) in [(-260.0, 1.0), (260.0, 0.0)] {
+                    let ball = SCNSphere(radius: 220)
+                    ball.segmentCount = 96
+                    ball.firstMaterial = StudioMaterials.pbr(UIColor(white: metal > 0 ? 0.95 : 0.6, alpha: 1),
+                                                             metalness: metal, roughness: metal > 0 ? 0.02 : 0.6)
+                    let node = SCNNode(geometry: ball)
+                    node.position = SCNVector3(Float(x), 0, 0)
+                    scene.rootNode.addChildNode(node)
+                }
+                let camera = SCNNode()
+                camera.camera = SCNCamera()
+                camera.camera?.zNear = 10
+                camera.camera?.zFar = 50000
+                camera.camera?.fieldOfView = 70
+                camera.position = SCNVector3(0, 0, 1200)
+                scene.rootNode.addChildNode(camera)
+                let renderer = SCNRenderer(device: device, options: nil)
+                renderer.scene = scene
+                renderer.pointOfView = camera
+                continuation.resume(returning: renderer.snapshot(atTime: 0, with: CGSize(width: 1170, height: 660),
+                                                                 antialiasingMode: .multisampling4X))
+            }
+        }
+    }
+}
+
 struct RenderLabView: View {
     @State private var rendered: [(name: String, image: UIImage)] = []
     @State private var done = false
@@ -90,6 +129,12 @@ struct RenderLabView: View {
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var timings = ""
+        let env = StudioTextures.environment
+        timings += "environment \(Int(env.size.width))x\(Int(env.size.height)) cg=\(env.cgImage != nil)\n"
+        if let diag = await RenderLab.environmentProbe() {
+            try? diag.pngData()?.write(to: dir.appendingPathComponent("00-diag-environment.png"))
+            rendered.append(("00-diag-environment", diag))
+        }
         for item in RenderLab.matrix {
             let start = Date()
             guard let image = await StudioRenderer.shared.render(item.request) else { continue }
