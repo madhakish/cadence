@@ -18,6 +18,7 @@ struct CadenceApp: App {
             } else if let container = bootstrap.container {
                 ThemedRoot()
                     .modelContainer(container)
+                    .task { StudioRenderer.shared.prewarm() }
                     .onChange(of: scenePhase) { _, phase in
                         guard phase == .background, !bootstrap.isTemporary else { return }
                         do { try BackupCheckpointService.create(context: container.mainContext, reason: "background") }

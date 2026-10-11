@@ -64,8 +64,10 @@ final class BarbellStudio {
         case .hero:
             let reach = max(1, layout.extent / 1120)
             eye = SCNVector3(Float(-2000 * reach), 330, Float(2250 * reach))
-            target = SCNVector3(Float(-200 * reach), Float(-0.27 * floorDrop), 0)
-            fov = aspect >= 1.5 ? 43.6 : 52
+            // Wide frames match the approved 45 mm look; taller frames (the
+            // inspector) keep the bar the same width and centre it vertically.
+            target = SCNVector3(Float(-200 * reach), Float((aspect >= 1.5 ? -0.27 : -0.1) * floorDrop), 0)
+            fov = aspect >= 1.5 ? 43.6 : 41
             fStop = 5.6
         case .blowup:
             let near = nearDiscs.map(\.node.position.x)
@@ -1197,17 +1199,32 @@ final class StudioRenderer: @unchecked Sendable {
         let scale: Double
     }
 
+    /// Bump when the renderer's look changes, so stale disk renders retire.
+    static let version = 1
+
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
     private var renderer: SCNRenderer?
+    private let directory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("StudioRenders/v\(StudioRenderer.version)", isDirectory: true)
 
     static var isSupported: Bool { MTLCreateSystemDefaultDevice() != nil }
 
-    private static func key(_ r: Request) -> NSString {
-        "\(r.loadout.hashValue)|\(r.style.rawValue)|\(r.theme.rawValue)|\(r.shot.rawValue)|\(r.width)x\(r.height)@\(r.scale)" as NSString
+    /// A key that is stable across launches (Swift hash values are not).
+    static func key(_ r: Request) -> String {
+        let plates = r.loadout.perSide.map { "\($0.plate.id)x\($0.count)" }.joined(separator: ",")
+        return "\(r.loadout.bar.id)|\(plates)|\(Weight.trim(r.loadout.collarLb, decimals: 3))|\(r.style.rawValue)|"
+            + "\(r.theme.rawValue)|\(r.shot.rawValue)|\(r.width)x\(r.height)@\(Weight.trim(r.scale, decimals: 2))"
     }
 
-    func cached(_ request: Request) -> UIImage? { cache.object(forKey: Self.key(request)) }
+    private func file(_ key: String) -> URL? {
+        // FNV-1a: a short, deterministic file name for the key.
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in key.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100000001b3 }
+        return directory?.appendingPathComponent(String(hash, radix: 16) + ".png")
+    }
+
+    func cached(_ request: Request) -> UIImage? { cache.object(forKey: Self.key(request) as NSString) }
 
     func render(_ request: Request) async -> UIImage? {
         if let hit = cached(request) { return hit }
@@ -1218,10 +1235,27 @@ final class StudioRenderer: @unchecked Sendable {
         }
     }
 
-    /// Synchronous on the studio queue; also used by the render lab.
+    /// Builds the shared textures and materials ahead of the first view.
+    func prewarm() {
+        queue.async(qos: .utility) {
+            _ = StudioTextures.environment
+            _ = StudioTextures.brandedOak
+            _ = StudioMaterials.oakTop
+            _ = StudioMaterials.knurl
+        }
+    }
+
+    /// Synchronous on the studio queue; also used by the render lab. Memory
+    /// first, then the on-disk cache, then a fresh render written back.
     func renderNow(_ request: Request) -> UIImage? {
-        if let hit = cached(request) { return hit }
+        let key = Self.key(request)
+        if let hit = cache.object(forKey: key as NSString) { return hit }
         guard request.width > 0, request.height > 0 else { return nil }
+        let url = file(key)
+        if let url, let data = try? Data(contentsOf: url), let disk = UIImage(data: data, scale: CGFloat(request.scale)) {
+            cache.setObject(disk, forKey: key as NSString)
+            return disk
+        }
         if renderer == nil {
             guard let device = MTLCreateSystemDefaultDevice() else { return nil }
             renderer = SCNRenderer(device: device, options: nil)
@@ -1235,10 +1269,14 @@ final class StudioRenderer: @unchecked Sendable {
         renderer.autoenablesDefaultLighting = false
         let pixels = CGSize(width: Double(request.width) * request.scale, height: Double(request.height) * request.scale)
         let raw = renderer.snapshot(atTime: 0, with: pixels, antialiasingMode: .multisampling4X)
+        renderer.scene = nil
         guard let cg = raw.cgImage else { return raw }
         let image = UIImage(cgImage: cg, scale: CGFloat(request.scale), orientation: .up)
-        cache.setObject(image, forKey: Self.key(request))
-        renderer.scene = nil
+        cache.setObject(image, forKey: key as NSString)
+        if let url, let data = image.pngData() {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+        }
         return image
     }
 }
