@@ -649,6 +649,19 @@ final class VisualProofUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
+    /// Scroll until `element` is realized and inside the window. Lazy Form
+    /// rows do not exist until they scroll on, and a label inside a combined
+    /// row (a picker's title) is never hittable even when it is on screen,
+    /// so hittability cannot judge visibility; the frame can.
+    private func scrollUntilVisible(_ element: XCUIElement, swipes: Int = 10) -> Bool {
+        let visible = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 100)
+        for _ in 0..<swipes {
+            if element.exists, visible.contains(element.frame) { return true }
+            app.swipeUp()
+        }
+        return element.exists && visible.contains(element.frame)
+    }
+
     /// The root List ends above the opaque 72 pt calculator band. XCTest
     /// can report a row below that band as hittable; use its whole frame.
     private var rootListViewport: CGRect {
@@ -839,10 +852,7 @@ final class VisualProofUITests: XCTestCase {
                       "the row pushes the whole-program editor")
         let nextDay = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH 'Next day'")).firstMatch
-        // Form rows are lazy: a row below the fold does not exist until it
-        // scrolls on, so scroll until it is hittable rather than waiting.
-        for _ in 0..<8 where !nextDay.isHittable { app.swipeUp() }
-        XCTAssertTrue(nextDay.isHittable, "the schedule position is on screen in the editor")
+        XCTAssertTrue(scrollUntilVisible(nextDay), "the schedule position is on screen in the editor")
         capture("after-21-edit-program-populated-iphone")
         app.navigationBars.buttons["Program"].tap()
         XCTAssertTrue(app.navigationBars["Program"].waitForExistence(timeout: 5))
@@ -864,8 +874,7 @@ final class VisualProofUITests: XCTestCase {
         blank.tap()
         XCTAssertTrue(app.navigationBars["Program 2"].waitForExistence(timeout: 5), "a blank program opens its editor")
         let addDay = app.buttons["Add day"]
-        for _ in 0..<8 where !addDay.isHittable { app.swipeUp() }
-        XCTAssertTrue(addDay.isHittable, "days can be added to a blank program")
+        XCTAssertTrue(scrollUntilVisible(addDay), "days can be added to a blank program")
         capture("after-21-edit-program-blank-iphone")
 
         // Deleting a program is confirmed, never one tap: cancel keeps it,
