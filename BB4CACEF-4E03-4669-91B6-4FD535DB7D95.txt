@@ -1,0 +1,2 @@
+window: 402.0 x 874.0 pt
+launchArguments: --visual-proof -AppleLanguages (en) -AppleLocale en_US -UIPreferredContentSizeCategoryName UICTContentSizeCategoryL --plate-theme=blackBumpersBand

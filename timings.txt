@@ -1,0 +1,13 @@
+environment 2048x1024 cg=true
+01-row-squat115-custom 5479 ms
+02-row-press100-custom 859 ms
+03-hero-225-lbColourBumpers 1468 ms
+04-hero-squat115-custom 168 ms
+05-hero-mixed-lbBlackIron 1841 ms
+06-hero-kg-iwfCompetition 2599 ms
+07-hero-315-ipfCalibrated 1890 ms
+08-blowup-mixed-lbColourBumpers 2619 ms
+09-blowup-kg-iwfCompetition 206 ms
+10-hero-collars-cadenceHouse 2165 ms
+11-row-mixed-lbGreyHammertone 1842 ms
+12-hero-mixed-blackBumpersBand 3087 ms
