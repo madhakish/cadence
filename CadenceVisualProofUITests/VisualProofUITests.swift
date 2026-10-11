@@ -653,11 +653,17 @@ final class VisualProofUITests: XCTestCase {
     /// rows do not exist until they scroll on, and a label inside a combined
     /// row (a picker's title) is never hittable even when it is on screen,
     /// so hittability cannot judge visibility; the frame can.
-    private func scrollUntilVisible(_ element: XCUIElement, swipes: Int = 10) -> Bool {
-        let visible = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 100)
-        for _ in 0..<swipes {
+    private func scrollUntilVisible(_ element: XCUIElement, drags: Int = 16) -> Bool {
+        let window = app.windows.firstMatch.frame
+        let visible = window.insetBy(dx: 0, dy: 100)
+        for _ in 0..<drags {
             if element.exists, visible.contains(element.frame) { return true }
-            app.swipeUp()
+            // No momentum: a swipeUp fling carried the row past the inset
+            // window on every attempt at 375 pt; a slow third-of-a-screen
+            // drag lands it. The press starts on the left, over labels.
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.4))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
         }
         return element.exists && visible.contains(element.frame)
     }
