@@ -86,15 +86,26 @@ final class BarbellStudio {
         cameraNode.look(at: target, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
         let dx = Double(eye.x - target.x), dy = Double(eye.y - target.y), dz = Double(eye.z - target.z)
         camera.focusDistance = CGFloat((dx * dx + dy * dy + dz * dz).squareRoot())
-        camera.fStop = CGFloat(fStop)
+        // SceneKit's circle of confusion treats scene units as metres; this
+        // scene is in millimetres, so the physical f-stop scales by 1/1000.
+        camera.fStop = CGFloat(fStop / 1000)
     }
 
     /// 0 assembled ... 1 exploded. Only the near sleeve's stack slides; the
     /// far side stays loaded so the bar still reads as one object.
+    /// Spacing between slid-out plates: at most `blowupGap`, and never so
+    /// much that the outermost plate leaves the platform.
+    var blowupSpacing: Double {
+        let count = Double(max(1, nearDiscs.count - 1))
+        let outer = nearDiscs.map { abs($0.disc.centerX) + $0.disc.thickness / 2 }.max() ?? 0
+        return max(40, min(Self.blowupGap, (StudioPlatform.size / 2 - 70 - outer) / count))
+    }
+
     func explode(_ t: Double) {
         let t = min(1, max(0, t))
+        let gap = blowupSpacing
         for (disc, node) in nearDiscs {
-            node.position.x = Float(disc.centerX - t * Self.blowupGap * Double(disc.index))
+            node.position.x = Float(disc.centerX - t * gap * Double(disc.index))
         }
         for (side, node) in collarNodes where side < 0 {
             node.opacity = CGFloat(1 - t)
@@ -581,7 +592,7 @@ enum StudioFaces {
             ctx.fill(CGRect(x: 0, y: 0, width: n, height: n))
             let centre = CGPoint(x: Double(n) / 2, y: Double(n) / 2)
             let numberFont = UIFont.systemFont(ofSize: CGFloat(numberSize), weight: .heavy, width: .condensed)
-            arc("\(s.denomination)\u{2009}\u{2009}\(s.unit)", font: numberFont, tracking: 1.04, baseline: mid + numberFont.capHeight / 2,
+            arc("\(s.denomination)\u{2002}\(s.unit)", font: numberFont, tracking: 1.04, baseline: mid + numberFont.capHeight / 2,
                 top: false, centre: centre, in: ctx.cgContext)
             if !s.brand.isEmpty {
                 let brandFont = UIFont.systemFont(ofSize: CGFloat(brandSize), weight: .bold)
@@ -700,7 +711,7 @@ enum StudioPlatform {
 enum StudioLighting {
     static let exposure: CGFloat = 0.0
     /// The environment was baked one stop under (docs/design-pass/lookdev/bake.py).
-    static let environmentIntensity: CGFloat = 2.0
+    static let environmentIntensity: CGFloat = 2.3
     static let keyIntensity: CGFloat = 650
 
     static func apply(to scene: SCNScene, floorY: Double) {
@@ -712,7 +723,7 @@ enum StudioLighting {
         let key = SCNLight()
         key.type = .directional
         key.intensity = keyIntensity
-        key.color = UIColor(red: 1, green: 0.97, blue: 0.92, alpha: 1)
+        key.color = UIColor(red: 1, green: 0.985, blue: 0.96, alpha: 1)
         key.castsShadow = true
         key.shadowMode = .deferred
         key.shadowColor = UIColor.black.withAlphaComponent(0.72)
@@ -838,7 +849,7 @@ enum StudioMaterials {
                 m.clearCoatRoughness.contents = NSNumber(value: 0.35)
             case .hammertone:
                 tiled(m.normal, StudioTextures.hammerNormal, 3, 3)
-                m.normal.intensity = 0.9
+                m.normal.intensity = 0.45
             case .machined:
                 tiled(m.normal, StudioTextures.brushedNormal, 1, 30)
             }
@@ -1014,9 +1025,9 @@ enum StudioTextures {
     static let blocks: UIImage = {
         let size = CGSize(width: 200, height: 200)
         return UIGraphicsImageRenderer(size: size).image { ctx in
-            UIColor(white: 0.16, alpha: 1).setFill()
+            UIColor(red: 0.105, green: 0.11, blue: 0.118, alpha: 1).setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
-            UIColor(white: 0.09, alpha: 1).setFill()
+            UIColor(red: 0.055, green: 0.058, blue: 0.062, alpha: 1).setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 8))
             ctx.fill(CGRect(x: 0, y: 100, width: 200, height: 8))
             ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 100))

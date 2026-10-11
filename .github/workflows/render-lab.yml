@@ -27,7 +27,7 @@ jobs:
     name: Render studio matrix
     if: github.ref != 'refs/heads/main'
     runs-on: macos-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,7 +53,11 @@ jobs:
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}' \
             -derivedDataPath build/render-lab \
             -resultBundlePath build/RenderLab.xcresult \
-            -only-testing:CadenceVisualProofUITests/RenderLabUITests/testRenderLab 2>&1 | tee build/xcodebuild.log
+            -only-testing:CadenceVisualProofUITests/RenderLabUITests/testRenderLab \
+            -only-testing:CadenceVisualProofUITests/VisualProofUITests/test02CurrentSessionAndExactPlateStack \
+            -only-testing:CadenceVisualProofUITests/VisualProofUITests/test04PlateCalculatorHero \
+            -only-testing:CadenceVisualProofUITests/VisualProofUITests/test09WorkoutPreviewInspection \
+            -only-testing:CadenceVisualProofUITests/VisualProofUITests/test15PlateThemesLoadedBar 2>&1 | tee build/xcodebuild.log
       - name: Keep build diagnostics
         if: always()
         run: |
