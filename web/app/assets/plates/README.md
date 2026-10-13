@@ -36,3 +36,14 @@ bumper, steel and change faces; the installer never writes or deletes them.
 Regenerate the sprites rather than edit them.
 
 Renderer source SHA-256: `c6b6e3b59eee519c694cfb6912ff75d41e00672778f37dc94f95bb8fb856739b`.
+
+
+## Reviewing asset changes
+
+Verify the current branch's consumers and installer before regeneration; native
+renderer work may change which assets are shared. Keep dimension/denomination
+metadata authoritative rather than parsing file names. A regenerated sprite or
+browser screenshot is not native acceptance. Use the repository's
+[native proof guide](../../../../.agents/skills/cadence-native-proof/SKILL.md)
+for math, geometry and actual simulator/device evidence, and keep captures out
+of this production asset directory.
