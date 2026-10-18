@@ -328,22 +328,22 @@ enum StudioLathe {
 // MARK: - Plates
 
 enum StudioPlates {
-    private static var built: [String: SCNNode] = [:]
-    private static let lock = NSLock()
+    /// Built plates, charged by their face textures (which they retain) and
+    /// evicted under that budget or memory pressure; a miss rebuilds the same plate.
+    private static let built: NSCache<NSString, SCNNode> = {
+        let cache = NSCache<NSString, SCNNode>()
+        cache.totalCostLimit = 96 << 20
+        return cache
+    }()
 
     /// A complete plate (body, hub, bolts, lettering) centred on its own
     /// origin with the axis along x, flattened to a single node. Identical
     /// plates share geometry through clones.
     static func node(for disc: BarbellInspector.Disc, style: PlateVisualStyle, theme: PlateThemeID) -> SCNNode {
-        let key = "\(disc.plate.id)|\(style.rawValue)|\(theme.rawValue)|\(disc.family)|\(disc.radius)|\(disc.thickness)"
-        lock.lock()
-        let hit = built[key]
-        lock.unlock()
-        if let hit { return hit.clone() }
+        let key = "\(disc.plate.id)|\(style.rawValue)|\(theme.rawValue)|\(disc.family)|\(disc.radius)|\(disc.thickness)" as NSString
+        if let hit = built.object(forKey: key) { return hit.clone() }
         let made = build(disc, style: style, theme: theme)
-        lock.lock()
-        built[key] = made
-        lock.unlock()
+        built.setObject(made, forKey: key, cost: StudioFaces.bytes(radius: disc.radius))
         return made.clone()
     }
 
@@ -483,17 +483,28 @@ enum StudioFaces {
         let relief: Double
     }
 
-    struct Maps { let diffuse: UIImage; let normal: UIImage }
+    final class Maps {
+        let diffuse: UIImage, normal: UIImage
+        init(diffuse: UIImage, normal: UIImage) { self.diffuse = diffuse; self.normal = normal }
+    }
 
-    private static var cache: [Spec: Maps] = [:]
-    private static let lock = NSLock()
+    /// Baked maps, charged by their decoded size and evicted under that
+    /// budget or memory pressure; a miss re-bakes the same deterministic maps.
+    private static let cache: NSCache<NSString, Maps> = {
+        let cache = NSCache<NSString, Maps>()
+        cache.totalCostLimit = 96 << 20
+        return cache
+    }()
+
+    static func size(small: Bool) -> Int { small ? 512 : 1024 }
+    /// Decoded bytes of one face's diffuse and normal maps (RGBA8 each).
+    static func bytes(radius: Double) -> Int { let n = size(small: radius < 120); return 2 * n * n * 4 }
 
     static func maps(_ spec: Spec) -> Maps {
-        lock.lock()
-        if let hit = cache[spec] { lock.unlock(); return hit }
-        lock.unlock()
+        let key = String(describing: spec) as NSString
+        if let hit = cache.object(forKey: key) { return hit }
         let made = bake(spec)
-        lock.lock(); cache[spec] = made; lock.unlock()
+        cache.setObject(made, forKey: key, cost: bytes(radius: spec.radius))
         return made
     }
 
@@ -530,7 +541,7 @@ enum StudioFaces {
     private static func toSRGB(_ v: Double) -> UInt8 { srgbTable[Int(max(0, min(1, v)) * 4095)] }
 
     private static func bake(_ s: Spec) -> Maps {
-        let n = s.small ? 512 : 1024
+        let n = size(small: s.small)
         let pxPerMM = Double(n) / (2 * s.radius)
         let mask = lettering(s, size: n, pxPerMM: pxPerMM)
         let mottle = StudioTextures.mottleField, grain = StudioTextures.grainField
@@ -861,7 +872,7 @@ enum StudioMaterials {
 
     /// The outer tyre: the same finish, rougher, with scuffs from drops.
     static func plateTyre(_ finish: PlateMaterial, fill: UInt32) -> SCNMaterial {
-        cached("tyre|\(finish.finish.rawValue)|\(fill)|\(finish.roughness)") {
+        cached("tyre|\(finish.finish.rawValue)|\(fill)|\(finish.roughness)|\(finish.metal)") {
             let m = plateBody(finish, fill: fill).copy() as! SCNMaterial
             if finish.finish == .rubber {
                 tiled(m.diffuse, StudioTextures.scuffedTyre(fill: fill), 3, 1)
@@ -1208,8 +1219,6 @@ final class StudioRenderer: @unchecked Sendable {
     private let directory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
         .appendingPathComponent("StudioRenders/v\(StudioRenderer.version)", isDirectory: true)
 
-    static var isSupported: Bool { MTLCreateSystemDefaultDevice() != nil }
-
     /// A key that is stable across launches (Swift hash values are not).
     static func key(_ r: Request) -> String {
         let plates = r.loadout.perSide.map { "\($0.plate.id)x\($0.count)" }.joined(separator: ",")
@@ -1231,6 +1240,16 @@ final class StudioRenderer: @unchecked Sendable {
         return await withCheckedContinuation { continuation in
             queue.async { [self] in
                 continuation.resume(returning: renderNow(request))
+            }
+        }
+    }
+
+    /// Builds a live studio scene on the studio queue, so plate-face baking
+    /// stays off the main thread for the inspector as it does for renders.
+    func studio(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) async -> BarbellStudio {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: BarbellStudio(loadout: loadout, style: style, theme: theme))
             }
         }
     }
@@ -1270,7 +1289,10 @@ final class StudioRenderer: @unchecked Sendable {
         let pixels = CGSize(width: Double(request.width) * request.scale, height: Double(request.height) * request.scale)
         let raw = renderer.snapshot(atTime: 0, with: pixels, antialiasingMode: .multisampling4X)
         renderer.scene = nil
-        guard let cg = raw.cgImage else { return raw }
+        // A refused GPU pass (the app went to the background mid-render) comes
+        // back as one flat colour. Never keep it: it would stick in memory and
+        // on disk for this request. The view asks again once it is active.
+        guard let cg = raw.cgImage, !Self.isFlat(cg) else { return nil }
         let image = UIImage(cgImage: cg, scale: CGFloat(request.scale), orientation: .up)
         cache.setObject(image, forKey: key as NSString)
         if let url, let data = image.pngData() {
@@ -1279,16 +1301,38 @@ final class StudioRenderer: @unchecked Sendable {
         }
         return image
     }
+
+    /// True when every pixel of an 8 × 8 reduction is identical. The studio
+    /// always draws a bar against a lit backdrop, so a real render never is.
+    static func isFlat(_ cg: CGImage) -> Bool {
+        let n = 8
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        let drawn = px.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: n, height: n))
+            return true
+        }
+        guard drawn else { return true }
+        return stride(from: 4, to: px.count, by: 4).allSatisfy { px[$0..<$0 + 4].elementsEqual(px[0..<4]) }
+    }
 }
 
 /// A cached studio render sized to its container.
 struct StudioImage: View {
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.scenePhase) private var scenePhase
     let loadout: Loadout
     let style: PlateVisualStyle
     let theme: PlateThemeID
     let shot: StudioShot
     @State private var image: UIImage?
+
+    private struct Render: Equatable {
+        let request: StudioRenderer.Request
+        let active: Bool
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1297,7 +1341,7 @@ struct StudioImage: View {
                                                  scale: Double(displayScale))
             ZStack {
                 Theme.sceneStudio
-                if let shown = image ?? StudioRenderer.shared.cached(request) {
+                if let shown = StudioRenderer.shared.cached(request) ?? image {
                     Image(uiImage: shown)
                         .resizable()
                         .interpolation(.high)
@@ -1306,8 +1350,13 @@ struct StudioImage: View {
                         .clipped()
                 }
             }
-            .task(id: request) {
-                image = await StudioRenderer.shared.render(request)
+            .task(id: Render(request: request, active: scenePhase == .active)) {
+                // No GPU work in the background; the phase change re-runs this.
+                guard scenePhase == .active else { return }
+                let rendered = await StudioRenderer.shared.render(request)
+                // A superseded request finishes late; it must not replace the current one.
+                guard !Task.isCancelled else { return }
+                image = rendered
             }
         }
     }
