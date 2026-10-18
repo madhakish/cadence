@@ -73,13 +73,12 @@ struct PlateFaceBadge: View {
 /// stage); `emphasis` is the state and changes only opacity — never geometry,
 /// order, or labels.
 struct BarbellView: View {
-    enum Presentation: Equatable { case compactSide, fullBar, inspectionSide }
+    enum Presentation: Equatable { case compactSide, fullBar }
     enum Emphasis: Equatable { case current, standard, muted }
     let solution: PlateSolution
     var plateStyle: PlateVisualStyle = .steel
     var plateTheme: PlateThemeID = .custom
     var presentation: Presentation = .compactSide
-    var exploded = false
     var emphasis: Emphasis = .standard
     var showsReadout = true
 
@@ -88,11 +87,10 @@ struct BarbellView: View {
     }
 
     var body: some View {
-        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded, theme: plateTheme)
+        let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: false, theme: plateTheme)
         // The studio renders the real bar on the platform: straight ahead for
-        // a set row, three-quarter for the stage, the blowup for an exploded
-        // inspection fallback. One scene behind every view.
-        let shot: StudioShot = presentation == .compactSide ? .row : (presentation == .inspectionSide && exploded ? .blowup : .hero)
+        // a set row, three-quarter for the stage. One scene behind every view.
+        let shot: StudioShot = presentation == .compactSide ? .row : .hero
         let artwork = StudioImage(loadout: solution.loadout, style: plateStyle, theme: plateTheme, shot: shot)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
             .accessibilityHidden(true)
@@ -103,12 +101,12 @@ struct BarbellView: View {
             } else {
                 artwork.frame(height: presentation == .compactSide ? 84 : nil)
             }
-            if showsReadout && presentation != .inspectionSide && !solution.loadout.perSide.isEmpty {
+            if showsReadout && !solution.loadout.perSide.isEmpty {
                 PlateStackReadout(loadout: solution.loadout)
             }
         }
         .opacity(emphasis == .muted ? 0.85 : 1)
-        .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
+        .accessibilityLabel("Assembled bar, \(Weight.both(lb: solution.loadout.totalLb))")
         .accessibilityChildren { Self.plateChildren(scene: scene, loadout: solution.loadout) }
     }
 
@@ -213,7 +211,6 @@ struct BarbellInspectionView: View {
     var plateStyle: PlateVisualStyle = .steel
     var plateTheme: PlateThemeID = .custom
     @State private var exploded = false
-    private let solid = BarbellSceneView.isSupported
 
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded, theme: plateTheme)
@@ -223,14 +220,9 @@ struct BarbellInspectionView: View {
                 let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
                 let width = exploded ? max(proxy.size.width, CGFloat(minimum) * max(1, captionSize / 14)) : proxy.size.width
                 ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
-                    Group {
-                        if solid {
-                            BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
-                                             exploded: exploded, reduceMotion: reduceMotion)
-                        } else {
-                            BarbellView(solution: solution, plateStyle: plateStyle, plateTheme: plateTheme, presentation: .inspectionSide, exploded: exploded)
-                        }
-                    }
+                    // Every iOS 17 device has Metal; the studio has no non-Metal path.
+                    BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
+                                     exploded: exploded, reduceMotion: reduceMotion)
                     .frame(width: width, height: 300)
                     .contentShape(Rectangle())
                     .onTapGesture { toggle() }

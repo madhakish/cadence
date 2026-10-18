@@ -13,8 +13,6 @@ struct BarbellSceneView: UIViewRepresentable {
     let exploded: Bool
     let reduceMotion: Bool
 
-    static var isSupported: Bool { StudioRenderer.isSupported }
-
     func makeUIView(context: Context) -> FittingSceneView {
         let view = FittingSceneView(frame: .zero)
         view.antialiasingMode = .multisampling4X
@@ -24,7 +22,6 @@ struct BarbellSceneView: UIViewRepresentable {
         view.autoenablesDefaultLighting = false
         view.isAccessibilityElement = false
         view.backgroundColor = UIColor(Theme.sceneStudio)
-        view.scene = context.coordinator.studio.scene
         context.coordinator.attach(view)
         context.coordinator.apply(exploded: exploded, animated: false, reduceMotion: reduceMotion)
         return view
@@ -58,16 +55,27 @@ func inspectionPlateLabel(_ plate: Plate) -> String {
 
 @MainActor
 final class StudioInspector {
-    let studio: BarbellStudio
+    /// Nil until the studio queue has built the scene; the view shows the
+    /// studio backdrop meanwhile.
+    private(set) var studio: BarbellStudio?
     private var captions: [UILabel] = []
     private var explodedNow: Bool?
+    /// The last requested state, applied when the scene arrives.
+    private var wanted = false
     private var transition = 0
     private var transitioning = false
     private var viewSize = CGSize(width: 390, height: 300)
     private weak var view: SCNView?
 
     init(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) {
-        studio = BarbellStudio(loadout: loadout, style: style, theme: theme)
+        Task { [weak self] in
+            let studio = await StudioRenderer.shared.studio(loadout: loadout, style: style, theme: theme)
+            self?.install(studio)
+        }
+    }
+
+    private func install(_ studio: BarbellStudio) {
+        self.studio = studio
         captions = studio.nearDiscs.map { entry in
             let caption = UILabel()
             caption.text = inspectionPlateLabel(entry.disc.plate)
@@ -81,21 +89,33 @@ final class StudioInspector {
             caption.isHidden = true
             return caption
         }
+        if let view { show(in: view) }
     }
 
     func attach(_ view: BarbellSceneView.FittingSceneView) {
         self.view = view
-        view.pointOfView = studio.cameraNode
-        for caption in captions { view.addSubview(caption) }
         view.onLayout = { [weak self] size in
             guard let self, size != self.viewSize, size.width > 0, size.height > 0 else { return }
             self.viewSize = size
-            self.studio.frame(self.explodedNow == true ? .blowup : .hero, aspect: Double(size.width / size.height))
+            self.studio?.frame(self.explodedNow == true ? .blowup : .hero, aspect: Double(size.width / size.height))
             self.updateCaptions()
         }
+        if studio != nil { show(in: view) }
+    }
+
+    /// Puts the built scene in the view at the requested state, unanimated.
+    private func show(in view: SCNView) {
+        guard let studio else { return }
+        view.scene = studio.scene
+        view.pointOfView = studio.cameraNode
+        for caption in captions { view.addSubview(caption) }
+        explodedNow = nil
+        apply(exploded: wanted, animated: false, reduceMotion: true)
     }
 
     func apply(exploded: Bool, animated: Bool, reduceMotion: Bool) {
+        wanted = exploded
+        guard let studio else { return }
         guard exploded != explodedNow else { updateCaptions(); return }
         explodedNow = exploded
         transition += 1
@@ -122,7 +142,7 @@ final class StudioInspector {
     /// Screen-space text never shrinks with the model. Each physical disc,
     /// including duplicates, owns a caption directly below its projected face.
     private func updateCaptions() {
-        guard let view else { return }
+        guard let view, let studio else { return }
         for (caption, entry) in zip(captions, studio.nearDiscs) {
             caption.isHidden = explodedNow != true || transitioning
             guard !caption.isHidden else { continue }
