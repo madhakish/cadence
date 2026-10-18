@@ -341,7 +341,8 @@ enum StudioPlates {
     /// origin with the axis along x, flattened to a single node. Identical
     /// plates share geometry through clones.
     static func node(for disc: BarbellInspector.Disc, style: PlateVisualStyle, theme: PlateThemeID) -> SCNNode {
-        let key = "\(disc.plate.id)|\(style.rawValue)|\(theme.rawValue)|\(disc.family)|\(disc.radius)|\(disc.thickness)" as NSString
+        // `Plate.id` rounds to two decimals; the face prints the exact value.
+        let key = "\(disc.plate.exactKey)|\(style.rawValue)|\(theme.rawValue)|\(disc.family)|\(disc.radius)|\(disc.thickness)" as NSString
         if let hit = built.object(forKey: key) { return hit.clone() }
         let made = build(disc, style: style, theme: theme)
         built.setObject(made, forKey: key, cost: StudioFaces.bytes(radius: disc.radius))
@@ -1227,7 +1228,7 @@ final class StudioRenderer: @unchecked Sendable {
 
     /// A key that is stable across launches (Swift hash values are not).
     static func key(_ r: Request) -> String {
-        let plates = r.loadout.perSide.map { "\($0.plate.id)x\($0.count)" }.joined(separator: ",")
+        let plates = r.loadout.perSide.map { "\($0.plate.exactKey)x\($0.count)" }.joined(separator: ",")
         return "\(r.loadout.bar.id)|\(plates)|\(Weight.trim(r.loadout.collarLb, decimals: 3))|\(r.style.rawValue)|"
             + "\(r.theme.rawValue)|\(r.shot.rawValue)|\(r.width)x\(r.height)@\(Weight.trim(r.scale, decimals: 2))"
     }
@@ -1263,11 +1264,21 @@ final class StudioRenderer: @unchecked Sendable {
 
     /// Builds a live studio scene on the studio queue, so plate-face baking
     /// stays off the main thread for the inspector as it does for renders.
-    func studio(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) async -> BarbellStudio {
-        await withCheckedContinuation { continuation in
-            queue.async {
-                continuation.resume(returning: BarbellStudio(loadout: loadout, style: style, theme: theme))
+    /// Nil when the caller was cancelled before the queue reached the build.
+    func studio(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) async -> BarbellStudio? {
+        let cancelled = OSAllocatedUnfairLock(initialState: false)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                queue.async {
+                    if cancelled.withLock({ $0 }) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(returning: BarbellStudio(loadout: loadout, style: style, theme: theme))
+                }
             }
+        } onCancel: {
+            cancelled.withLock { $0 = true }
         }
     }
 
@@ -1397,6 +1408,12 @@ struct StudioImage: View {
             }
         }
     }
+}
+
+extension Plate {
+    /// A cache-key component that keeps the stored value's every bit, unlike
+    /// `id`, which rounds to two decimals (1.125 and 1.13 share an id).
+    var exactKey: String { "\(String(value.bitPattern, radix: 16))-\(unit.rawValue)" }
 }
 
 extension UIColor {

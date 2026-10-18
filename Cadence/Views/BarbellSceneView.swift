@@ -66,10 +66,18 @@ final class StudioInspector {
     private var transitioning = false
     private var viewSize = CGSize(width: 390, height: 300)
     private weak var view: SCNView?
+    /// Cancels the scene build when the inspector goes away before it lands,
+    /// so the shared studio queue does not bake an unreachable scene.
+    private let building = BuildHandle()
+
+    private final class BuildHandle: @unchecked Sendable {
+        var task: Task<Void, Never>?
+        deinit { task?.cancel() }
+    }
 
     init(loadout: Loadout, style: PlateVisualStyle, theme: PlateThemeID) {
-        Task { [weak self] in
-            let studio = await StudioRenderer.shared.studio(loadout: loadout, style: style, theme: theme)
+        building.task = Task { [weak self] in
+            guard let studio = await StudioRenderer.shared.studio(loadout: loadout, style: style, theme: theme) else { return }
             self?.install(studio)
         }
     }
