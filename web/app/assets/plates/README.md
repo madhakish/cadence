@@ -1,9 +1,9 @@
 # Loaded-bar sprites
 
 Rendered by `web/tools/render-plate-sprites.py` (a deterministic signed-distance
-ray marcher with a studio light rig) and installed here and into
-`Cadence/Assets.xcassets/PlateSprites` by `web/tools/install-plate-sprites.mjs`;
-the two copies are byte-identical and tested. Every sprite is procedural and
+ray marcher with a studio light rig) and installed here by
+`web/tools/install-plate-sprites.mjs`. iOS renders the SceneKit studio instead
+(`Cadence/Views/BarbellStudio.swift`). Every sprite is procedural and
 saved as grey+alpha PNG. Plates are greyscale and are colourised at runtime
 from the shared luminance matrix; hubs, hub bolts and bar parts stay
 untinted (cast-iron plates have no separate hub, so only the bore does).

@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "platform-mat-normal.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

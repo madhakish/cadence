@@ -1,6 +1,6 @@
 # Photographic barbell inspection
 
-**Historical implementation record (20 September 2026).** Current compiled/rendered evidence and the remaining acceptance gates are in [FINAL-VERIFICATION.md](FINAL-VERIFICATION.md) and [BEFORE-AFTER.md](BEFORE-AFTER.md). Status statements below belong to that earlier checkpoint.
+**Superseded on iOS by [STUDIO-RENDERER.md](STUDIO-RENDERER.md) (#316).** **Historical implementation record (20 September 2026).** Current compiled/rendered evidence and the remaining acceptance gates are in [FINAL-VERIFICATION.md](FINAL-VERIFICATION.md) and [BEFORE-AFTER.md](BEFORE-AFTER.md). Status statements below belong to that earlier checkpoint.
 
 The September 20, 2026 refinement presents one loaded sleeve in two authored
 views: assembled and nearly straight ahead, then closer and angled with the
