@@ -107,4 +107,4 @@ running process or configured integration.
 
 Cadence is public. Keep its Discussions disabled and task claims on its issues
 and PRs. Keep private paths, internal session notes and private links out of
-issues, PRs and commits.
+issue and PR text; tool attribution lines are exempt.
