@@ -198,7 +198,7 @@ The repository includes two task-specific guides, loaded only when relevant:
 Run the capture-helper regression tests without Xcode or dependencies:
 
 ```sh
-python3 -m unittest discover -s .agents/skills/cadence-native-proof/scripts -p 'test_*.py' -v
+python3 -B -m unittest discover -s .agents/skills/cadence-native-proof/scripts -p 'test_*.py' -v
 ```
 
 Use the [documentation index](docs/README.md) for product behavior and
