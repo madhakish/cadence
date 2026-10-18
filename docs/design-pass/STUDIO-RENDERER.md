@@ -71,8 +71,8 @@ the theme's own (`CADENCE` by default).
 
 `--render-lab` (DEBUG only) renders a fixed matrix of loadouts, themes and
 shots with the production renderer, plus an environment probe. It writes each
-PNG and a timing log to the app's `tmp/render-lab`. The
-[`render-lab.yml`](../../.github/workflows/render-lab.yml) workflow runs it on an iPhone
-simulator for the studio work branch and publishes the PNGs and build
-diagnostics to `render-proof/photoreal-316`, so review does not depend on
-artifact downloads.
+PNG and a timing log to the app's `tmp/render-lab`; run it on a simulator
+with `CadenceVisualProofUITests/RenderLabUITests/testRenderLab`. During #316 a
+branch-scoped workflow ran it and published the PNGs to
+`render-proof/photoreal-316`. That workflow needed `contents: write` and a
+force-push, so it was removed before merge rather than kept on main.

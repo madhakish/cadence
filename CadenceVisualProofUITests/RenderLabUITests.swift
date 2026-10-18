@@ -2,7 +2,7 @@ import XCTest
 
 /// Drives the DEBUG render lab: the production studio renderer draws a fixed
 /// matrix of loadouts, themes and shots; the PNGs land in the app's tmp
-/// directory for the capture workflow to collect.
+/// directory (`tmp/render-lab`).
 final class RenderLabUITests: XCTestCase {
     func testRenderLab() {
         let app = XCUIApplication()

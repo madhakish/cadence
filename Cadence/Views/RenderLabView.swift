@@ -6,7 +6,7 @@ import UIKit
 
 /// DEBUG-only visual QA for the barbell studio: renders a fixed matrix of
 /// loadouts × themes × shots with the production renderer, writes each PNG
-/// to tmp/render-lab for the capture workflow, and shows them. Launched by
+/// to tmp/render-lab, and shows them. Launched by
 /// `--render-lab`; Release builds never reach it.
 enum RenderLab {
     static var isRequested: Bool {
