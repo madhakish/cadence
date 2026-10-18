@@ -23,8 +23,9 @@ unzip -q "$IPA_PATH" -d "$artifact_tmp"
 
 app="$artifact_tmp/Payload/Cadence.app"
 widget="$app/PlugIns/CadenceWidgets.appex"
-if [[ ! -d "$app" || ! -d "$widget" ]]; then
-  echo "Release IPA is missing Cadence.app or its widget extension" >&2
+watch="$app/Watch/CadenceWatch.app"
+if [[ ! -d "$app" || ! -d "$widget" || ! -d "$watch" ]]; then
+  echo "Release IPA is missing Cadence.app, its widget extension, or its embedded Watch/ app" >&2
   exit 1
 fi
 
@@ -36,6 +37,8 @@ app_version="$(plist_value "$app" CFBundleShortVersionString)"
 widget_version="$(plist_value "$widget" CFBundleShortVersionString)"
 app_id="$(plist_value "$app" CFBundleIdentifier)"
 widget_id="$(plist_value "$widget" CFBundleIdentifier)"
+watch_version="$(plist_value "$watch" CFBundleShortVersionString)"
+watch_id="$(plist_value "$watch" CFBundleIdentifier)"
 
 [[ "$app_version" == "$EXPECTED_VERSION" ]] || {
   echo "App version is $app_version; expected $EXPECTED_VERSION" >&2
@@ -45,12 +48,21 @@ widget_id="$(plist_value "$widget" CFBundleIdentifier)"
   echo "Widget version is $widget_version; expected $EXPECTED_VERSION" >&2
   exit 1
 }
+[[ "$watch_version" == "$EXPECTED_VERSION" ]] || {
+  echo "Watch app version is $watch_version; expected $EXPECTED_VERSION" >&2
+  exit 1
+}
 [[ "$app_id" == "$APP_IDENTIFIER" ]] || {
   echo "App identifier is $app_id; expected $APP_IDENTIFIER" >&2
   exit 1
 }
 [[ "$widget_id" == "$APP_IDENTIFIER.Widgets" ]] || {
   echo "Widget identifier is $widget_id; expected $APP_IDENTIFIER.Widgets" >&2
+  exit 1
+}
+
+[[ "$watch_id" == "$APP_IDENTIFIER.watchkitapp" ]] || {
+  echo "Watch app identifier is $watch_id; expected $APP_IDENTIFIER.watchkitapp" >&2
   exit 1
 }
 

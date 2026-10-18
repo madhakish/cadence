@@ -6,7 +6,8 @@ storage_mode("git")
 type("appstore")
 app_identifier([
   ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence",
-  "#{ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"}.Widgets" # Live Activity widget extension
+  "#{ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"}.Widgets", # Live Activity widget extension
+  "#{ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"}.watchkitapp" # embedded watch app
 ])
 # Read-only by default: routine CI builds must never be able to rewrite the
 # signing material in the certs repo (and the PAT behind

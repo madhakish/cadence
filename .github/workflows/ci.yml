@@ -154,7 +154,7 @@ jobs:
       # Parsing alone does not type-check SwiftUI or SwiftData usage.
       - name: Parse app-target Swift (syntax fail-fast)
         run: |
-          find Cadence CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
+          find Cadence CadenceWatch CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
             | xargs -0 xcrun swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
@@ -293,6 +293,17 @@ jobs:
           -destination 'generic/platform=iOS'
           -derivedDataPath build/device
           CODE_SIGNING_ALLOWED=NO
+      # The iOS build above embeds the watch app, but only a watchOS SDK build
+      # of its own scheme catches watch-only compile and link errors.
+      - name: Build for watchOS Simulator
+        run: >-
+          xcodebuild build
+          -project Cadence.xcodeproj
+          -scheme CadenceWatch
+          -configuration Release
+          -destination 'generic/platform=watchOS Simulator'
+          -derivedDataPath build/watch
+          CODE_SIGNING_ALLOWED=NO
       - name: Package device artifact
         run: |
           mkdir -p dist/Payload
@@ -308,7 +319,7 @@ jobs:
   # Build, sign, and seal the App Store IPA once. Semantic release and every
   # publisher sit behind this job; TestFlight only downloads and promotes the
   # immutable workflow artifact. Its SHA-256, version, bundle IDs, embedded
-  # widget, and code signatures are checked both here and before upload.
+  # widget and watch app, and code signatures are checked both here and before upload.
   store-build:
     name: Signed release artifact
     needs: [changes, core-tests, web-tests]

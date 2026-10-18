@@ -32,6 +32,11 @@ assert_classification \
   'Cadence/Views/HomeView.swift'
 
 assert_classification \
+  "watch app changes" \
+  $'native=true\nmigrations=false\nweb=false' \
+  'CadenceWatch/CadenceWatchApp.swift'
+
+assert_classification \
   "persistence changes" \
   $'native=true\nmigrations=true\nweb=false' \
   $'Cadence/Models/SessionModels.swift\nCadenceMigrationTests/PersistenceMigrationTests.swift'

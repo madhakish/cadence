@@ -8,6 +8,8 @@ APP_ID = ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence"
 # The Live Activity ships in an embedded widget extension with its own App ID,
 # which needs its own distribution profile or the archive will not sign.
 WIDGET_ID = "#{APP_ID}.Widgets"
+# The embedded watch app is a third App ID with its own distribution profile.
+WATCH_ID = "#{APP_ID}.watchkitapp"
 ARTIFACT_DIR = File.expand_path(ENV["ARTIFACT_DIR"] || "../dist", __dir__)
 ARTIFACT_NAME = "Cadence-store.ipa"
 
@@ -35,7 +37,7 @@ platform :ios do
 
     # The App IDs and App Store Connect record are created once by hand; see
     # docs/TESTFLIGHT.md. Routine CI only reads signing material.
-    match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID], api_key: api_key,
+    match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID, WATCH_ID], api_key: api_key,
           readonly: ENV["MATCH_READONLY"] != "false")
 
     update_code_signing_settings(
@@ -53,6 +55,14 @@ platform :ios do
       team_id: ENV["DEVELOPER_TEAM_ID"],
       code_sign_identity: "Apple Distribution",
       profile_name: ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
+    )
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Cadence.xcodeproj",
+      targets: ["CadenceWatch"],
+      team_id: ENV["DEVELOPER_TEAM_ID"],
+      code_sign_identity: "Apple Distribution",
+      profile_name: ENV["sigh_#{WATCH_ID}_appstore_profile-name"]
     )
 
     # Version + build number are build-setting overrides. The version comes
@@ -74,7 +84,8 @@ platform :ios do
       export_options: {
         provisioningProfiles: {
           APP_ID => ENV["sigh_#{APP_ID}_appstore_profile-name"],
-          WIDGET_ID => ENV["sigh_#{WIDGET_ID}_appstore_profile-name"]
+          WIDGET_ID => ENV["sigh_#{WIDGET_ID}_appstore_profile-name"],
+          WATCH_ID => ENV["sigh_#{WATCH_ID}_appstore_profile-name"]
         }
       },
       xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build} MARKETING_VERSION=#{app_version}"

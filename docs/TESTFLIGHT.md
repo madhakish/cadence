@@ -64,7 +64,13 @@ create identifiers, register it by hand too:
 `com.madhakish.Cadence.Widgets`, no extra capabilities. (No separate ASC *app
 record* — the extension ships inside the Cadence app.)
 
-(`fastlane match` then makes the signing cert + profiles for both App IDs
+The **Apple Watch app** ships embedded in the iPhone app with its own App ID,
+`com.madhakish.Cadence.watchkitapp` (explicit, **HealthKit** ticked). It needs a
+`match` App Store profile like the other two, so run the temporary read-write
+`match` setup (`MATCH_READONLY=false`) once after it lands. This is an owner
+action; routine CI stays read-only.
+
+(`fastlane match` then makes the signing cert + profiles for all three App IDs
 automatically on the first CI run.)
 
 ## Configure the repo
