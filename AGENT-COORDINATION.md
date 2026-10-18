@@ -20,9 +20,8 @@ resuming work; follow it within user instructions and runtime/repository policy.
 1. Confirm owner/repository, base revision, task, and applicable instructions.
    Search relevant issues and open PRs; if the local semantic-search MCP is
    present, `search` prior decisions and reviews by specific task nouns
-   (nightly index). If it is absent or a search errors, skip it and take
-   `Prior:` from gh/git. Fetch the threads with all comments needed to
-   establish ownership and decisions.
+   (nightly index; skip it on error). Fetch the threads with all comments
+   needed to establish ownership and decisions.
 2. Reuse the task issue. Create one for substantial work if none exists, with
    scope and acceptance checks. A scoped PR review/fix can use its existing PR;
    do not create a duplicate issue for bookkeeping.
