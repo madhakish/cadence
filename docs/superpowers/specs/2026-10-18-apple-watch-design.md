@@ -212,7 +212,12 @@ These came from the owner and are not open to the builder:
   - a session ID;
   - a target ID (set or exercise);
   - a payload;
-  - a wall-clock timestamp;
+  - a logical version: a per-device counter that each device raises past
+    every version it has seen before it issues an operation (a Lamport
+    clock), so an edit made after seeing another always orders after it,
+    whatever the two devices' clocks say;
+  - a wall-clock timestamp, for display and session timing only, never for
+    ordering;
   - the originating device.
 - **Operations are idempotent** (applying one twice is a no-op, keyed by
   operation UUID).
@@ -228,12 +233,13 @@ These came from the owner and are not open to the builder:
 - **Starting a session.** `sessionStarted` carries the full session snapshot,
   with the session ID minted by the device that started it.
 - **Set edits:**
-  - `setPerformed` covers status, performed reps, performed load, flags and the
-    warmup flag;
+  - `setPerformed` covers status, performed reps, performed load, performed
+    duration (`durationSeconds`, for holds, carries and conditioning), flags
+    and the warmup flag;
   - `setAdded` and `setRemoved`. `setAdded` carries the ID of the set it
     follows (none for first), so sets added on both devices while apart land
     in a deterministic order: inserts after the same set order by
-    (timestamp, device);
+    (version, device);
   - `exerciseAdded` and `exerciseRemoved` exist only for phone-originated
     changes, since the watch cannot add exercises;
   - `setFlags` covers the effort tags.
@@ -241,7 +247,7 @@ These came from the owner and are not open to the builder:
   `sessionPaused`/`sessionResumed` carry timing events; `sessionEnded` means
   the user finished on the watch.
 - **Conflict rule.** Each field of a set is last-writer-wins by
-  (timestamp, device), applied per field so an edited weight never resets
+  (version, device), applied per field so an edited weight never resets
   reps (training-data invariant). `setRemoved` wins over later edits to the
   same set.
   - A person edits one set on one device at a time, so true conflicts are rare.
@@ -268,8 +274,12 @@ These came from the owner and are not open to the builder:
 
 ### 5. Ending and banking
 
-- **Ending on the watch** sends `sessionEnded` with the final timing and the
-  UUIDs of every operation the watch issued for the session.
+- **Ending on the watch** sends `sessionEnded` with the final timing, the
+  UUIDs of every operation the watch issued for the session, and the outcome
+  of the watch's Health workout: saved (with its UUID), discarded because
+  Health writing is off, or failed. The watch sends it only after that save
+  has finished, so the phone always knows who owns the Health workout before
+  it banks (section 6).
 - **The phone banks the session** with `SessionCompletion.finish` once it has
   received `sessionEnded` and accounted for every operation it lists
   (applied, or recorded as rejected under the rules in section 4, so one
@@ -348,8 +358,9 @@ These came from the owner and are not open to the builder:
   - *Assistant's call.*
 - **No duplicate workout.**
   - V16 adds a `healthWorkoutRecordedOnWatch` marker (or the saved workout's
-    UUID) to `WorkoutSession`. Bank-time export skips any session the watch
-    recorded.
+    UUID) to `WorkoutSession`, set from `sessionEnded` before banking.
+    Bank-time export skips any session the watch recorded. If the watch
+    reports a failed save, the phone exports at bank time as it does today.
   - `HealthComparison`'s own-sample filter learns the watch bundle ID, so
     Cadence never shows its own watch data as independent Health data.
   - Only samples Cadence derives from the log (the distance samples added
