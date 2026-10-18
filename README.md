@@ -184,7 +184,6 @@ include a loaded-bar inspection: a rendered bar diagram in rows and, in the
 inspector, a real-time 3D bar you can orbit, zoom, explode, and relight.
 See [renderer implementation and verification](docs/design-pass/BARBELL-INSPECTION.md).
 
-
 ## Focused developer workflows
 
 The repository includes two task-specific guides, loaded only when relevant:

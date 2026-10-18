@@ -85,7 +85,6 @@ release pipeline. [AGENTS.md](../AGENTS.md) is the contributor and agent entry
 point; the [engineering guide](AGENT-GUIDE.md) covers architecture, persistence,
 parity, and verification.
 
-
 ## Maintainer workflows
 
 - [Repository agent guide](../AGENTS.md): task ownership, migration, privacy
