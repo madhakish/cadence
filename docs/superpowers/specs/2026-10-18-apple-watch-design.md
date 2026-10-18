@@ -160,10 +160,14 @@ These came from the owner and are not open to the builder:
 - **The backup format does not change.** IDs are device-local identity for
   sync. A restore creates fresh IDs, so sync must never span a restore:
   - a restore tells the watch that the IDs of any session the restore
-    replaced are gone. The watch drops that replica but keeps its outbox:
-    the phone turns the sets in it into a new unbanked session, flagged for
+    replaced are gone. The watch answers with a recovery bundle: its whole
+    replica (exercises, order, planned values, load basis and every
+    performed set) plus its outbox, because acknowledged operations are no
+    longer in the outbox and the deltas alone cannot rebuild the session.
+    The phone turns the bundle into a new unbanked session, flagged for
     review like a duplicate start (section 4), instead of guessing positions
-    or dropping sets the watch logged (anti-goal 1);
+    or dropping sets the watch logged (anti-goal 1). The watch keeps the
+    replica until the phone confirms that session is saved;
   - the V16 session fields that guard banking and Health export (below) are
     not in the backup, and a restore cannot tell which unbanked session the
     watch started. A restored unbanked session is therefore never banked
@@ -276,10 +280,11 @@ These came from the owner and are not open to the builder:
 
 - **Ending on the watch** sends `sessionEnded` with the final timing, the
   UUIDs of every operation the watch issued for the session, and the outcome
-  of the watch's Health workout: saved (with its UUID), discarded because
-  Health writing is off, or failed. The watch sends it only after that save
-  has finished, so the phone always knows who owns the Health workout before
-  it banks (section 6).
+  of the watch's Health workout (section 6): saved (with its UUID), not
+  written (discarded because Health writing is off, or failed before the
+  workout was finished), or unknown (finishing reported an error, so Health
+  may hold it). The watch sends it only after that save has finished, so the
+  phone always knows who owns the Health workout before it banks.
 - **The phone banks the session** with `SessionCompletion.finish` once it has
   received `sessionEnded` and accounted for every operation it lists
   (applied, or recorded as rejected under the rules in section 4, so one
@@ -291,24 +296,33 @@ These came from the owner and are not open to the builder:
   be saved. Banking then happens without asking.
 - **The watch shows a local summary immediately:** sets, volume and duration
   from its replica. It does not show PRs, because only the phone detects them.
-- **Ending on the phone** banks as today, and tells the watch to end its
-  workout session.
-  - If the watch is reachable, the phone first asks it to flush its outbox and
-    waits briefly for it.
-  - If the phone knows the watch has the session open but cannot reach it,
-    it says so before banking and offers to wait. Sets that arrive after
-    banking take the correction path below, which does not re-run PRs,
-    milestones or progression, so banking early is the owner's choice and
-    never silent (anti-goal 5).
+- **Ending on the phone** uses the same barrier as ending on the watch.
+  - If the watch has the session open, the phone asks it to end: the watch
+    ends its workout session and answers with `sessionEnded` exactly as
+    above, listing its operation UUIDs and its Health outcome. The phone
+    banks once it has accounted for those operations, and exports to Health
+    only under the rules in section 6.
+  - If the watch does not answer within a short wait, or cannot be reached,
+    the phone says so and offers to wait. Banking without the watch is then
+    the owner's choice and never silent: sets that arrive later take the
+    late-operation path below, which does not replay program progression
+    (anti-goal 5). While the watch owns the Health workout, the phone does
+    not export one; the watch saves it when it ends.
 - **Late operations.** Operations that arrive after the session was banked are
   never dropped.
-  - They are applied through the existing banked-session correction path
-    (`SessionCorrectionService`), with the same rules as a manual correction
-    of a banked session, including what that path does and does not
-    recompute. It does not re-run grading, milestones or program
-    advancement (epic #155 Stage 6), so this path is only for a session
-    banked on the phone while the watch was unreachable, never for a
-    watch-ended session.
+  - Late value edits to an existing set (performed load, reps, duration,
+    distance, status) go through the existing banked-session correction
+    path, `SessionCorrectionService.applyAndRebuild`, with the same rules as
+    a manual correction. It rebuilds the affected PR milestones; it does not
+    replay the program grade or advancement (epic #155 Stage 6).
+  - That service changes only those fields on a set that already exists. It
+    cannot add or remove a set, or change the warmup flag, effort tags or
+    `autoregReason`. Phase 2 therefore extends the correction boundary with
+    those operations, under the same rebuild rules, with tests. Until an
+    operation can be applied it is stored with the session and listed for
+    the owner, never dropped.
+  - This path is only for a session banked on the phone without the watch,
+    never for a watch-ended session.
   - The phone shows a notice that sets from the watch were added to a saved
     session.
   - *Assistant's call.*
@@ -359,8 +373,11 @@ These came from the owner and are not open to the builder:
 - **No duplicate workout.**
   - V16 adds a `healthWorkoutRecordedOnWatch` marker (or the saved workout's
     UUID) to `WorkoutSession`, set from `sessionEnded` before banking.
-    Bank-time export skips any session the watch recorded. If the watch
-    reports a failed save, the phone exports at bank time as it does today.
+    Bank-time export skips any session the watch recorded.
+  - The phone exports at bank time only when the watch reports *not
+    written*. An *unknown* outcome gets no automatic export: like
+    `HealthKitService.saveWorkout`, which never retries an ambiguous finish,
+    the phone shows a notice and the owner checks Health.
   - `HealthComparison`'s own-sample filter learns the watch bundle ID, so
     Cadence never shows its own watch data as independent Health data.
   - Only samples Cadence derives from the log (the distance samples added
@@ -469,7 +486,11 @@ house look adapted for watchOS; the builder chooses the visual details.
   exercise's signature build shows:
   - at least 10 sets in the evaluation;
   - an exact rep count on at least 90% of sets, and within ±1 on at least 98%;
-  - set end detected within 5 s of the Done tap on at least 95%.
+  - set end detected within 5 s of the Done tap on at least 95%;
+  - over the full held-out session streams, including rests, setup, walking
+    between stations and other exercises, at most one detection with no
+    matching Done tap per 100 real sets. A detector that finds every set but
+    also logs sets that never happened corrupts the session.
 - **Per-exercise reporting.** The evaluation runs offline and reports each
   exercise. Exercises below the bar stay manual, and the owner sees which
   exercises are enabled.
