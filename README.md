@@ -166,9 +166,7 @@ derivative works. A good report is worth more here than a patch.
 
 Anyone working inside the repository — including coding agents — should start
 with [AGENTS.md](AGENTS.md), the canonical guide to the migration protocol, the
-native/web parity contract, and the definition of done. The
-[coordination routing guide](docs/GITHUB-DISCUSSIONS.md) separates public project
-updates from internal agent conversation.
+native/web parity contract, and the definition of done.
 
 ## License
 

@@ -103,8 +103,8 @@ coordination succeeded. A comment is durable storage, not guaranteed
 delivery or a wake-up signal. Do not claim background monitoring without a
 running process or configured integration.
 
-## Discussions
+## Public repository
 
-Internal agent Discussions live in private Pantheon. Keep Cadence Discussions
-disabled and public task claims here. Read the [routing guide](docs/GITHUB-DISCUSSIONS.md)
-before using internal threads; never copy their private content here.
+Cadence is public. Keep its Discussions disabled and task claims on its issues
+and PRs. Keep private paths, internal session notes and private links out of
+issue and PR text; tool attribution lines are exempt.
