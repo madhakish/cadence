@@ -159,9 +159,11 @@ These came from the owner and are not open to the builder:
   - The same migration adds the session fields sync needs (below).
 - **The backup format does not change.** IDs are device-local identity for
   sync. A restore creates fresh IDs, so sync must never span a restore:
-  - a restore tells the watch to drop its active replica and outbox for any
-    session the restore replaced, and the phone rejects operations whose
-    target IDs no longer exist instead of guessing a position;
+  - a restore tells the watch that the IDs of any session the restore
+    replaced are gone. The watch drops that replica but keeps its outbox:
+    the phone turns the sets in it into a new unbanked session, flagged for
+    review like a duplicate start (section 4), instead of guessing positions
+    or dropping sets the watch logged (anti-goal 1);
   - the V16 session fields that guard banking and Health export (below) are
     not in the backup, and a restore cannot tell which unbanked session the
     watch started. A restored unbanked session is therefore never banked
@@ -214,6 +216,15 @@ These came from the owner and are not open to the builder:
   - the originating device.
 - **Operations are idempotent** (applying one twice is a no-op, keyed by
   operation UUID).
+  - The phone stores the UUIDs it has applied, and a tombstone for every set
+    or exercise removed, with the session (V16 fields) until the session is
+    banked and the watch has acknowledged it. Without them a `setAdded`
+    delivered again after a relaunch would bring back a removed set.
+  - A `setAdded` whose anchor set was removed is placed where the anchor was;
+    the tombstone keeps that position. It is never rejected, because that
+    loses a set logged on the other device.
+  - An edit to a removed set is recorded as rejected, not applied, and is
+    visible in the session's review notice.
 - **Starting a session.** `sessionStarted` carries the full session snapshot,
   with the session ID minted by the device that started it.
 - **Set edits:**
@@ -260,7 +271,9 @@ These came from the owner and are not open to the builder:
 - **Ending on the watch** sends `sessionEnded` with the final timing and the
   UUIDs of every operation the watch issued for the session.
 - **The phone banks the session** with `SessionCompletion.finish` once it has
-  received `sessionEnded` and applied every operation it lists, so PRs,
+  received `sessionEnded` and accounted for every operation it lists
+  (applied, or recorded as rejected under the rules in section 4, so one
+  rejected edit cannot hold the session unbanked forever), so PRs,
   milestones and progression are computed exactly once, in one place, over
   every set. WatchConnectivity does not order `sendMessage` against
   `transferUserInfo`, so `sessionEnded` can arrive before sets queued earlier.
@@ -272,6 +285,11 @@ These came from the owner and are not open to the builder:
   workout session.
   - If the watch is reachable, the phone first asks it to flush its outbox and
     waits briefly for it.
+  - If the phone knows the watch has the session open but cannot reach it,
+    it says so before banking and offers to wait. Sets that arrive after
+    banking take the correction path below, which does not re-run PRs,
+    milestones or progression, so banking early is the owner's choice and
+    never silent (anti-goal 5).
 - **Late operations.** Operations that arrive after the session was banked are
   never dropped.
   - They are applied through the existing banked-session correction path
@@ -334,6 +352,12 @@ These came from the owner and are not open to the builder:
     recorded.
   - `HealthComparison`'s own-sample filter learns the watch bundle ID, so
     Cadence never shows its own watch data as independent Health data.
+  - Only samples Cadence derives from the log (the distance samples added
+    before saving) are its own. Heart rate and energy measured by the
+    watch's builder are sensor readings, a real second opinion. If they are
+    attributed to the watch app's bundle, the filter must tell them apart
+    by sample type or by metadata Cadence writes on its own samples, not by
+    bundle alone. *Builder to verify the source attribution on device.*
   - This deliberately changes the assertion in `HealthComparisonTests.swift`
     that treats a watch bundle as a foreign source. Under
     `INV-HEALTH-IS-A-SECOND-OPINION` it then means *Cadence's own* watch
@@ -444,7 +468,8 @@ house look adapted for watchOS; the builder chooses the visual details.
 ### 10. Autocomplete on the watch
 
 - **When the detector fires** for an enabled exercise (default mode):
-  - the set logs as completed with the detected reps and the planned load;
+  - the set logs as completed with the detected reps and the set's current
+    load: the planned load unless it was adjusted or dropped on the watch;
   - the rest timer starts under the existing `restAfterCompleting` rule;
   - the watch gives a distinct haptic;
   - the rest screen shows "8 reps · Edit".
