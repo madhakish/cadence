@@ -181,3 +181,25 @@ The [plate calculator](docs/how-to/plate-calculator.md) and active barbell sets
 include a loaded-bar inspection: a rendered bar diagram in rows and, in the
 inspector, a real-time 3D bar you can orbit, zoom, explode, and relight.
 See [renderer implementation and verification](docs/design-pass/BARBELL-INSPECTION.md).
+
+## Focused developer workflows
+
+The repository includes two task-specific guides, loaded only when relevant:
+
+- [Native visual proof](.agents/skills/cadence-native-proof/SKILL.md) separates
+  exact load math, geometry and inspected simulator/device pixels. Its offline
+  capture inventory hashes selected PNGs; it does not certify visual quality.
+- [Native/web parity and Health outcomes](.agents/skills/cadence-parity-health/SKILL.md)
+  distinguishes shared rules from iOS-only Health edges and local session saves
+  from optional export results.
+
+Run the capture-helper regression tests without Xcode or dependencies:
+
+```sh
+python3 -B -m unittest discover -s .agents/skills/cadence-native-proof/scripts -p 'test_*.py' -v
+```
+
+Use the [documentation index](docs/README.md) for product behavior and
+[AGENTS.md](AGENTS.md) for the required checks. Historical mockups, browser
+captures and prior-commit native captures do not establish acceptance of a new
+native build. Keep generated evidence in temporary storage or CI artifacts.

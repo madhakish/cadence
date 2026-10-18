@@ -1,7 +1,7 @@
 # Cadence repository guide
 
-This is the canonical guide for the repository. Nested `AGENTS.md` files may
-add subtree guidance; user/runtime instructions retain their normal precedence.
+Canonical repository guide. Nested `AGENTS.md` files add subtree guidance;
+user/runtime instructions retain precedence.
 
 ## Before work
 
@@ -70,9 +70,8 @@ Foundation-only deterministic logic; `web/app/js/core.js` mirrors it.
 
 ## Required reading by task
 
-Paths inside the detailed guide are relative to the repository root unless
-they are Markdown links. For any code change, read working approach, privacy,
-hygiene, and definition of done in addition to the relevant domain sections.
+Detailed-guide paths are repository-relative except Markdown links. For code
+changes, read the common sections plus the applicable domain sections below.
 
 | Task | Read before changing it |
 | --- | --- |
@@ -106,3 +105,8 @@ hygiene, and definition of done in addition to the relevant domain sections.
 Prioritize persistence loss, missing migrations, parity regressions, incorrect
 performed/load semantics, privacy leaks, and unverified completion claims.
 Read the applicable rules above and report concrete evidence and impact.
+
+## Focused repository skills
+
+For native pixels, read [native proof](.agents/skills/cadence-native-proof/SKILL.md).
+For domain parity or Health outcomes, read [parity/Health](.agents/skills/cadence-parity-health/SKILL.md).
