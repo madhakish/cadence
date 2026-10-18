@@ -58,8 +58,8 @@ on native and web. Set it up from your existing program's editor.
   gym's software can't issue.
 - **Settings & export** — units display, multiple gyms with per-gym plate
   inventories, per-lift increments, rest defaults, optional HealthKit (write
-  workouts/bodyweight, and separately compare conditioning distance against
-  Health), full JSON + CSV export.
+  workouts and body measurements, compare against Health, and read measured
+  ruck steps, each opted in separately), full JSON + CSV export.
 
 Fresh installs contain a searchable, categorized library of 141 generic
 strength, accessory, bodyweight, Olympic, and conditioning exercises plus a
@@ -146,9 +146,10 @@ Notes:
   safety contracts and [TestFlight guide](docs/TESTFLIGHT.md) for distribution
   and recovery.
 - HealthKit has three independent app opt-ins, all off by default: writing
-  workouts/bodyweight, reading Health comparisons, and reading measured steps
-  for timed ruck bank summaries. Reading never overwrites a log — it shows both
-  numbers and you choose. No step writes or Health readings in backups.
+  workouts, bodyweight and body fat; reading Health comparisons; and reading
+  measured steps for timed ruck bank summaries. Reading never overwrites a
+  log — it shows both numbers and you choose. No step writes or Health
+  readings in backups.
 - All weights are stored in lb (`Double`). kg exists only at entry/display.
 
 ## Contributing
