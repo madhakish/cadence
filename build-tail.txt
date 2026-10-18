@@ -1,0 +1,80 @@
+    t =   316.58s     Find the "plate-target" TextField
+    t =   316.71s     Check for interrupting elements affecting "plate-target" TextField
+    t =   316.85s     Synthesize event
+    t =   317.15s     Wait for com.madhakish.Cadence to idle
+    t =   317.75s Type '139' into "plate-target" TextField
+    t =   317.76s     Wait for com.madhakish.Cadence to idle
+    t =   318.10s     Find the "plate-target" TextField
+    t =   318.43s     Check for interrupting elements affecting "plate-target" TextField
+    t =   319.05s     Synthesize event
+    t =   319.41s     Wait for com.madhakish.Cadence to idle
+    t =   320.06s Waiting 3.0s for "plate-target-done" Button to exist
+    t =   321.09s     Checking `Expect predicate `existsNoRetry == 1` for object "plate-target-done" Button`
+    t =   321.09s         Checking existence of `"plate-target-done" Button`
+    t =   321.45s Tap "plate-target-done" Button
+    t =   321.45s     Wait for com.madhakish.Cadence to idle
+    t =   321.46s     Find the "plate-target-done" Button
+    t =   321.61s     Check for interrupting elements affecting "plate-target-done" Button
+    t =   321.80s     Synthesize event
+    t =   322.15s     Wait for com.madhakish.Cadence to idle
+    t =   322.96s Waiting 3.0s for Keyboard (First Match) to not exist
+    t =   323.98s     Checking `Expect predicate `existsNoRetry == 0` for object Keyboard (First Match)`
+    t =   323.99s         Checking existence of `Keyboard (First Match)`
+    t =   324.72s Find the "expand-loaded-bar" Any
+    t =   324.89s Find the "expand-loaded-bar" Button
+    t =   325.08s Find the "expand-loaded-bar" Button
+    t =   325.25s Find the "expand-loaded-bar" Button
+    t =   325.43s Tap "expand-loaded-bar" Button
+    t =   325.43s     Wait for com.madhakish.Cadence to idle
+    t =   325.45s     Find the "expand-loaded-bar" Button
+    t =   325.62s     Check for interrupting elements affecting "expand-loaded-bar" Button
+    t =   325.78s     Synthesize event
+    t =   326.10s     Wait for com.madhakish.Cadence to idle
+    t =   326.29s Waiting 5.0s for "Loaded bar" NavigationBar to exist
+    t =   327.35s     Checking `Expect predicate `existsNoRetry == 1` for object "Loaded bar" NavigationBar`
+    t =   327.35s         Checking existence of `"Loaded bar" NavigationBar`
+    t =   327.94s Waiting 3.0s for "barbell-explode-toggle" Button to exist
+    t =   329.01s     Checking `Expect predicate `existsNoRetry == 1` for object "barbell-explode-toggle" Button`
+    t =   329.01s         Checking existence of `"barbell-explode-toggle" Button`
+    t =   330.26s Checking `Expect predicate `value == "Assembled"` for object "barbell-explode-toggle" Button`
+    t =   330.26s     Find the "barbell-explode-toggle" Button
+    t =   330.50s Find the "barbell-explode-toggle" Button
+    t =   331.55s Added attachment named 'after-15-theme-cadenceHouse-assembled-iphone'
+    t =   331.56s Find the Window (First Match)
+    t =   331.58s Added attachment named 'after-15-theme-cadenceHouse-assembled-iphone-geometry'
+    t =   331.58s Tap "barbell-explode-toggle" Button
+    t =   331.58s     Wait for com.madhakish.Cadence to idle
+    t =   331.59s     Find the "barbell-explode-toggle" Button
+    t =   331.73s     Check for interrupting elements affecting "barbell-explode-toggle" Button
+    t =   331.91s     Synthesize event
+    t =   332.23s     Wait for com.madhakish.Cadence to idle
+    t =   333.29s Checking `Expect predicate `value == "Exploded"` for object "barbell-explode-toggle" Button`
+    t =   333.29s     Find the "barbell-explode-toggle" Button
+    t =   333.52s Find the "barbell-explode-toggle" Button
+    t =   334.65s Added attachment named 'after-15-theme-cadenceHouse-exploded-iphone'
+    t =   334.65s Find the Window (First Match)
+    t =   334.67s Added attachment named 'after-15-theme-cadenceHouse-exploded-iphone-geometry'
+    t =   334.67s Tap "Done" Button
+    t =   334.67s     Wait for com.madhakish.Cadence to idle
+    t =   334.67s     Find the "Done" Button
+    t =   334.85s     Check for interrupting elements affecting "Done" Button
+    t =   335.06s     Synthesize event
+    t =   335.38s     Wait for com.madhakish.Cadence to idle
+    t =   336.27s Tear Down
+Test Case '-[CadenceVisualProofUITests.VisualProofUITests test15PlateThemesLoadedBar]' passed (336.980 seconds).
+Test Suite 'VisualProofUITests' passed at 2026-10-18 17:12:06.457.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 476.007 (476.012) seconds
+Test Suite 'CadenceVisualProofUITests.xctest' passed at 2026-10-18 17:12:06.457.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 561.359 (561.371) seconds
+Test Suite 'Selected tests' passed at 2026-10-18 17:12:06.458.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 561.359 (561.372) seconds
+2026-10-18 17:12:42.477 xcodebuild[2997:13977] [MT] IDETestOperationsObserverDebug: 646.186 elapsed -- Testing started completed.
+2026-10-18 17:12:42.477 xcodebuild[2997:13977] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-18 17:12:42.477 xcodebuild[2997:13977] [MT] IDETestOperationsObserverDebug: 646.186 sec, +646.186 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/cadence/cadence/build/RenderLab.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
