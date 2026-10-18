@@ -1,5 +1,6 @@
 import CadenceCore
 import Metal
+import os
 import SceneKit
 import SwiftUI
 import UIKit
@@ -1242,10 +1243,21 @@ final class StudioRenderer: @unchecked Sendable {
 
     func render(_ request: Request) async -> UIImage? {
         if let hit = cached(request) { return hit }
-        return await withCheckedContinuation { continuation in
-            queue.async { [self] in
-                continuation.resume(returning: renderNow(request))
+        let cancelled = OSAllocatedUnfairLock(initialState: false)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                queue.async { [self] in
+                    // A superseded view's request still waits in this serial
+                    // queue; skip its snapshot so the current one is not delayed.
+                    if cancelled.withLock({ $0 }) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(returning: renderNow(request))
+                }
             }
+        } onCancel: {
+            cancelled.withLock { $0 = true }
         }
     }
 
