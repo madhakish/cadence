@@ -142,10 +142,10 @@ These came from the owner and are not open to the builder:
   target.
   - `Package.swift` is `swift-tools-version:5.9`, so use the string form
     `.watchOS("26.0")` rather than a tools bump. A bump would also have to
-    move the local `swift:5.10` container. Everything the two devices must agree on lives there, as
-  Foundation-only Swift. It is testable on Linux locally in the container; CI
-runs it on macOS: the sync message types, the merge rules
-  and later the detector.
+    move the local `swift:5.10` container.
+  - Everything the two devices must agree on lives there, as Foundation-only
+    Swift: the sync message types, the merge rules and later the detector. It
+    is testable on Linux locally in the container; CI runs it on macOS.
 - **These new CadenceCore modules are Swift-only:** the web app is out of scope
   by owner decision. Record each new public symbol as `swiftOnly` with that
   reason if the module is mapped in `parity-map.json`, or keep the modules
@@ -158,8 +158,17 @@ runs it on macOS: the sync message types, the merge rules
   - Sync addresses sets and exercises by these IDs, never by position.
   - The same migration adds the session fields sync needs (below).
 - **The backup format does not change.** IDs are device-local identity for
-  sync. A restore creates fresh IDs, which is fine because sync never spans a
-  restore.
+  sync. A restore creates fresh IDs, so sync must never span a restore:
+  - a restore tells the watch to drop its active replica and outbox for any
+    session the restore replaced, and the phone rejects operations whose
+    target IDs no longer exist instead of guessing a position;
+  - the V16 session fields that guard banking and Health export (below) are
+    not in the backup, and a restore cannot tell which unbanked session the
+    watch started. A restored unbanked session is therefore never banked
+    automatically, and its bank-time Health export asks first. Restoring must
+    never produce a second Health workout or a second program advance.
+  - *Assistant's call.* The alternative is a backup-schema change, which also
+    requires web import/export updates under the portable backup contract.
 - *Assistant's call.* The alternative was reusing the Lock Screen's positional
   identity with stale-command refusal. That rejects any queued watch edit after
   the layout changed on the phone, which loses sets: anti-goal 1.
@@ -210,7 +219,10 @@ runs it on macOS: the sync message types, the merge rules
 - **Set edits:**
   - `setPerformed` covers status, performed reps, performed load, flags and the
     warmup flag;
-  - `setAdded` and `setRemoved`;
+  - `setAdded` and `setRemoved`. `setAdded` carries the ID of the set it
+    follows (none for first), so sets added on both devices while apart land
+    in a deterministic order: inserts after the same set order by
+    (timestamp, device);
   - `exerciseAdded` and `exerciseRemoved` exist only for phone-originated
     changes, since the watch cannot add exercises;
   - `setFlags` covers the effort tags.
@@ -245,12 +257,15 @@ runs it on macOS: the sync message types, the merge rules
 
 ### 5. Ending and banking
 
-- **Ending on the watch** sends `sessionEnded` with the final timing.
-- **The phone banks the session** with `SessionCompletion.finish` when it
-  receives `sessionEnded`, so PRs, milestones and progression are computed
-  exactly once and in one place. Until then the phone shows the session as
-  ended on the watch and waiting to be saved. Banking happens on receipt
-  without asking.
+- **Ending on the watch** sends `sessionEnded` with the final timing and the
+  UUIDs of every operation the watch issued for the session.
+- **The phone banks the session** with `SessionCompletion.finish` once it has
+  received `sessionEnded` and applied every operation it lists, so PRs,
+  milestones and progression are computed exactly once, in one place, over
+  every set. WatchConnectivity does not order `sendMessage` against
+  `transferUserInfo`, so `sessionEnded` can arrive before sets queued earlier.
+  Until then the phone shows the session as ended on the watch and waiting to
+  be saved. Banking then happens without asking.
 - **The watch shows a local summary immediately:** sets, volume and duration
   from its replica. It does not show PRs, because only the phone detects them.
 - **Ending on the phone** banks as today, and tells the watch to end its
@@ -262,7 +277,10 @@ runs it on macOS: the sync message types, the merge rules
   - They are applied through the existing banked-session correction path
     (`SessionCorrectionService`), with the same rules as a manual correction
     of a banked session, including what that path does and does not
-    recompute.
+    recompute. It does not re-run grading, milestones or program
+    advancement (epic #155 Stage 6), so this path is only for a session
+    banked on the phone while the watch was unreachable, never for a
+    watch-ended session.
   - The phone shows a notice that sets from the watch were added to a saved
     session.
   - *Assistant's call.*
