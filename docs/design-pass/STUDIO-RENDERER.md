@@ -44,7 +44,9 @@ has no users and is out of scope for this change.
 | `blowup` | inspector (exploded) | the near sleeve's plates slid out along the sleeve |
 
 Static views use `StudioRenderer` offscreen renders, cached by loadout, theme,
-shot, size and scale. The inspector is a live `SCNView` (`StudioInspector`)
+shot, size and scale, in memory and under `Caches/StudioRenders`, in a folder
+named for the renderer version and the app build. Launch deletes other builds'
+folders. The inspector is a live `SCNView` (`StudioInspector`)
 that animates between `hero` and `blowup`, with screen-space captions under
 each slid-out plate. Accessibility labels, plate children, captions and
 identifiers are unchanged from the previous inspector.
@@ -70,8 +72,10 @@ the theme's own (`CADENCE` by default).
 ## Visual QA
 
 `--render-lab` (DEBUG only) renders a fixed matrix of loadouts, themes and
-shots with the production renderer, plus an environment probe. It writes each
-PNG and a timing log to the app's `tmp/render-lab`; run it on a simulator
+shots with the production renderer, plus an environment probe. It clears the
+render cache first, so every image comes from the build under test, and a
+failed render fails the test. It writes each PNG and a timing log to the
+app's `tmp/render-lab`; run it on a simulator
 with `CadenceVisualProofUITests/RenderLabUITests/testRenderLab`. During #316 a
 branch-scoped workflow ran it and published the PNGs to
 `render-proof/photoreal-316`. That workflow needed `contents: write` and a

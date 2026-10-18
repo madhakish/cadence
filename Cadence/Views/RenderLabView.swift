@@ -102,6 +102,7 @@ extension RenderLab {
 struct RenderLabView: View {
     @State private var rendered: [(name: String, image: UIImage)] = []
     @State private var done = false
+    @State private var failed: [String] = []
 
     var body: some View {
 #if DEBUG
@@ -112,7 +113,9 @@ struct RenderLabView: View {
                     Image(uiImage: entry.image).resizable().scaledToFit()
                 }
                 if done {
-                    Text("render-lab-done").font(.caption).accessibilityIdentifier("render-lab-done")
+                    // The UI test reads this label: a render that failed must fail the run.
+                    Text(failed.isEmpty ? "render-lab-done" : "render-lab-failed: \(failed.joined(separator: ", "))")
+                        .font(.caption).accessibilityIdentifier("render-lab-done")
                 }
             }
             .padding()
@@ -128,6 +131,8 @@ struct RenderLabView: View {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("render-lab", isDirectory: true)
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Stored renders would let the lab show an earlier build's output.
+        await StudioRenderer.shared.purge()
         var timings = ""
         let env = StudioTextures.environment
         timings += "environment \(Int(env.size.width))x\(Int(env.size.height)) cg=\(env.cgImage != nil)\n"
@@ -137,7 +142,11 @@ struct RenderLabView: View {
         }
         for item in RenderLab.matrix {
             let start = Date()
-            guard let image = await StudioRenderer.shared.render(item.request) else { continue }
+            guard let image = await StudioRenderer.shared.render(item.request) else {
+                timings += "\(item.name) FAILED\n"
+                failed.append(item.name)
+                continue
+            }
             let ms = Int(Date().timeIntervalSince(start) * 1000)
             try? image.pngData()?.write(to: dir.appendingPathComponent("\(item.name).png"))
             timings += "\(item.name) \(ms) ms\n"

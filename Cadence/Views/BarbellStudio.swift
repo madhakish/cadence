@@ -1211,13 +1211,18 @@ final class StudioRenderer: @unchecked Sendable {
     }
 
     /// Bump when the renderer's look changes, so stale disk renders retire.
+    /// The directory also carries the build number, so an app update never
+    /// shows a render from an older renderer, theme table or texture.
     static let version = 1
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
     private var renderer: SCNRenderer?
-    private let directory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-        .appendingPathComponent("StudioRenders/v\(StudioRenderer.version)", isDirectory: true)
+    private static let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("StudioRenders", isDirectory: true)
+    private static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+    private let directory: URL? = StudioRenderer.root?
+        .appendingPathComponent("v\(StudioRenderer.version)-\(StudioRenderer.build)", isDirectory: true)
 
     /// A key that is stable across launches (Swift hash values are not).
     static func key(_ r: Request) -> String {
@@ -1254,13 +1259,32 @@ final class StudioRenderer: @unchecked Sendable {
         }
     }
 
-    /// Builds the shared textures and materials ahead of the first view.
+    /// Builds the shared textures and materials ahead of the first view, and
+    /// deletes renders stored by other builds.
     func prewarm() {
-        queue.async(qos: .utility) {
+        queue.async(qos: .utility) { [self] in
+            if let root = Self.root, let current = directory?.lastPathComponent,
+               let stored = try? FileManager.default.contentsOfDirectory(atPath: root.path) {
+                for name in stored where name != current {
+                    try? FileManager.default.removeItem(at: root.appendingPathComponent(name))
+                }
+            }
             _ = StudioTextures.environment
             _ = StudioTextures.brandedOak
             _ = StudioMaterials.oakTop
             _ = StudioMaterials.knurl
+        }
+    }
+
+    /// Forgets every stored render, in memory and on disk, so the render lab
+    /// measures this build's renderer rather than an earlier run's files.
+    func purge() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async { [self] in
+                cache.removeAllObjects()
+                if let directory { try? FileManager.default.removeItem(at: directory) }
+                continuation.resume()
+            }
         }
     }
 

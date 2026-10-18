@@ -8,7 +8,9 @@ final class RenderLabUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--visual-proof", "--render-lab", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["render-lab-done"].waitForExistence(timeout: 900), "Render lab did not finish")
+        let done = app.staticTexts["render-lab-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 900), "Render lab did not finish")
+        XCTAssertEqual(done.label, "render-lab-done", "Render lab had failed renders")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "render-lab-screen"
         shot.lifetime = .keepAlways
