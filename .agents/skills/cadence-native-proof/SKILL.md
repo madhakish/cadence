@@ -38,8 +38,10 @@ relevant defect fail; never weaken a pixel check to label presence.
 
 Record source SHA, capture run/artifact, simulator/device and OS, viewport and
 scale, fixture/loadout/theme/view, command, observed defects and untested cells.
-Use `scripts/capture_inventory.py --source-sha <40-hex> --platform native
---root <capture-directory> <relative.png> ...` to hash an explicit PNG list.
+From the repository root, run `python3
+.agents/skills/cadence-native-proof/scripts/capture_inventory.py --source-sha
+<40-hex> --platform native --root <capture-directory> <relative.png> ...` to
+hash an explicit PNG list.
 Redirect JSON into a temporary evidence folder, not application assets.
 This helper records bytes and caller-supplied provenance only: it does not
 decode images, authenticate their origin, judge quality or prove matrix coverage.
