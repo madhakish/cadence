@@ -1327,7 +1327,8 @@ struct StudioImage: View {
     let style: PlateVisualStyle
     let theme: PlateThemeID
     let shot: StudioShot
-    @State private var image: UIImage?
+    /// The last render and the request it answers; never shown for another request.
+    @State private var rendered: (request: StudioRenderer.Request, image: UIImage)?
 
     private struct Render: Equatable {
         let request: StudioRenderer.Request
@@ -1341,7 +1342,7 @@ struct StudioImage: View {
                                                  scale: Double(displayScale))
             ZStack {
                 Theme.sceneStudio
-                if let shown = StudioRenderer.shared.cached(request) ?? image {
+                if let shown = StudioRenderer.shared.cached(request) ?? (rendered?.request == request ? rendered?.image : nil) {
                     Image(uiImage: shown)
                         .resizable()
                         .interpolation(.high)
@@ -1353,10 +1354,10 @@ struct StudioImage: View {
             .task(id: Render(request: request, active: scenePhase == .active)) {
                 // No GPU work in the background; the phase change re-runs this.
                 guard scenePhase == .active else { return }
-                let rendered = await StudioRenderer.shared.render(request)
+                let image = await StudioRenderer.shared.render(request)
                 // A superseded request finishes late; it must not replace the current one.
                 guard !Task.isCancelled else { return }
-                image = rendered
+                rendered = image.map { (request: request, image: $0) }
             }
         }
     }
