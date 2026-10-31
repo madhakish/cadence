@@ -50,6 +50,9 @@ struct StartView: View {
                     .font(.footnote)
                     .padding(.top, 8)
                     .accessibilityHint("Recordings help Cadence learn to count your reps. They go to your iPhone only.")
+                Toggle("Confirm detected sets", isOn: $model.confirmBeforeLogging)
+                    .font(.footnote)
+                    .accessibilityHint("When on, a set your watch detects waits for you to confirm it instead of logging itself.")
             }
             .padding(.horizontal, 4)
         }
@@ -95,6 +98,7 @@ struct SetView: View {
         } else if let exercise = model.currentExercise, let set = model.currentSet {
             let index = (exercise.sets.firstIndex { $0.id == set.id } ?? 0) + 1
             VStack(spacing: 6) {
+                ProposalBanner()
                 HStack {
                     Text(set.isWarmup ? "Warmup" : "Set \(index) of \(exercise.sets.count)")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -192,6 +196,13 @@ struct RestView: View {
                 HStack {
                     Button("+30 s") { model.addRest(30) }
                     Button("Skip") { model.endRest() }.accessibilityIdentifier("skipRest")
+                }
+                ProposalBanner()
+                if let reps = model.autoLoggedReps, let setID = model.lastLoggedSetID {
+                    Button("\(reps) reps · Edit") { model.reopen(setID); model.endRest() }
+                        .font(.headline)
+                        .accessibilityIdentifier("autoLogged")
+                        .accessibilityHint("Logged from your wrist motion. Tap to correct it.")
                 }
                 if let setID = model.lastLoggedSetID {
                     EffortTags(setID: setID)
@@ -344,6 +355,28 @@ struct TimedSetView: View {
         .onChange(of: set.id) { _, _ in
             startedAt = nil
             stoppedAt = nil
+        }
+    }
+}
+
+/// Tap-to-confirm (design section 10): a detected set waits here until the
+/// owner confirms it; rest has already started.
+struct ProposalBanner: View {
+    @EnvironmentObject private var model: WatchSessionModel
+
+    var body: some View {
+        if let proposal = model.proposal {
+            VStack(spacing: 4) {
+                Text("Detected \(proposal.reps) reps").font(.headline)
+                HStack {
+                    Button("Confirm") { model.confirmProposal() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("confirmDetected")
+                    Button("Not a set") { model.dismissProposal() }
+                        .font(.footnote)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 }
