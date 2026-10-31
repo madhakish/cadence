@@ -71,7 +71,17 @@ final class PhoneWatchLink: NSObject {
         }
         let open = try context.fetch(FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { !$0.isCompleted }, sortBy: [SortDescriptor(\.date, order: .reverse)])).first
-        return WatchPlan(next: next, activeSessionID: open?.id, settings: watchSettings, sentAt: now)
+        var modality: WorkoutModality?
+        if let next {
+            let library = try context.fetch(FetchDescriptor<Exercise>())
+            let kinds = next.exercises.compactMap { planned -> CompletedExerciseKind? in
+                guard let exercise = library.first(where: { $0.id == planned.catalog.exerciseID }) else { return nil }
+                return CompletedExerciseKind(name: exercise.name, type: exercise.typeRaw, category: exercise.categoryRaw)
+            }
+            modality = WorkoutClassification.classify(kinds)
+        }
+        return WatchPlan(next: next, activeSessionID: open?.id, settings: watchSettings, sentAt: now,
+                         nextModality: modality)
     }
 
     // MARK: Messages from the watch
