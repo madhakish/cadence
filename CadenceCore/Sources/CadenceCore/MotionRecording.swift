@@ -110,16 +110,19 @@ public struct MotionEvent: Codable, Hashable, Sendable {
     public var kind: Kind
     public var setID: String?
     public var exerciseID: String?
+    /// The exercise's display name, so evaluation tables read as lifts.
+    public var exerciseName: String?
     public var reps: Int?
     public var weightLb: Double?
     public var isWarmup: Bool?
 
-    public init(t: Double, kind: Kind, setID: String? = nil, exerciseID: String? = nil, reps: Int? = nil,
-                weightLb: Double? = nil, isWarmup: Bool? = nil) {
+    public init(t: Double, kind: Kind, setID: String? = nil, exerciseID: String? = nil, exerciseName: String? = nil,
+                reps: Int? = nil, weightLb: Double? = nil, isWarmup: Bool? = nil) {
         self.t = t
         self.kind = kind
         self.setID = setID
         self.exerciseID = exerciseID
+        self.exerciseName = exerciseName
         self.reps = reps
         self.weightLb = weightLb
         self.isWarmup = isWarmup
