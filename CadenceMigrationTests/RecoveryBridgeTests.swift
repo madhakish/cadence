@@ -12,7 +12,7 @@ final class RecoveryBridgeTests: XCTestCase {
     private let asOf = Date(timeIntervalSince1970: 2_272_000_000)
 
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

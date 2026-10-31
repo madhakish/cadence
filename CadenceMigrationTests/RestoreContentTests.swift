@@ -6,7 +6,7 @@ import CadenceCore
 @MainActor
 final class RestoreContentTests: XCTestCase {
     func testWeightOnlyRepairReachesRestoreWithoutChangingIdentity() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let container = try ModelContainer(for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
         let context = container.mainContext

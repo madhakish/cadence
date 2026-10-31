@@ -264,6 +264,7 @@ enum Seeder {
         try clearRetiredRestStamps(byName: byName, context: context)
         try promoteVerticalPullMains(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
+        try ensureSyncIDs(context: context)
         try ensureExerciseIDs(context: context)
         try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
@@ -377,6 +378,33 @@ enum Seeder {
                 repeat { session.id = UUID().uuidString } while seen.contains(session.id)
             }
             seen.insert(session.id)
+        }
+    }
+
+    /// Schema V16 watch-sync identity. Every session entry and set gets a
+    /// stable random UUID so the phone and watch address them by ID, never by
+    /// position (design #339, section 2). Valid unique IDs are preserved;
+    /// empty (the V15 literal default), malformed or duplicated ones are
+    /// re-minted. Only the ID column is fetched, so a large history stays
+    /// cheap at launch. Idempotent — a second run changes nothing.
+    static func ensureSyncIDs(context: ModelContext) throws {
+        var entries = FetchDescriptor<SessionExercise>()
+        entries.propertiesToFetch = [\.syncID]
+        var seen: Set<String> = []
+        for entry in try context.fetch(entries) {
+            if UUID(uuidString: entry.syncID) == nil || seen.contains(entry.syncID) {
+                repeat { entry.syncID = UUID().uuidString } while seen.contains(entry.syncID)
+            }
+            seen.insert(entry.syncID)
+        }
+        var sets = FetchDescriptor<SetEntry>()
+        sets.propertiesToFetch = [\.syncID]
+        seen = []
+        for set in try context.fetch(sets) {
+            if UUID(uuidString: set.syncID) == nil || seen.contains(set.syncID) {
+                repeat { set.syncID = UUID().uuidString } while seen.contains(set.syncID)
+            }
+            seen.insert(set.syncID)
         }
     }
 

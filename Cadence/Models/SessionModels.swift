@@ -80,6 +80,20 @@ final class WorkoutSession {
     /// instead of in notes.
     @Relationship(deleteRule: .cascade, inverse: \ActivityDetail.session)
     var activityDetail: ActivityDetail?
+    /// Watch sync state for this session (schema V16): the phone's Codable
+    /// `SyncEndpoint`, holding processed operation IDs and tombstones until the
+    /// session is banked and the watch has acknowledged it. Nil for sessions
+    /// the watch never touched. Device-local; not part of the backup.
+    var syncStateData: Data?
+    /// Who owns this session's Health workout after the watch ended it:
+    /// `SyncHealthOutcome` as "saved", "notWritten" or "unknown" (schema V16).
+    /// Bank-time export runs only for nil or "notWritten".
+    var watchHealthOutcomeRaw: String?
+    /// The watch-saved Health workout's UUID when the outcome is "saved".
+    var watchHealthWorkoutID: String?
+    /// Why a watch-synced session waits for the owner before banking
+    /// (duplicate start, stale plan, recovered after restore). Nil = no review.
+    var syncReviewRaw: String?
 
     init(date: Date = .now, notes: String = "", gymID: String? = nil, gymName: String? = nil) {
         self.id = UUID().uuidString
@@ -153,12 +167,17 @@ final class SessionExercise {
     var exerciseID: String?
     /// Immutable Codable TFHAnchor used when this entry was created.
     var tfhAnchorData: Data?
+    /// Stable watch-sync identity (schema V16): sync addresses entries by this
+    /// ID, never by position. Minted at creation; the V15 literal default ""
+    /// is backfilled after open by `Seeder.ensureSyncIDs`. Device-local.
+    var syncID: String = ""
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
         self.order = order
         self.exercise = exercise
         self.notes = notes
         self.sets = []
+        self.syncID = UUID().uuidString
     }
 
     /// One spelling of the bar-stamping rule for every entry-creation path:
@@ -273,6 +292,8 @@ final class SetEntry {
     var autoregReasonRaw: String?
     /// Codable TFHBenchmarkResult, separate from completed/performed work.
     var tfhBenchmarkData: Data?
+    /// Stable watch-sync identity (schema V16), as `SessionExercise.syncID`.
+    var syncID: String = ""
     var sessionExercise: SessionExercise?
 
     init(
@@ -299,6 +320,7 @@ final class SetEntry {
         plannedDurationSeconds: Int? = nil,
         prescriptionBlock: PrescriptionBlockKind = .work
     ) {
+        self.syncID = UUID().uuidString
         self.order = order
         self.weightLb = weightLb
         self.reps = reps

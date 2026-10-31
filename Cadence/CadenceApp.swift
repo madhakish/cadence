@@ -84,6 +84,7 @@ final class AppBootstrap: ObservableObject {
         let candidates: [(String, () throws -> ModelContainer)] = [
             // Newest shipped checksum first; older installs retain their
             // complete, non-destructive staged upgrade paths.
+            ("V15 staged migration", { try self.makeContainer(migrationPlan: CadenceV15MigrationPlan.self) }),
             ("V14 staged migration", { try self.makeContainer(migrationPlan: CadenceV14MigrationPlan.self) }),
             ("V13 staged migration", { try self.makeContainer(migrationPlan: CadenceV13MigrationPlan.self) }),
             ("V12 staged migration", { try self.makeContainer(migrationPlan: CadenceV12MigrationPlan.self) }),
@@ -150,7 +151,7 @@ final class AppBootstrap: ObservableObject {
         migrationPlan: Plan.Type,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly)
         return try ModelContainer(
             for: schema,
@@ -160,7 +161,7 @@ final class AppBootstrap: ObservableObject {
     }
 
     private func makeUnplannedContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let config = ModelConfiguration(schema: schema)
         return try ModelContainer(for: schema, migrationPlan: nil, configurations: config)
     }

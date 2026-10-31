@@ -39,7 +39,7 @@ final class ExerciseFavoriteTests: XCTestCase {
             })
             XCTAssertFalse(definitions.isEmpty); XCTAssertFalse(equipment.isEmpty)
         }
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let upgraded = try ModelContainer(for: schema, migrationPlan: CadenceV14MigrationPlan.self,
             configurations: ModelConfiguration(schema: schema, url: url))
         let lifts = try upgraded.mainContext.fetch(FetchDescriptor<Exercise>())
@@ -75,7 +75,7 @@ final class ExerciseFavoriteTests: XCTestCase {
             old.mainContext.insert(lift); old.mainContext.insert(gym)
             try old.mainContext.save()
         }
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         do {
             let upgraded = try ModelContainer(for: schema, migrationPlan: CadenceV14MigrationPlan.self,
                 configurations: ModelConfiguration("favorites", schema: schema, url: url))
@@ -98,7 +98,7 @@ final class ExerciseFavoriteTests: XCTestCase {
     }
 
     func testFavoritesRoundTripPreviewAndLegacyRestore() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let source = try ModelContainer(for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
         let lift = Exercise(name: "Synthetic Favorite", category: .main, type: .barbell,
@@ -136,7 +136,7 @@ final class ExerciseFavoriteTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("Cadence.store")
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         do {
             let writable = try ModelContainer(for: schema,
                 configurations: ModelConfiguration("favorites", schema: schema, url: url))
