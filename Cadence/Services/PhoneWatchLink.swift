@@ -125,9 +125,21 @@ final class PhoneWatchLink: NSObject {
                     NotificationCenter.default.post(name: .watchRestChanged,
                                                     object: RestTimer.Change(state: view.rest, exerciseName: next))
                 }
-                // A banked session keeps late operations in its sync state; they are
-                // listed for the owner and never dropped (design section 5).
                 guard let session else { continue }
+                if session.isCompleted {
+                    // Late operations after banking without the watch: value edits go
+                    // through the correction path (milestones rebuilt, program not
+                    // replayed); the rest stays in the sync state, listed, never dropped.
+                    let late = WatchSessionSync.lateCorrections(view: replica.view(), session: session)
+                    if !late.corrections.isEmpty {
+                        try SessionCorrectionService.applyAndRebuild(late.corrections, in: session, context: context)
+                    }
+                    if !late.corrections.isEmpty || !late.pending.isEmpty {
+                        PersistenceErrorCenter.shared.message = late.pending.isEmpty
+                            ? "Sets from your watch were added to a saved session."
+                            : "Sets from your watch were added to a saved session; \(late.pending.count) change(s) need a look in History."
+                    }
+                }
                 try WatchSessionSync.store(endpoint, in: session)
                 _ = PersistenceErrorCenter.shared.save(context, operation: "Saving sets from your watch")
                 send(.ack(replica.acknowledgement(for: .watch)))
