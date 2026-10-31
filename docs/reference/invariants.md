@@ -837,6 +837,15 @@ sequence order, redelivery is a no-op, edits to different fields of a set both
 survive, and concurrent edits to one field pick the same winner on both
 devices by Lamport version, never by wall clock.
 
+### INV-CSV-NO-FORMULA
+*platforms: core*
+
+The sets CSV is opened in spreadsheets, so no field it writes can run as a
+formula. A field starting with `=`, `+`, `-`, `@`, a tab or a carriage return
+gets a leading apostrophe, and any field holding a comma, quote, line feed or
+carriage return is quoted. Free text (notes, exercise names, values from an
+imported backup) is shown as text, never evaluated.
+
 ## Grading
 
 ### INV-BELOW-PLAN-IS-BELOW-PLAN
@@ -1184,6 +1193,10 @@ Every service worker deletes only the caches it owns, matched by name prefix.
 `web/app/sw.js` owns `cadence-app-`; `web/sw.js` retires the legacy
 `cadence-<build>` shells and explicitly excludes the app's prefix. Neither may
 sweep `caches.keys()` unfiltered.
+
+Reads follow the same rule: the app worker serves only from its own cache
+(never a bare `caches.match`, which searches every cache on the origin), and it
+caches only successful same-origin responses.
 
 > Cache Storage is keyed by ORIGIN, not by scope, so `caches.keys()` returns
 > every cache on the whole github.io account — including other projects

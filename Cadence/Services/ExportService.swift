@@ -413,11 +413,9 @@ enum ExportService {
         return Data(rows.joined(separator: "\n").utf8)
     }
 
+    /// Formula-safe, shared with web `csvField` ([INV-CSV-NO-FORMULA]).
     private static func escapeCSV(_ field: String) -> String {
-        if field.contains(",") || field.contains("\"") || field.contains("\n") {
-            return "\"\(field.replacingOccurrences(of: "\"", with: "\"\""))\""
-        }
-        return field
+        CSVExport.field(field)
     }
 
     // MARK: - Assembly
