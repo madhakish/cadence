@@ -42,10 +42,15 @@ authenticates via `MATCH_GIT_BASIC_AUTHORIZATION` =
 trailing one `base64` emits:
 `printf 'madhakish:github_pat_xxx' | base64 | tr -d '\n'`
 
+The certs repo's default branch is `main` (the Matchfile sets
+`git_branch("main")`; match would otherwise default to `master`). Protect it:
+changes land only by pull request, with linear history.
+
 For the **first run only** (when `match` must *create* the cert + profiles) you
-need write access: temporarily use a Contents **read-and-write** fine-grained
-PAT and set the repo variable `MATCH_READONLY=false`. Once the certs exist in
-the repo, delete that variable and swap the secret back to a read-only PAT.
+need write access: temporarily use a fine-grained PAT with Contents and Pull
+requests **read-and-write** and set the repo variable `MATCH_READONLY=false`.
+Once the certs exist in the repo, delete that variable and swap the secret back
+to a read-only PAT.
 
 ### 4. Register the App ID + app record (one-time, ~3 min)
 Two quick browser steps (more reliable than doing it headless):
@@ -66,12 +71,53 @@ record* — the extension ships inside the Cadence app.)
 
 The **Apple Watch app** ships embedded in the iPhone app with its own App ID,
 `com.madhakish.Cadence.watchkitapp` (explicit, **HealthKit** ticked). It needs a
-`match` App Store profile like the other two, so run the temporary read-write
-`match` setup (`MATCH_READONLY=false`) once after it lands. This is an owner
-action; routine CI stays read-only.
+`match` App Store profile like the other two; follow
+[new App IDs](#signing-preflight-and-new-app-ids) so the profile exists before
+anything depends on it. This is an owner action; routine CI stays read-only.
 
 (`fastlane match` then makes the signing cert + profiles for all three App IDs
 automatically on the first CI run.)
+
+## Signing preflight and new App IDs
+
+Every main run, manual dispatch and native PR runs the **Signing preflight**
+job (`.github/scripts/check-signing-material.rb`) on Ubuntu right after the
+repository preflight. In about a minute it proves what the signed build needs:
+the certs token can read the certs repo (and write to it when
+`MATCH_READONLY=false`), every App ID that ships in the app has an App Store
+profile there, the App Store Connect key is accepted, Apple is not blocking the
+account on an unaccepted agreement, and every App ID is registered. The signed
+build and the `App build (macOS)` aggregate wait on it, so a broken token, a
+missing profile or a pending Program License Agreement fails the PR, not a
+release run 25 minutes in. Fork and Dependabot PRs receive no secrets and
+report a notice instead. Run it locally with `make signing`: the certs checks
+use your `gh` login, and the Apple checks run when `ASC_KEY_ID`,
+`ASC_ISSUER_ID` and `ASC_KEY_CONTENT` are exported.
+
+The offline half (`check-signing-coverage.rb`, part of `make check` and the
+CI preflight) keeps `project.yml`, the Fastfile and the Matchfile in step:
+every embedded target is signed by `match`, `update_code_signing_settings` and
+the export `provisioningProfiles`, and `build_beta` reads `MATCH_READONLY`
+before `setup_ci` forces it to true.
+
+To add a target with its own App ID (an extension, a watch app):
+
+1. Add the target to `project.yml` and its App ID to the Fastfile and
+   Matchfile. `make check` fails until all three agree.
+2. Open the PR. **Signing preflight** fails with "no App Store provisioning
+   profile for …". Do not merge yet.
+3. Set the repository variable `MATCH_READONLY=false` and replace
+   `MATCH_GIT_BASIC_AUTHORIZATION` with a token for the certs repo with
+   **Contents: Read and write** and **Pull requests: Read and write**. Re-run
+   the PR checks: the preflight passes in provisioning mode and confirms the
+   token can push a branch and open pull requests.
+4. Merge. The main run starts a `match/provision-<run>` branch from the certs
+   repo's `main`, `match` registers the App ID if needed and writes the new
+   profile there, and the lane lands it on `main` by pull request (rebase
+   merge), then fails the run if any profile is still missing. Nothing pushes
+   to the protected `main` directly.
+5. Once `make signing` passes, delete `MATCH_READONLY` and restore the
+   read-only token. The preflight then guards the steady state again.
 
 ## Configure the repo
 

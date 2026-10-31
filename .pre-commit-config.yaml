@@ -1,0 +1,32 @@
+# Local hooks: `brew install pre-commit && make hooks`. Each hook runs the
+# same script CI runs, so a commit that passes here passes the CI preflight.
+repos:
+  - repo: local
+    hooks:
+      - id: preflight
+        name: make check (CI preflight)
+        entry: make check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: test
+        name: make test (preflight + CadenceCore + web)
+        entry: make test
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      # A new target, App ID, entitlement or signing change must prove the
+      # certs repo and Apple account can sign it before it leaves the machine.
+      - id: signing
+        name: make signing (live signing preflight)
+        entry: make signing
+        language: system
+        pass_filenames: false
+        files: ^(project\.yml|fastlane/|.*\.entitlements$)
+        stages: [pre-push]
+  # This repository is public: block committed credentials and keys.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]

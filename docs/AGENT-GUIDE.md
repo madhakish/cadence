@@ -348,6 +348,12 @@ into it. Guard genuinely Darwin-only tests with `#if canImport(Darwin)`.
 
 ## Build and test commands
 
+`make help` lists the local entry points; they run the scripts CI runs.
+`make check` is the CI preflight (also the pre-commit hook), `make test` adds
+the Core and web suites (also the pre-push hook), `make native` builds the
+iPhone app and runs the watch UI tests, and `make signing` is the live signing
+preflight. Install the hooks with `brew install pre-commit && make hooks`.
+
 Core tests, from any supported Swift toolchain:
 
 ```bash
@@ -396,8 +402,12 @@ artifact staging use explicit GitHub-hosted `macos-latest` runners. Metadata-onl
 jobs use GitHub-hosted Ubuntu. No job selects a self-hosted runner.
 Native validation is change-aware behind that aggregate:
 
-- repository hygiene, shell/JavaScript/Ruby/workflow syntax, and CI topology
-  contracts must pass before either portable suite starts;
+- repository hygiene, shell/JavaScript/Ruby/workflow syntax, CI topology and
+  signing-coverage contracts (`.github/scripts/preflight.sh`, the same script
+  as `make check`) must pass before either portable suite starts;
+- the Signing preflight proves the certs token, every App ID's profile and
+  registration, and the App Store Connect key before any release build, on
+  main and on native PRs; the signed build and the aggregate wait on it;
 - the app builds start only after core and web suites pass; the core job uses
   the runner's selected Xcode Swift toolchain and reports its version;
 - the unsigned-device build (Darwin unit tests + production-SDK Release

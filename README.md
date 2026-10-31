@@ -113,6 +113,10 @@ xcodegen generate
 open Cadence.xcodeproj
 ```
 
+`make test` runs everything CI runs before the app builds (repository and
+signing contracts, CadenceCore, web); `make help` lists the native and signing
+targets, and `make hooks` installs pre-commit and pre-push hooks.
+
 Run tests (plate math, progression, PR detection, warmup ramp, units):
 
 ```bash

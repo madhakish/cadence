@@ -41,6 +41,15 @@ assert_job_not_contains() {
   fi
 }
 
+assert_file_contains() {
+  local file="$1"
+  local expected="$2"
+  if ! grep -Fq -- "$expected" "$file"; then
+    echo "$file must contain: $expected" >&2
+    exit 1
+  fi
+}
+
 assert_workflow_contains() {
   local expected="$1"
   if ! grep -Fq "$expected" "$workflow"; then
@@ -63,13 +72,28 @@ for job in core-tests web-tests simulator-build device-build store-build migrati
   assert_job_not_contains "$job" "container:"
 done
 assert_job_contains simulator-build "needs: [changes, core-tests, web-tests]"
-assert_job_contains store-build "needs: [changes, core-tests, web-tests]"
+assert_job_contains store-build "needs: [changes, core-tests, web-tests, signing-preflight]"
 assert_job_contains migration-tests "needs: [changes, core-tests, web-tests]"
 assert_job_contains changes "bash .github/scripts/cancel-stale-pr-runs.sh"
-assert_job_contains changes "bash .github/scripts/test-cancel-stale-pr-runs.sh"
-assert_job_contains changes "bash .github/scripts/test-ci-topology.sh"
-assert_job_contains changes "bash .github/scripts/test-fastlane-phases.sh"
-assert_job_contains changes "bash .github/scripts/test-verify-native-jobs.sh"
+# CI, `make check` and pre-commit share one preflight script.
+assert_job_contains changes "run: bash .github/scripts/preflight.sh"
+assert_file_contains .github/scripts/preflight.sh "node --test .github/scripts/test-repository-hygiene.mjs"
+assert_file_contains .github/scripts/preflight.sh "git diff --check"
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-cancel-stale-pr-runs.sh"
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-ci-topology.sh"
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-signing-preflight.sh"
+# Signing material is proven on Ubuntu right after preflight, before any
+# macOS minute is spent, and the signed build and the aggregate wait on it.
+assert_job_contains signing-preflight "needs: changes"
+assert_job_contains signing-preflight "runs-on: ubuntu-latest"
+assert_job_contains signing-preflight "if: needs.changes.outputs.native == 'true' || github.event_name != 'pull_request'"
+assert_job_contains signing-preflight "run: ruby .github/scripts/check-signing-material.rb"
+assert_job_contains signing-preflight "MATCH_READONLY: \${{ vars.MATCH_READONLY }}"
+assert_job_contains signing-preflight "|| github.actor == 'dependabot[bot]') && 'optional' || 'required' }}"
+assert_job_contains app-build "SIGNING_REQUIRED: \${{ needs.changes.outputs.native == 'true' || github.event_name != 'pull_request' }}"
+assert_job_contains app-build 'SIGNING_RESULT: ${{ needs.signing-preflight.result }}'
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-fastlane-phases.sh"
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-verify-native-jobs.sh"
 assert_job_contains changes "force_testflight and verify_signed_artifact are mutually exclusive"
 assert_job_contains web-tests 'simulator-build-required: ${{ steps.release-plan.outputs.simulator-build-required }}'
 assert_job_contains web-tests 'store-build-required: ${{ steps.release-plan.outputs.store-build-required }}'
@@ -122,7 +146,7 @@ assert_job_contains migration-tests 'TEST_RUNNER_CADENCE_V15_STORE_DIR:'
 # Preserve the stable aggregate check and route its policy through the
 # scenario-tested executable gate. The portable suites are direct dependencies
 # so their failures cannot disappear when every conditional native job skips.
-assert_job_contains app-build "needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests, native-smoke]"
+assert_job_contains app-build "needs: [changes, core-tests, web-tests, signing-preflight, simulator-build, device-build, store-build, migration-tests, native-smoke]"
 assert_job_contains app-build "if: always()"
 assert_job_contains native-smoke "needs: [changes, core-tests, web-tests]"
 assert_job_contains native-smoke "if: needs.changes.outputs.native == 'true'"

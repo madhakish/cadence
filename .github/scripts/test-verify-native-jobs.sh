@@ -20,6 +20,8 @@ run_gate() {
     MIGRATION_RESULT="${11}" \
     NATIVE_SMOKE_REQUIRED="${12:-false}" \
     NATIVE_SMOKE_RESULT="${13:-skipped}" \
+    SIGNING_REQUIRED="${14:-false}" \
+    SIGNING_RESULT="${15:-skipped}" \
     bash "$gate"
 }
 
@@ -87,5 +89,16 @@ expect_fail "required native interactions failed" \
   success success success true success false skipped false skipped false skipped true failure
 expect_fail "unexpected native interactions ran" \
   success success success false skipped false skipped false skipped false skipped false success
+
+# The signing preflight: a broken certs token or Apple account must fail the
+# aggregate on native PRs and on main, never pass by being skipped.
+expect_pass "native PR with signing proven" \
+  success success success true success false skipped false skipped false skipped true success true success
+expect_fail "native PR with signing material broken" \
+  success success success true success false skipped false skipped false skipped true success true failure
+expect_fail "release main push with signing preflight skipped" \
+  success success success false skipped true success true success false skipped false skipped true skipped
+expect_fail "release main push with signing preflight failed" \
+  success success success false skipped true success true skipped false skipped false skipped true failure
 
 echo "CI job aggregate contract tests passed ($scenarios scenarios)"
