@@ -25,6 +25,12 @@ end
 platform :ios do
   desc "Build and sign the immutable Release IPA without uploading it"
   lane :build_beta do
+    # Read the first-run override before setup_ci: setup_ci sets
+    # MATCH_READONLY=true for the rest of the lane ("Enabling match readonly
+    # mode"), so reading it afterwards made the documented MATCH_READONLY=false
+    # provisioning run (docs/TESTFLIGHT.md) impossible.
+    match_readonly = ENV["MATCH_READONLY"] != "false"
+
     # Create + unlock a temporary CI keychain so `match` imports the distribution
     # cert somewhere `codesign` can use non-interactively. Without this, match
     # lands the cert in the locked login keychain and codesign can hang waiting
@@ -38,7 +44,7 @@ platform :ios do
     # The App IDs and App Store Connect record are created once by hand; see
     # docs/TESTFLIGHT.md. Routine CI only reads signing material.
     match(type: "appstore", app_identifier: [APP_ID, WIDGET_ID, WATCH_ID], api_key: api_key,
-          readonly: ENV["MATCH_READONLY"] != "false")
+          readonly: match_readonly)
 
     update_code_signing_settings(
       use_automatic_signing: false,
