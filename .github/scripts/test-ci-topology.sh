@@ -113,7 +113,7 @@ assert_job_contains device-build "needs: [changes, core-tests, web-tests]"
 assert_job_contains simulator-build "timeout-minutes: 20"
 assert_job_contains device-build "timeout-minutes: 20"
 assert_job_contains store-build "timeout-minutes: 45"
-assert_job_contains migration-tests "timeout-minutes: 45"
+assert_job_contains migration-tests "timeout-minutes: 75"
 assert_job_contains migration-tests "ref: 20058600ec2947c1a4f13a855d3b922ae80e1709"
 assert_job_contains migration-tests 'TEST_RUNNER_CADENCE_V14_STORE_DIR:'
 assert_job_contains migration-tests "ref: 575ef369c9a44e52ec72c1f3d084f2a32e8cc469"
