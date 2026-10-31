@@ -140,7 +140,7 @@ targets:
         # The workout session keeps the app running with the wrist down and
         # supplies heart rate (design #339 section 6).
         WKBackgroundModes: [workout-processing]
-        NSHealthShareUsageDescription: Cadence reads your heart rate during a workout so it can show it on the set and rest screens.
+        NSHealthShareUsageDescription: Cadence reads your heart rate and active energy during a workout it runs on your watch; heart rate shows on the set and rest screens.
         NSHealthUpdateUsageDescription: Cadence saves workouts run on your watch to Apple Health when Health writing is on in Cadence's settings.
     settings:
       base:

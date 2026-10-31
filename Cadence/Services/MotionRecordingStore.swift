@@ -50,9 +50,30 @@ enum MotionRecordingStore {
         return total
     }
 
+    static func delete(recordingID: String, root: URL = root) throws {
+        guard UUID(uuidString: recordingID) != nil else { return }
+        let folder = root.appendingPathComponent(recordingID, isDirectory: true)
+        if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+    }
+
+    static func deleteAll(root: URL = root) throws {
+        for sidecar in list(root: root) { try delete(recordingID: sidecar.recordingID, root: root) }
+        removeExports()
+    }
+
+    /// Exported zips are copies of real data in tmp: remove them once they are
+    /// no longer being shared, and before making a new one.
+    static func removeExports(in directory: URL = FileManager.default.temporaryDirectory) {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.lastPathComponent.hasPrefix("Cadence-motion-recordings-") && file.pathExtension == "zip" {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
     /// One zip of every recording, for the share sheet.
     static func exportArchive(root: URL = root, now: Date = Date()) throws -> URL {
         try prepare(root)
+        removeExports()
         var coordinationError: NSError?
         var archive: URL?
         var copyError: Error?

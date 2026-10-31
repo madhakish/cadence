@@ -58,4 +58,35 @@ final class MotionRecordingStoreTests: XCTestCase {
         XCTAssertThrowsError(try MotionRecordingStore.store(samplesAt: incoming.samples, sidecar: Data("{}".utf8),
                                                             root: workspace.appendingPathComponent("r")))
     }
+
+    func testRecordingsCanBeDeletedOneByOneOrAllAtOnce() throws {
+        let workspace = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let root = workspace.appendingPathComponent("MotionRecordings")
+        let first = try syntheticRecording(in: workspace)
+        try MotionRecordingStore.store(samplesAt: first.samples, sidecar: first.sidecar, root: root)
+        let second = try syntheticRecording(in: workspace)
+        try MotionRecordingStore.store(samplesAt: second.samples, sidecar: second.sidecar, root: root)
+        XCTAssertEqual(MotionRecordingStore.list(root: root).count, 2)
+
+        try MotionRecordingStore.delete(recordingID: first.id, root: root)
+        XCTAssertEqual(MotionRecordingStore.list(root: root).map(\.recordingID), [second.id])
+        try MotionRecordingStore.delete(recordingID: "../../not-a-recording", root: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.path), "a non-UUID ID never reaches the file system")
+
+        try MotionRecordingStore.deleteAll(root: root)
+        XCTAssertTrue(MotionRecordingStore.list(root: root).isEmpty)
+    }
+
+    func testExportedZipsDoNotLingerInTemporaryStorage() throws {
+        let tmp = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let stale = tmp.appendingPathComponent("Cadence-motion-recordings-2026-10-31T12-00-00Z.zip")
+        let unrelated = tmp.appendingPathComponent("something-else.zip")
+        try Data("PK".utf8).write(to: stale)
+        try Data("PK".utf8).write(to: unrelated)
+        MotionRecordingStore.removeExports(in: tmp)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path), "only Cadence's own exports are removed")
+    }
 }
