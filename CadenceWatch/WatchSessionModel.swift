@@ -189,8 +189,8 @@ final class WatchSessionModel: ObservableObject {
             status: .completed, reps: reps, weightLb: weightLb,
             durationSeconds: durationSeconds ?? set.durationSeconds, performedAs: exercise.catalog.exerciseID)))
         lastLoggedSetID = set.id
-        motion.note(.setCompleted, setID: set.id, exerciseID: exercise.catalog.exerciseID, reps: reps,
-                    weightLb: weightLb, isWarmup: set.isWarmup)
+        motion.note(.setCompleted, setID: set.id, exerciseID: exercise.catalog.exerciseID,
+                    exerciseName: exercise.catalog.name, reps: reps, weightLb: weightLb, isWarmup: set.isWarmup)
         if settings?.haptics ?? true { WKInterfaceDevice.current().play(.success) }
         if settings?.autoStartRest ?? true {
             motion.note(.restStarted)

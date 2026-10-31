@@ -66,12 +66,13 @@ final class MotionRecorder: ObservableObject {
     }
 
     /// A session event, on the samples' clock.
-    func note(_ kind: MotionEvent.Kind, setID: String? = nil, exerciseID: String? = nil, reps: Int? = nil,
-              weightLb: Double? = nil, isWarmup: Bool? = nil) {
+    func note(_ kind: MotionEvent.Kind, setID: String? = nil, exerciseID: String? = nil, exerciseName: String? = nil,
+              reps: Int? = nil, weightLb: Double? = nil, isWarmup: Bool? = nil) {
         guard isRecording else { return }
         let t = ProcessInfo.processInfo.systemUptime - startUptime
-        sidecar?.events.append(MotionEvent(t: t, kind: kind, setID: setID, exerciseID: exerciseID, reps: reps,
-                                           weightLb: weightLb, isWarmup: isWarmup))
+        sidecar?.events.append(MotionEvent(t: t, kind: kind, setID: setID, exerciseID: exerciseID,
+                                           exerciseName: exerciseName, reps: reps, weightLb: weightLb,
+                                           isWarmup: isWarmup))
         writeSidecar()
     }
 
