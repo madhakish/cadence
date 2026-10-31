@@ -24,6 +24,8 @@ final class MotionRecorder: ObservableObject {
     private var directory: URL?
     /// `CMDeviceMotion.timestamp` and `systemUptime` share this clock.
     private var startUptime: TimeInterval = 0
+    /// Each one-second batch of live samples, for set detection (phase 5).
+    var onSamples: (([MotionSample]) -> Void)?
 
     static var root: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -49,6 +51,9 @@ final class MotionRecorder: ObservableObject {
                 device: .init(model: Self.machineIdentifier(),
                               wristLocation: device.wristLocation == .left ? "left" : "right",
                               crownOrientation: device.crownOrientation == .left ? "left" : "right"))
+            writer.onBatch = { [weak self] batch in
+                Task { @MainActor in self?.onSamples?(batch) }
+            }
             self.writer = writer
             self.directory = directory
             startUptime = ProcessInfo.processInfo.systemUptime
@@ -123,8 +128,11 @@ final class MotionRecorder: ObservableObject {
 final class MotionFileWriter: @unchecked Sendable {
     let queue: OperationQueue
     var startUptime: TimeInterval = 0
+    /// Called on `queue` with each flushed block of samples.
+    var onBatch: (([MotionSample]) -> Void)?
     private let handle: FileHandle
     private var buffer = Data()
+    private var batch: [MotionSample] = []
 
     init(url: URL, sampleRate: Double) throws {
         FileManager.default.createFile(atPath: url.path, contents: MotionRecording.header(sampleRate: sampleRate))
@@ -138,12 +146,14 @@ final class MotionFileWriter: @unchecked Sendable {
     /// Called on `queue` only.
     func record(_ motion: CMDeviceMotion) {
         let a = motion.userAcceleration, r = motion.rotationRate, g = motion.gravity, q = motion.attitude.quaternion
-        MotionRecording.append(MotionSample(
+        let sample = MotionSample(
             t: Float(motion.timestamp - startUptime),
             userAcceleration: SIMD3(Float(a.x), Float(a.y), Float(a.z)),
             rotationRate: SIMD3(Float(r.x), Float(r.y), Float(r.z)),
             gravity: SIMD3(Float(g.x), Float(g.y), Float(g.z)),
-            attitude: SIMD4(Float(q.x), Float(q.y), Float(q.z), Float(q.w))), to: &buffer)
+            attitude: SIMD4(Float(q.x), Float(q.y), Float(q.z), Float(q.w)))
+        MotionRecording.append(sample, to: &buffer)
+        batch.append(sample)
         if buffer.count >= MotionRecording.bytesPerSample * 50 { flush() }
     }
 
@@ -159,5 +169,7 @@ final class MotionFileWriter: @unchecked Sendable {
         guard !buffer.isEmpty else { return }
         try? handle.write(contentsOf: buffer)
         buffer.removeAll(keepingCapacity: true)
+        if !batch.isEmpty { onBatch?(batch) }
+        batch.removeAll(keepingCapacity: true)
     }
 }

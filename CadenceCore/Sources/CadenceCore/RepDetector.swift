@@ -248,3 +248,46 @@ public enum RepDetector {
         return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 }
+
+/// Live set detection on the watch (design section 10): the batch detector run
+/// over a sliding window, reporting each set once, after no further rep could
+/// still join it. Feed it samples as they arrive; reset it when the exercise
+/// in focus changes.
+public struct StreamingSetDetector: Sendable {
+    public let signature: RepSignature
+    public let sampleRate: Double
+    private var buffer: [MotionSample] = []
+    private var reportedThrough = -Double.infinity
+
+    public init(signature: RepSignature, sampleRate: Double = MotionRecording.defaultSampleRate) {
+        self.signature = signature
+        self.sampleRate = sampleRate
+    }
+
+    /// Seconds of motion kept: room for a long set plus its lead-in.
+    public var window: Double { max(30, 14 * signature.repPeriod + signature.endLag) }
+
+    /// Seconds after the last rep before a set is final: its learned end lag,
+    /// and at least long enough that a slow final rep would already have come.
+    public var settle: Double { max(signature.endLag, 1.5 * signature.repPeriod) }
+
+    public mutating func append(_ samples: [MotionSample]) -> DetectedSet? {
+        buffer += samples
+        guard let now = buffer.last.map({ Double($0.t) }) else { return nil }
+        if let keep = buffer.firstIndex(where: { Double($0.t) >= now - window }), keep > 0 {
+            buffer.removeFirst(keep)
+        }
+        let sets = RepDetector.detect(buffer, signature: signature, sampleRate: sampleRate)
+        guard let done = sets.last(where: { set in
+            let lastRep = set.end - signature.endLag
+            return now >= lastRep + settle && set.start > reportedThrough
+        }) else { return nil }
+        reportedThrough = done.end
+        return done
+    }
+
+    public mutating func reset() {
+        buffer.removeAll()
+        reportedThrough = -.infinity
+    }
+}

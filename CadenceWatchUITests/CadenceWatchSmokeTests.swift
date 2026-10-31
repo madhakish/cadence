@@ -74,4 +74,21 @@ final class CadenceWatchSmokeTests: XCTestCase {
         let logged = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plank' AND label CONTAINS '1 of 1 sets'")).firstMatch
         XCTAssertTrue(page(app, upTo: logged), "the hold is logged")
     }
+
+    /// Phase 5: a detected set logs itself with its reps and offers Edit.
+    func testADetectedSetLogsItselfAndOffersEdit() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        let logged = app.buttons["autoLogged"]
+        XCTAssertTrue(logged.waitForExistence(timeout: 20), "the synthetic set is detected and logged")
+        XCTAssertEqual(logged.label, "5 reps · Edit")
+        // Edit reopens the set for a manual entry.
+        logged.tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+    }
 }

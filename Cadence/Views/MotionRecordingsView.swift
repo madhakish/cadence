@@ -11,6 +11,7 @@ struct MotionRecordingsView: View {
     @State private var exportError: String?
     @State private var preparing = false
     @State private var confirmingDeleteAll = false
+    @State private var autocomplete: MotionRecordingStore.AutocompleteState?
 
     var body: some View {
         List {
@@ -22,6 +23,20 @@ struct MotionRecordingsView: View {
                 }
             } footer: {
                 Text("Your watch records wrist motion during sessions it runs, so Cadence can later learn to count your reps. Recordings stay on this phone and are not part of your backup. Turn recording off in the Cadence app on your watch.")
+            }
+            if let autocomplete, !autocomplete.verdicts.isEmpty {
+                Section {
+                    ForEach(autocomplete.verdicts, id: \.name) { verdict in
+                        LabeledContent(verdict.name) {
+                            Text(verdict.verdict == "enable" ? "On" : verdict.verdict.capitalized)
+                                .foregroundStyle(verdict.verdict == "enable" ? .green : .secondary)
+                        }
+                    }
+                } header: {
+                    Text("Autocomplete")
+                } footer: {
+                    Text("An exercise completes its sets on the watch only after your recordings show it counts your reps accurately: at least 10 sets, exact on 9 in 10, and set end within 5 seconds.")
+                }
             }
             if !recordings.isEmpty {
                 Section("Sessions") {
@@ -78,6 +93,7 @@ struct MotionRecordingsView: View {
     private func reload() {
         recordings = MotionRecordingStore.list()
         bytes = MotionRecordingStore.totalBytes()
+        autocomplete = MotionRecordingStore.autocompleteState()
         archive = nil
     }
 

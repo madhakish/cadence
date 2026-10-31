@@ -157,4 +157,39 @@ final class RepDetectorTests: XCTestCase {
         XCTAssertEqual(results.first?.verdict, "needs a second session")
         XCTAssertFalse(results.first?.passes ?? true)
     }
+
+    // MARK: Phase 5: live detection
+
+    func testStreamingDetectionFiresOncePerSetSoonAfterItEnds() throws {
+        let training = session(seed: 30, sets: [(bench, 5), (bench, 6), (bench, 5), (bench, 4)])
+        let signature = try XCTUnwrap(RepDetector.signature(exerciseID: "bench",
+                                                            from: DetectorEvaluation.labelledSets("bench", in: training)))
+        let live = session(seed: 31, sets: [(bench, 5), (bench, 8), (bench, 3)])
+        var detector = StreamingSetDetector(signature: signature)
+        var fired: [(at: Double, set: DetectedSet)] = []
+        // One-second batches, as the watch's writer delivers them.
+        var index = 0
+        while index < live.samples.count {
+            let batch = Array(live.samples[index..<min(index + 50, live.samples.count)])
+            index += 50
+            if let set = detector.append(batch) { fired.append((Double(batch.last!.t), set)) }
+        }
+        let taps = live.sidecar.labelledSets()
+        XCTAssertEqual(fired.map(\.set.reps), [5, 8, 3], "each set once, with its reps, nothing during rests")
+        for (event, tap) in zip(fired, taps) {
+            XCTAssertLessThanOrEqual(event.at - tap.end, 5, "the set completes within 5 s of where Done would be tapped")
+            XCTAssertEqual(event.set.end, tap.end, accuracy: 5)
+        }
+    }
+
+    func testOnlyExercisesThatPassTheBarGetASignature() {
+        let recordings = [
+            session(seed: 40, sets: [(bench, 5), (bench, 5), (bench, 5), (bench, 6), (curl, 10)]),
+            session(seed: 41, sets: [(bench, 3), (bench, 5), (bench, 8), (bench, 5), (curl, 12)]),
+            session(seed: 42, sets: [(bench, 5), (bench, 4), (bench, 6), (bench, 5), (curl, 10)]),
+        ]
+        let signatures = DetectorEvaluation.enabledSignatures(recordings)
+        XCTAssertEqual(signatures.map(\.exerciseID), ["bench"], "curls have only 3 sets: never enabled")
+        XCTAssertEqual(signatures.first?.trainingSets, 12)
+    }
 }
