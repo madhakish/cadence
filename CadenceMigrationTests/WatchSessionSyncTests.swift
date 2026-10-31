@@ -231,6 +231,30 @@ final class WatchSessionSyncTests: XCTestCase {
                       "rows that match the merge produce no operations")
     }
 
+    func testLateWatchSetsReachABankedSessionThroughTheCorrectionPath() throws {
+        let source = try makeContainer()
+        let snapshot = try WatchSessionSync.snapshot(of: try plannedSession(source.mainContext), title: "Day B", builtAt: t0)
+        let store = try makeContainer()
+        let context = store.mainContext
+        var (watch, phone, session) = try startOnWatch(snapshot, phoneContext: context)
+        // The phone banked without the watch; the watch's sets arrive afterwards.
+        session.isCompleted = true
+        try context.save()
+        let bench = snapshot.exercises[0]
+        _ = watch.issue(.setPerformed(setID: bench.sets[1].id, patch: SyncSetPatch(status: .completed, reps: 6,
+            weightLb: 190, performedAs: bench.catalog.exerciseID)), operationID: opID(), now: t0)
+        _ = watch.issue(.setFlags(setID: bench.sets[1].id, flags: ["clean"]), operationID: opID(), now: t0)
+        for op in watch.outbox { phone.receive(op) }
+
+        let late = WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session)
+        XCTAssertEqual(late.corrections.count, 1)
+        XCTAssertEqual(late.pending, [bench.sets[1].id], "a tag is not a correction yet: listed, never dropped")
+        try SessionCorrectionService.applyAndRebuild(late.corrections, in: session, context: context)
+        let set = try XCTUnwrap(session.orderedExercises[0].orderedSets.first { $0.syncID == bench.sets[1].id })
+        XCTAssertEqual(set.status, .completed); XCTAssertEqual(set.reps, 6); XCTAssertEqual(set.weightLb, 190)
+        XCTAssertTrue(WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session).corrections.isEmpty)
+    }
+
     func testAPlannedSnapshotInsertsNothing() throws {
         let store = try makeContainer()
         let context = store.mainContext

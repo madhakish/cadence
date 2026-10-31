@@ -389,6 +389,41 @@ enum WatchSessionSync {
             sets: entry.orderedSets.map(plannedSet))
     }
 
+    // MARK: Late operations
+
+    /// Operations that reach a session the phone already banked without the
+    /// watch (design section 5). Value edits to sets that exist become
+    /// corrections for `SessionCorrectionService.applyAndRebuild`; anything it
+    /// cannot apply yet (a set added or removed, warmup, tags, drop reason) is
+    /// returned by set ID so it is listed for the owner, never dropped.
+    static func lateCorrections(view: SyncSessionView, session: WorkoutSession)
+        -> (corrections: [(set: SetEntry, correction: SetLifecycle.SetCorrection)], pending: [String]) {
+        var rows: [String: SetEntry] = [:]
+        for entry in session.exercises { for set in entry.sets { rows[set.syncID] = set } }
+        var corrections: [(set: SetEntry, correction: SetLifecycle.SetCorrection)] = []
+        var pending: [String] = []
+        var seen: Set<String> = []
+        for value in view.exercises.flatMap(\.sets) {
+            seen.insert(value.id)
+            guard let set = rows[value.id] else { pending.append(value.id); continue }
+            var correction = SetLifecycle.SetCorrection()
+            var changed = false
+            if set.weightLb != value.weightLb { correction.weightLb = value.weightLb; changed = true }
+            if set.reps != value.reps { correction.reps = value.reps; changed = true }
+            if set.durationSeconds != value.durationSeconds, let seconds = value.durationSeconds {
+                correction.durationSeconds = seconds; changed = true
+            }
+            if set.status != value.status { correction.status = value.status; changed = true }
+            if changed { corrections.append((set: set, correction: correction)) }
+            if set.isWarmup != value.isWarmup || set.flagsRaw != value.flags
+                || set.autoregReasonRaw != value.autoregReason?.rawValue {
+                pending.append(value.id)
+            }
+        }
+        pending += rows.keys.filter { !seen.contains($0) }.sorted()
+        return (corrections, pending)
+    }
+
     // MARK: Persisted sync state
 
     static func phoneContext(of replica: SyncReplica) throws -> PhoneContext? {
