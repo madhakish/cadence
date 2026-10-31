@@ -137,17 +137,20 @@ final class PhoneWatchLink: NSObject {
                 }
                 guard let session else { continue }
                 if session.isCompleted {
-                    // Late operations after banking without the watch: value edits go
-                    // through the correction path (milestones rebuilt, program not
-                    // replayed); the rest stays in the sync state, listed, never dropped.
+                    // Late operations after banking without the watch go through the
+                    // correction path: values first, then structure; milestones
+                    // rebuild and program state is not replayed (design section 5).
                     let late = WatchSessionSync.lateCorrections(view: replica.view(), session: session)
                     if !late.corrections.isEmpty {
                         try SessionCorrectionService.applyAndRebuild(late.corrections, in: session, context: context)
                     }
+                    if !late.pending.isEmpty {
+                        try SessionCorrectionService.applyWatchStructure(
+                            replica.view(), pendingSetIDs: late.pending,
+                            phone: try WatchSessionSync.phoneContext(of: replica), to: session, context: context)
+                    }
                     if !late.corrections.isEmpty || !late.pending.isEmpty {
-                        PersistenceErrorCenter.shared.message = late.pending.isEmpty
-                            ? "Sets from your watch were added to a saved session."
-                            : "Sets from your watch were added to a saved session; \(late.pending.count) change(s) need a look in History."
+                        PersistenceErrorCenter.shared.message = "Sets from your watch were added to a saved session."
                     }
                 }
                 try WatchSessionSync.store(endpoint, in: session)
