@@ -333,7 +333,7 @@ jobs:
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -746,7 +746,7 @@ jobs:
           IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
           CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
         run: bash .github/scripts/verify-release-artifact.sh
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
