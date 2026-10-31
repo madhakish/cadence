@@ -85,7 +85,9 @@ struct SetView: View {
     @State private var editingLoad = false
 
     var body: some View {
-        if let exercise = model.currentExercise, let set = model.currentSet {
+        if let exercise = model.currentExercise, let set = model.currentSet, WatchSessionModel.isTimed(set) {
+            TimedSetView(exercise: exercise, set: set)
+        } else if let exercise = model.currentExercise, let set = model.currentSet {
             let index = (exercise.sets.firstIndex { $0.id == set.id } ?? 0) + 1
             VStack(spacing: 6) {
                 HStack {
@@ -134,6 +136,7 @@ struct LoadAdjuster: View {
     @Binding var weightLb: Double
     @EnvironmentObject private var model: WatchSessionModel
     @Environment(\.dismiss) private var dismiss
+    @State private var choosingReason = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -143,6 +146,16 @@ struct LoadAdjuster: View {
                 Button("+5") { weightLb += 5 }
             }
             Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
+            Button("Drop load…") { choosingReason = true }
+                .font(.footnote)
+        }
+        .confirmationDialog("Why drop the load?", isPresented: $choosingReason) {
+            ForEach(AutoregReason.allCases, id: \.self) { reason in
+                Button(reason.rawValue.capitalized) {
+                    model.dropLoad(reason: reason)
+                    dismiss()
+                }
+            }
         }
         .focusable()
         .digitalCrownRotation($weightLb, from: 0, through: 1000, by: 2.5, sensitivity: .medium,
@@ -273,6 +286,59 @@ struct SummaryView: View {
                 .font(.footnote).foregroundStyle(.secondary)
             Text("Saved to your iPhone when it's in reach.").font(.caption2).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+        }
+    }
+}
+
+/// Holds by a hold timer; carries and conditioning by duration (owner
+/// decision 11). The timer runs on the watch; Done logs the elapsed time.
+struct TimedSetView: View {
+    let exercise: SyncSessionView.Exercise
+    let set: SyncSessionView.Set
+    @EnvironmentObject private var model: WatchSessionModel
+    @State private var startedAt: Date?
+    @State private var stoppedAt: Date?
+
+    private var target: Int? { self.set.created.plannedDurationSeconds ?? self.set.durationSeconds }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(target.map { "Target \(Duration.seconds($0).formatted(.time(pattern: .minuteSecond)))" } ?? "Timed")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                HeartRateBadge()
+            }
+            Text(exercise.catalog.name).font(.headline).lineLimit(2).multilineTextAlignment(.center)
+            if let startedAt {
+                TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                    let elapsed = (stoppedAt ?? context.date).timeIntervalSince(startedAt)
+                    Text(Duration.seconds(elapsed).formatted(.time(pattern: .minuteSecond)))
+                        .font(.system(size: 36, weight: .semibold).monospacedDigit())
+                }
+            }
+            if startedAt == nil {
+                Button("Start") { startedAt = Date() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .accessibilityIdentifier("startTimer")
+            } else if stoppedAt == nil {
+                Button("Stop") { stoppedAt = Date() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            } else if let startedAt, let stoppedAt {
+                Button("Done") {
+                    model.complete(set, reps: set.reps, weightLb: set.weightLb,
+                                   durationSeconds: Int(stoppedAt.timeIntervalSince(startedAt).rounded()))
+                    self.startedAt = nil
+                    self.stoppedAt = nil
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large)
+            }
+            Button("Skip", role: .destructive) { model.skip(set) }
+                .font(.footnote).buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        .onChange(of: set.id) { _, _ in
+            startedAt = nil
+            stoppedAt = nil
         }
     }
 }

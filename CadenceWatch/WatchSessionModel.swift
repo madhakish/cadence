@@ -73,6 +73,9 @@ final class WatchSessionModel: ObservableObject {
         let snapshot = SyncSessionSnapshot(title: "Day A", position: nil, builtAt: now, exercises: [
             SyncPlannedExercise(id: UUID().uuidString, catalog: bench, programRole: "main", sets: sets(185, 5)),
             SyncPlannedExercise(id: UUID().uuidString, catalog: row, sets: sets(135, 8)),
+            SyncPlannedExercise(id: UUID().uuidString, catalog: SyncCatalogExercise(exerciseID: "fixture-plank", name: "Plank"),
+                                sets: [SyncPlannedSet(id: UUID().uuidString, reps: 0, weightLb: 0, durationSeconds: 30,
+                                                      plannedDurationSeconds: 30)]),
         ])
         let settings = WatchSettings(accessoryRestSeconds: 90, secondaryRestSeconds: 180, mainUpperRestSeconds: 180,
                                      mainCompoundRestSeconds: 180, autoStartRest: true, haptics: false, unit: "lb",
@@ -161,11 +164,16 @@ final class WatchSessionModel: ObservableObject {
         send(.join(sessionID: id))
     }
 
-    func complete(_ set: SyncSessionView.Set, reps: Int, weightLb: Double) {
+    /// Holds, carries and conditioning are logged by time (owner decision 11).
+    static func isTimed(_ set: SyncSessionView.Set) -> Bool {
+        set.created.plannedDurationSeconds != nil || set.durationSeconds != nil
+    }
+
+    func complete(_ set: SyncSessionView.Set, reps: Int, weightLb: Double, durationSeconds: Int? = nil) {
         guard let exercise = currentExercise else { return }
         issue(.setPerformed(setID: set.id, patch: SyncSetPatch(
             status: .completed, reps: reps, weightLb: weightLb,
-            durationSeconds: set.durationSeconds, performedAs: exercise.catalog.exerciseID)))
+            durationSeconds: durationSeconds ?? set.durationSeconds, performedAs: exercise.catalog.exerciseID)))
         lastLoggedSetID = set.id
         if settings?.haptics ?? true { WKInterfaceDevice.current().play(.success) }
         if settings?.autoStartRest ?? true {
@@ -174,6 +182,22 @@ final class WatchSessionModel: ObservableObject {
         }
         if exercise.id == focusExerciseID, !(currentExercise?.sets.contains { $0.status == .planned } ?? false) {
             focusExerciseID = nil
+        }
+    }
+
+    /// The phone's mid-session drop load (design section 7): the remaining
+    /// planned work sets of the current exercise get the engine's dropped load
+    /// and carry the reason, so banking treats them as on the phone. The
+    /// configured fixed drop lives in the phone's planning context, so the
+    /// watch uses the engine's standard drop.
+    func dropLoad(reason: AutoregReason) {
+        guard let exercise = currentExercise else { return }
+        let plan = ProgramEngine.dropLoadPlan(
+            sets: exercise.sets.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) },
+            barLb: exercise.catalog.loadBasis == .totalBar ? 45 : 0)
+        for step in plan {
+            issue(.setPerformed(setID: exercise.sets[step.index].id, patch: SyncSetPatch(
+                weightLb: step.weightLb, autoregReason: SyncValue(reason))))
         }
     }
 
