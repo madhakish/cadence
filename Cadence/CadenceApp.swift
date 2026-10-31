@@ -16,7 +16,13 @@ struct CadenceApp: App {
             if let container = bootstrap.container {
                 ThemedRoot()
                     .modelContainer(container)
+                    .task(id: ObjectIdentifier(container)) {
+                        // The watch shares the real store only, never a temporary session.
+                        guard !bootstrap.isTemporary else { return }
+                        PhoneWatchLink.shared.activate(container: container)
+                    }
                     .onChange(of: scenePhase) { _, phase in
+                        if phase == .active, !bootstrap.isTemporary { PhoneWatchLink.shared.pushPlan() }
                         guard phase == .background, !bootstrap.isTemporary else { return }
                         do { try BackupCheckpointService.create(context: container.mainContext, reason: "background") }
                         catch { BackupCheckpointService.recordFailure(error) }

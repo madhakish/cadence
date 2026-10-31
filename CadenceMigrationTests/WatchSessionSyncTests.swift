@@ -188,6 +188,49 @@ final class WatchSessionSyncTests: XCTestCase {
         XCTAssertFalse(context.hasChanges, "the backfill keeps the derived entry's ID, so projection finds it again")
     }
 
+    // [INV-WATCH-SYNC-PERFORMED-WORK]
+    func testPhoneEditsBecomeOperationsInsteadOfBeingOverwritten() throws {
+        let source = try makeContainer()
+        let snapshot = try WatchSessionSync.snapshot(of: try plannedSession(source.mainContext), title: "Day B", builtAt: t0)
+        let store = try makeContainer()
+        let context = store.mainContext
+        var (watch, phone, session) = try startOnWatch(snapshot, phoneContext: context)
+        // The phone's logger edits rows directly: completes a set with a heavier
+        // load, flags it, adds a set, deletes another and moves the row first.
+        let bench = session.orderedExercises[0]
+        let row = session.orderedExercises[1]
+        let first = bench.orderedSets[1]
+        first.status = .completed; first.weightLb = 195; first.flagsRaw = ["grindy"]
+        let added = SetEntry(order: 3, weightLb: 155, reps: 8)
+        context.insert(added); added.sessionExercise = bench
+        let deleted = row.orderedSets[2].syncID
+        context.delete(row.orderedSets[2])
+        row.order = -1
+        try context.save()
+        // Meanwhile the watch completes a different set.
+        _ = watch.issue(.setPerformed(setID: snapshot.exercises[1].sets[0].id, patch: SyncSetPatch(
+            status: .completed, reps: 8, weightLb: 135, performedAs: snapshot.exercises[1].catalog.exerciseID)),
+                        operationID: opID(), now: t0)
+
+        let phoneOps = WatchSessionSync.captureLocalEdits(of: session, into: &phone, now: t0, makeID: opID)
+        XCTAssertFalse(phoneOps.isEmpty)
+        for op in watch.outbox { phone.receive(op) }
+        for op in phoneOps { watch.receive(op) }
+        try WatchSessionSync.project(phone.replica!.view(), onto: session,
+                                     phone: try WatchSessionSync.phoneContext(of: phone.replica!), context: context)
+        try context.save()
+
+        XCTAssertEqual(phone.replica!.view().exercises, watch.replica!.view().exercises, "both devices agree")
+        XCTAssertEqual(session.orderedExercises.map(\.syncID), [row.syncID, bench.syncID], "the phone's reorder survives")
+        let kept = try XCTUnwrap(bench.orderedSets.first { $0.syncID == first.syncID })
+        XCTAssertEqual(kept.status, .completed); XCTAssertEqual(kept.weightLb, 195); XCTAssertEqual(kept.flagsRaw, ["grindy"])
+        XCTAssertTrue(bench.orderedSets.contains { $0.syncID == added.syncID && $0.reps == 8 })
+        XCTAssertNil(try context.fetch(FetchDescriptor<SetEntry>()).first { $0.syncID == deleted })
+        XCTAssertEqual(row.orderedSets.first?.status, .completed, "the watch's work arrives too")
+        XCTAssertTrue(WatchSessionSync.captureLocalEdits(of: session, into: &phone, now: t0, makeID: opID).isEmpty,
+                      "rows that match the merge produce no operations")
+    }
+
     func testAPlannedSnapshotInsertsNothing() throws {
         let store = try makeContainer()
         let context = store.mainContext
