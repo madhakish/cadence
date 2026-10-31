@@ -85,6 +85,11 @@ public enum WatchWire: Codable, Hashable, Sendable {
     /// The watch joins the session the phone has open: the phone answers with
     /// every operation of that session so far, starting with its start.
     case join(sessionID: String)
+    /// The phone stored a motion recording; the watch may delete its copy.
+    case recordingStored(recordingID: String)
+
+    /// `WCSession.transferFile` metadata key carrying the recording's sidecar.
+    public static let motionMetadataKey = "cadence.motion.v1"
 
     /// WatchConnectivity dictionaries carry property-list values, so every
     /// message travels as one JSON blob under this key.

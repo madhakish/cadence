@@ -98,7 +98,7 @@ final class PhoneWatchLink: NSObject {
             endpoint.acknowledge(ack)
             try? WatchSessionSync.store(endpoint, in: session)
             _ = PersistenceErrorCenter.shared.save(context, operation: "Recording what the watch received")
-        case .plan:
+        case .plan, .recordingStored:
             break
         }
     }
@@ -277,6 +277,15 @@ extension PhoneWatchLink: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let wire = WatchWire.decode(userInfo) else { return }
         Task { @MainActor in self.handle(wire) }
+    }
+
+    /// A motion recording from the watch. Stored before returning (the system
+    /// deletes the incoming file afterwards), then acknowledged so the watch
+    /// can delete its copy.
+    nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard let sidecar = file.metadata?[WatchWire.motionMetadataKey] as? Data,
+              let id = try? MotionRecordingStore.store(samplesAt: file.fileURL, sidecar: sidecar) else { return }
+        Task { @MainActor in self.send(.recordingStored(recordingID: id)) }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {

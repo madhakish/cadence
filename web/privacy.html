@@ -135,6 +135,25 @@
                 Health data stays on your device and is not sent to a server.</td>
             </tr>
             <tr>
+              <td>Apple Watch (iOS, optional)</td>
+              <td>The watch app runs sessions and syncs them with your iPhone over
+                Apple's direct device-to-device link. No server is involved. The watch
+                asks for its own Health permission the first time it runs a session, to
+                read heart rate and active energy during that workout. It saves the
+                workout to Health only if Health writing is on in Cadence's settings and
+                your iPhone confirmed that during the session; otherwise nothing is
+                written.</td>
+            </tr>
+            <tr>
+              <td>Wrist-motion recordings (Apple Watch)</td>
+              <td>While the watch runs a session it records wrist motion (acceleration
+                and rotation) with the sets you log, so Cadence can learn to count your
+                reps. On by default; switch it off on the watch's start screen.
+                Recordings go to your iPhone, are kept outside your logbook and
+                excluded from backups, and leave the phone only if you export them.
+                Delete them in <em>Settings → Watch → Motion recordings</em>.</td>
+            </tr>
+            <tr>
               <td>Notifications</td>
               <td>Scheduled locally on the device. No push server, so no server knows
                 when you train.</td>
@@ -184,6 +203,9 @@
         <li><strong>iOS app:</strong> deleting the app removes its sandbox, store and
           all. Anything already written to Apple Health is managed in the Health app, not
           by Cadence.</li>
+        <li><strong>Watch motion recordings:</strong> <em>Settings → Watch → Motion
+          recordings → Delete all recordings</em> removes them from the iPhone; deleting
+          the app removes them too.</li>
       </ul>
       <p>
         There's no "delete my account" request to file, because there's no account and no

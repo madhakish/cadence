@@ -21,6 +21,7 @@ final class WatchWireTests: XCTestCase {
             .plan(WatchPlan(next: snapshot, settings: settings, sentAt: t0)),
             .requestPlan,
             .join(sessionID: "s"),
+            .recordingStored(recordingID: "r"),
         ]
         for message in messages {
             let dictionary = try message.dictionary()

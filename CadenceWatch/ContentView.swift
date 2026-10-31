@@ -19,6 +19,7 @@ struct ContentView: View {
 
 struct StartView: View {
     @EnvironmentObject private var model: WatchSessionModel
+    @EnvironmentObject private var motion: MotionRecorder
 
     var body: some View {
         ScrollView {
@@ -45,6 +46,10 @@ struct StartView: View {
                     Text("Your next program day appears here once the phone has planned it.")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
+                Toggle("Record wrist motion", isOn: $motion.isEnabled)
+                    .font(.footnote)
+                    .padding(.top, 8)
+                    .accessibilityHint("Recordings help Cadence learn to count your reps. They go to your iPhone only.")
             }
             .padding(.horizontal, 4)
         }

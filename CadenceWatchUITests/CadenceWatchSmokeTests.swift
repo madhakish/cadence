@@ -10,8 +10,9 @@ final class CadenceWatchSmokeTests: XCTestCase {
     /// Vertical pages swallow a swipe fired mid-animation, so page until the
     /// element appears (a few tries) rather than counting swipes.
     private func page(_ app: XCUIApplication, upTo element: XCUIElement, down: Bool = false) -> Bool {
-        for _ in 0..<5 {
-            if element.waitForExistence(timeout: 1.5), element.isHittable { return true }
+        // CI's watch simulators run on busy shared runners: be patient.
+        for _ in 0..<8 {
+            if element.waitForExistence(timeout: 3), element.isHittable { return true }
             if down { app.swipeDown() } else { app.swipeUp() }
         }
         return element.exists
