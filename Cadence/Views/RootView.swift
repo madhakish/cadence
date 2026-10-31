@@ -63,6 +63,10 @@ struct RootView: View {
             GymCardView(gym: gyms.first { $0.isDefault } ?? gyms.first)
         }
         .environment(restTimer)
+        .onReceive(NotificationCenter.default.publisher(for: .watchRestChanged)) { note in
+            guard let change = note.object as? RestTimer.Change else { return }
+            restTimer.adopt(change.state, exerciseName: change.exerciseName)
+        }
         .environment(workoutClock)
         .task {
             await NotificationService.cancelOrphanedHoldAlerts()
