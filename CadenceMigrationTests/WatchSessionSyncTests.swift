@@ -248,11 +248,28 @@ final class WatchSessionSyncTests: XCTestCase {
 
         let late = WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session)
         XCTAssertEqual(late.corrections.count, 1)
-        XCTAssertEqual(late.pending, [bench.sets[1].id], "a tag is not a correction yet: listed, never dropped")
+        XCTAssertEqual(late.pending, [bench.sets[1].id], "a tag is structural, not a value correction")
         try SessionCorrectionService.applyAndRebuild(late.corrections, in: session, context: context)
         let set = try XCTUnwrap(session.orderedExercises[0].orderedSets.first { $0.syncID == bench.sets[1].id })
         XCTAssertEqual(set.status, .completed); XCTAssertEqual(set.reps, 6); XCTAssertEqual(set.weightLb, 190)
         XCTAssertTrue(WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session).corrections.isEmpty)
+
+        // The structural remainder: the tag, and a set the watch added late.
+        let extra = SyncPlannedSet(id: "e0000000-0000-4000-8000-000000000009", reps: 3, weightLb: 200)
+        _ = watch.issue(.setAdded(exerciseID: bench.id, after: bench.sets[2].id, set: extra), operationID: opID(), now: t0)
+        _ = watch.issue(.setPerformed(setID: extra.id, patch: SyncSetPatch(status: .completed, reps: 3,
+            performedAs: bench.catalog.exerciseID)), operationID: opID(), now: t0)
+        for op in watch.outbox { phone.receive(op) }
+        let remainder = WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session)
+        try SessionCorrectionService.applyAndRebuild(remainder.corrections, in: session, context: context)
+        try SessionCorrectionService.applyWatchStructure(phone.replica!.view(), pendingSetIDs: remainder.pending,
+            phone: try WatchSessionSync.phoneContext(of: phone.replica!), to: session, context: context)
+        try context.save()
+        XCTAssertEqual(set.flagsRaw, ["clean"])
+        let added = try XCTUnwrap(session.orderedExercises[0].orderedSets.last)
+        XCTAssertEqual(added.syncID, extra.id); XCTAssertEqual(added.status, .completed); XCTAssertEqual(added.weightLb, 200)
+        let after = WatchSessionSync.lateCorrections(view: phone.replica!.view(), session: session)
+        XCTAssertTrue(after.corrections.isEmpty && after.pending.isEmpty, "nothing late is left unapplied")
     }
 
     func testAPlannedSnapshotInsertsNothing() throws {
