@@ -264,6 +264,7 @@ enum Seeder {
         try clearRetiredRestStamps(byName: byName, context: context)
         try promoteVerticalPullMains(byName: byName, context: context)
         try ensureWorkoutSessionIDs(context: context)
+        try ensureSyncIDs(context: context)
         try ensureExerciseIDs(context: context)
         try normalizeRelationshipAliases(context: context)
         try snapshotLegacyLoadSemantics(context: context)
@@ -377,6 +378,27 @@ enum Seeder {
                 repeat { session.id = UUID().uuidString } while seen.contains(session.id)
             }
             seen.insert(session.id)
+        }
+    }
+
+    /// Schema V16 watch-sync identity. Rows from older stores arrive with an
+    /// empty `syncID`; mint one, keep every valid ID and repair duplicates, the
+    /// same way `ensureWorkoutSessionIDs` does. Idempotent: a second run
+    /// changes nothing.
+    static func ensureSyncIDs(context: ModelContext) throws {
+        var seenEntries: Set<String> = []
+        for entry in try context.fetch(FetchDescriptor<SessionExercise>()) {
+            if UUID(uuidString: entry.syncID) == nil || seenEntries.contains(entry.syncID) {
+                repeat { entry.syncID = UUID().uuidString } while seenEntries.contains(entry.syncID)
+            }
+            seenEntries.insert(entry.syncID)
+        }
+        var seenSets: Set<String> = []
+        for set in try context.fetch(FetchDescriptor<SetEntry>()) {
+            if UUID(uuidString: set.syncID) == nil || seenSets.contains(set.syncID) {
+                repeat { set.syncID = UUID().uuidString } while seenSets.contains(set.syncID)
+            }
+            seenSets.insert(set.syncID)
         }
     }
 

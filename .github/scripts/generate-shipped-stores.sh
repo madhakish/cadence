@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 5 ]]; then
-  echo "usage: $0 <v1.29 checkout> <PR72 checkout> <PR73 checkout> <V14 checkout> <fixture output>" >&2
+if [[ $# -ne 6 ]]; then
+  echo "usage: $0 <v1.29 checkout> <PR72 checkout> <PR73 checkout> <V14 checkout> <V15 checkout> <fixture output>" >&2
   exit 64
 fi
 
@@ -10,7 +10,8 @@ v129_source="$1"
 pr72_source="$2"
 pr73_source="$3"
 v14_source="$4"
-fixture_root="$5"
+v15_source="$5"
+fixture_root="$6"
 
 device_id="$({ xcrun simctl list devices available -j; } | python3 -c '
 import json, sys
@@ -96,4 +97,11 @@ xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true
 build_app "v14" "$v14_source"
 launch_app
 copy_store "v14"
+
+# The predecessor of watch-sync identity (V16) must likewise be an actual
+# production V15 store: main's last V15 application before the schema change.
+xcrun simctl uninstall "$device_id" com.madhakish.Cadence 2>/dev/null || true
+build_app "v15" "$v15_source"
+launch_app
+copy_store "v15"
 xcrun simctl shutdown "$device_id" 2>/dev/null || true

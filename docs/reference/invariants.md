@@ -67,6 +67,17 @@ sets/exercise entries must invalidate the old face even when names and
 warmup/work patterns match. Refusal writes nothing. An unchanged saved
 session must still accept its command after the store is reopened.
 
+### INV-WATCH-SYNC-IDENTITY
+*platforms: native*
+
+Every session entry and set carries a stable sync ID, minted when the row is
+created and never derived from its position, so watch operations keep naming
+the right set after sets or exercises are added, removed or reordered. Rows
+from older stores get one from an idempotent post-open backfill that keeps
+every valid ID and repairs duplicates. Sync IDs and sync state are
+device-local: a restore mints fresh IDs and carries no sync state or watch
+Health ownership, so sync never spans a restore.
+
 The native `WorkoutCommandTests` exercise this boundary against SwiftData,
 including a synthetic on-disk store, in the macOS CI suite.
 

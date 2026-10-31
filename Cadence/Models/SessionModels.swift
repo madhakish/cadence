@@ -80,6 +80,23 @@ final class WorkoutSession {
     /// instead of in notes.
     @Relationship(deleteRule: .cascade, inverse: \ActivityDetail.session)
     var activityDetail: ActivityDetail?
+    /// Watch sync state (schema V16): the phone's encoded `SyncEndpoint` —
+    /// applied operation IDs, tombstones and the merged replica — for a
+    /// session shared with the watch. Nil for every session the watch never
+    /// touched. Device-local: not in the backup, so a restored session never
+    /// resumes sync (design section 2).
+    var syncStateData: Data?
+    /// The watch's Health workout outcome for this session (`SyncHealthOutcome`
+    /// raw: saved / notWritten / unknown), set from `sessionEnded` before
+    /// banking. Nil means the watch wrote no workout; bank-time export runs
+    /// only when this is nil or notWritten.
+    var watchHealthOutcomeRaw: String?
+    /// The saved watch workout's HealthKit UUID when the outcome is saved.
+    var watchHealthWorkoutID: String?
+    /// Why this session waits for the owner instead of banking automatically
+    /// (duplicate start, stale plan, recovered after a restore). Nil for an
+    /// ordinary session.
+    var syncReviewReasonRaw: String?
 
     init(date: Date = .now, notes: String = "", gymID: String? = nil, gymName: String? = nil) {
         self.id = UUID().uuidString
@@ -153,8 +170,13 @@ final class SessionExercise {
     var exerciseID: String?
     /// Immutable Codable TFHAnchor used when this entry was created.
     var tfhAnchorData: Data?
+    /// Stable identity for watch sync (schema V16), never positional. Minted
+    /// at creation; rows from older stores get one from
+    /// `Seeder.ensureSyncIDs`. Device-local: a restore mints fresh IDs.
+    var syncID: String = ""
 
     init(order: Int, exercise: Exercise?, notes: String = "") {
+        self.syncID = UUID().uuidString
         self.order = order
         self.exercise = exercise
         self.notes = notes
@@ -274,6 +296,10 @@ final class SetEntry {
     /// Codable TFHBenchmarkResult, separate from completed/performed work.
     var tfhBenchmarkData: Data?
     var sessionExercise: SessionExercise?
+    /// Stable identity for watch sync (schema V16), never positional. Minted
+    /// at creation; rows from older stores get one from
+    /// `Seeder.ensureSyncIDs`. Device-local: a restore mints fresh IDs.
+    var syncID: String = ""
 
     init(
         order: Int,
@@ -299,6 +325,7 @@ final class SetEntry {
         plannedDurationSeconds: Int? = nil,
         prescriptionBlock: PrescriptionBlockKind = .work
     ) {
+        self.syncID = UUID().uuidString
         self.order = order
         self.weightLb = weightLb
         self.reps = reps

@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class CarryProjectionTests: XCTestCase {
     func testMixedRepHistoryNeverSuppressesDistanceVolumeRecord() throws {
-        let schema = Schema(versionedSchema: CadenceSchemaV15.self)
+        let schema = Schema(versionedSchema: CadenceSchemaV16.self)
         let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let context = container.mainContext
         let exercise = Exercise(name: "Farmer Carry", category: .accessory, type: .dumbbell,
