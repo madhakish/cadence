@@ -131,8 +131,21 @@ final class HealthKitService {
     private func isForeign(_ sample: HKSample) -> Bool {
         HealthComparison.sourceIsForeign(
             bundleIdentifier: sample.sourceRevision.source.bundleIdentifier,
-            appBundleIdentifier: Bundle.main.bundleIdentifier
+            appBundleIdentifier: Bundle.main.bundleIdentifier,
+            isSensorReading: isSensorReading(sample)
         )
+    }
+
+    /// What a workout session measured (heart rate, energy, steps), as opposed
+    /// to what Cadence derives from the log (the workout itself and the
+    /// distance it adds from logged conditioning).
+    private func isSensorReading(_ sample: HKSample) -> Bool {
+        guard let quantity = sample as? HKQuantitySample else { return false }
+        let derived: Set<HKQuantityType> = [
+            HKQuantityType(.distanceWalkingRunning), HKQuantityType(.distanceCycling),
+            HKQuantityType(.distanceSwimming),
+        ]
+        return !derived.contains(quantity.quantityType)
     }
 
     // MARK: - Authorization

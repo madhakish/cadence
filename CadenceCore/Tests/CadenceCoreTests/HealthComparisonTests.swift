@@ -88,6 +88,18 @@ final class HealthComparisonTests: XCTestCase {
             bundleIdentifier: "com.example.cadence.watch", appBundleIdentifier: app),
             "a different bundle is a different source, prefix or not")
 
+        // Cadence's own watch app: its workout is Cadence's record of the
+        // session; what its sensors measured is still a second opinion.
+        XCTAssertFalse(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "com.example.cadence.watchkitapp", appBundleIdentifier: app),
+            "the workout Cadence's watch recorded is not a second opinion")
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "com.example.cadence.watchkitapp", appBundleIdentifier: app, isSensorReading: true),
+            "heart rate measured by Cadence's watch is a real reading")
+        XCTAssertTrue(HealthComparison.sourceIsForeign(
+            bundleIdentifier: "com.example.other.watchkitapp", appBundleIdentifier: app),
+            "another app's watch stays foreign")
+
         // Unattributable is foreign: dropping a sample we cannot prove is ours
         // would silently discard a real second opinion, where the opposite
         // choice fails visibly the first time it offers back our own number.
