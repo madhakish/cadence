@@ -137,6 +137,11 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.madhakish.Cadence
+        # The workout session keeps the app running with the wrist down and
+        # supplies heart rate (design #339 section 6).
+        WKBackgroundModes: [workout-processing]
+        NSHealthShareUsageDescription: Cadence reads your heart rate and active energy during a workout it runs on your watch; heart rate shows on the set and rest screens.
+        NSHealthUpdateUsageDescription: Cadence saves workouts run on your watch to Apple Health when Health writing is on in Cadence's settings.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence.watchkitapp
@@ -146,6 +151,24 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # Watch simulator smoke test (design #339 verification): start, log a set,
+  # rest, end, against the debug-only `--watch-fixture` plan.
+  CadenceWatchUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - CadenceWatchUITests
+    dependencies:
+      - target: CadenceWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence.watchkitapp.uitests
+        TEST_TARGET_NAME: CadenceWatch
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
 
   # Hostless macOS test bundle for on-disk SwiftData compatibility. It compiles
   # only persistence models + program codecs/seeding so CI can create real old
@@ -194,6 +217,12 @@ targets:
       # Legacy recovery-bridge reconciliation is models-only; compiling it
       # here pins pointer repair and the open-session guard on real rows.
       - Cadence/Services/RecoveryBridgeService.swift
+      # Watch session sync is models-only: snapshot, watch-start materialization
+      # and merged-view projection run on real SwiftData rows (#335).
+      - Cadence/Services/WatchSessionSync.swift
+      # Motion recordings are files outside SwiftData; the store's idempotence,
+      # backup exclusion and zip export are pinned here (#336).
+      - Cadence/Services/MotionRecordingStore.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore
@@ -247,3 +276,7 @@ schemes:
     build:
       targets:
         CadenceWatch: all
+    test:
+      config: Debug
+      targets:
+        - CadenceWatchUITests

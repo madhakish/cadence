@@ -94,7 +94,7 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test19AppThemeCanvases
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test20EquipmentContextAndEmptyStates
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test21EditProgramRowOpensEditor
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Replay the synthetic native fixture and capture the web matrix
@@ -117,7 +117,7 @@ jobs:
           fi
       - name: Upload visual proof
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cadence-iphone-visual-proof-${{ needs.gate.outputs.sha }}
           path: |
@@ -175,7 +175,7 @@ jobs:
           fi
       - name: Upload exact-width proof
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cadence-native-${{ matrix.width }}pt-${{ needs.gate.outputs.sha }}
           path: |
@@ -224,7 +224,7 @@ jobs:
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
           -derivedDataPath build/baseline-proof
           -resultBundlePath build/BaselineProof.xcresult
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Capture the original web application at the fixed viewports
@@ -247,7 +247,7 @@ jobs:
           fi
       - name: Upload exact baseline proof
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cadence-dp1-baseline-${{ needs.gate.outputs.sha }}
           path: |

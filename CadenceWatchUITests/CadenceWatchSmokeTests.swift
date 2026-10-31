@@ -1,0 +1,78 @@
+import XCTest
+
+/// The watch smoke test from design #339's verification plan: start → log a
+/// set → rest → end, on a watch simulator, against the debug-only fixture plan.
+final class CadenceWatchSmokeTests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false
+    }
+
+    /// Vertical pages swallow a swipe fired mid-animation, so page until the
+    /// element appears (a few tries) rather than counting swipes.
+    private func page(_ app: XCUIApplication, upTo element: XCUIElement, down: Bool = false) -> Bool {
+        // CI's watch simulators run on busy shared runners: be patient.
+        for _ in 0..<8 {
+            if element.waitForExistence(timeout: 3), element.isHittable { return true }
+            if down { app.swipeDown() } else { app.swipeUp() }
+        }
+        return element.exists
+    }
+
+    func testStartLogASetRestAndEnd() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture"]
+        app.launch()
+
+        let start = app.buttons["start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        start.tap()
+
+        XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+        app.buttons["done"].tap()
+
+        // Auto-started rest, with the optional effort tags.
+        XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
+        app.buttons["quality-clean"].tap()
+        app.buttons["skipRest"].tap()
+
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 2 of 2")
+
+        // The End page is two pages down: set → exercise list → end.
+        let end = app.buttons["endWorkout"]
+        XCTAssertTrue(page(app, upTo: end))
+        end.tap()
+        // The confirmation is a system sheet, which drops custom identifiers.
+        let confirm = app.buttons["End now"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        let summary = app.staticTexts["summarySets"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.label, "1 working set")
+    }
+
+    func testATimedHoldIsLoggedByItsDuration() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        // Jump to the plank from the exercise list.
+        let plank = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plank'")).firstMatch
+        XCTAssertTrue(page(app, upTo: plank))
+        plank.tap()
+        let startTimer = app.buttons["startTimer"]
+        XCTAssertTrue(page(app, upTo: startTimer, down: true))
+        startTimer.tap()
+        sleep(2)
+        app.buttons["Stop"].tap()
+        app.buttons["Done"].tap()
+
+        // The list row's label combines the name and the progress line.
+        let logged = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plank' AND label CONTAINS '1 of 1 sets'")).firstMatch
+        XCTAssertTrue(page(app, upTo: logged), "the hold is logged")
+    }
+}

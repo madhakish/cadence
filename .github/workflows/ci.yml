@@ -66,7 +66,7 @@ jobs:
           CURRENT_RUN_ID: ${{ github.run_id }}
           CURRENT_RUN_NUMBER: ${{ github.run_number }}
         run: bash .github/scripts/cancel-stale-pr-runs.sh
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Validate repository hygiene
@@ -154,7 +154,7 @@ jobs:
       # Parsing alone does not type-check SwiftUI or SwiftData usage.
       - name: Parse app-target Swift (syntax fail-fast)
         run: |
-          find Cadence CadenceWatch CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
+          find Cadence CadenceWatch CadenceWatchUITests CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
             | xargs -0 xcrun swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
@@ -176,7 +176,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -197,7 +197,7 @@ jobs:
         run: npm run test:browser
       - name: Retain browser acceptance evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cadence-browser-acceptance-${{ github.sha }}
           path: web/test-results/
@@ -258,7 +258,7 @@ jobs:
           mkdir -p dist
           (cd build/sim/Build/Products/Release-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/dist/Cadence-simulator.app.zip" Cadence.app)
       - name: Upload simulator artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Cadence-simulator
           path: dist/Cadence-simulator.app.zip
@@ -304,13 +304,35 @@ jobs:
           -destination 'generic/platform=watchOS Simulator'
           -derivedDataPath build/watch
           CODE_SIGNING_ALLOWED=NO
+      # Design #339's watch smoke test: start, log a set, rest, end, on a real
+      # watch simulator against the debug-only fixture plan.
+      - name: Watch simulator smoke test
+        run: |
+          watch_id="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "watchOS" not in runtime:
+                  continue
+              for device in devices[runtime]:
+                  if device.get("isAvailable") and device.get("name", "").startswith("Apple Watch"):
+                      print(device["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("No available Apple Watch simulator")
+          ')"
+          xcodebuild test \
+            -project Cadence.xcodeproj \
+            -scheme CadenceWatch \
+            -destination "platform=watchOS Simulator,id=$watch_id" \
+            -derivedDataPath build/watch-test \
+            CODE_SIGNING_ALLOWED=NO
       - name: Package device artifact
         run: |
           mkdir -p dist/Payload
           cp -R build/device/Build/Products/Release-iphoneos/Cadence.app dist/Payload/
           (cd dist && zip -qry Cadence-unsigned.ipa Payload)
       - name: Upload device artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Cadence-device
           path: dist/Cadence-unsigned.ipa
@@ -333,7 +355,7 @@ jobs:
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -378,7 +400,7 @@ jobs:
           printf '%s\n' "$EXPECTED_VERSION" > dist/Cadence-store.version
           bash .github/scripts/verify-release-artifact.sh
       - name: Cache immutable signed artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Cadence-store
           path: |
@@ -397,7 +419,7 @@ jobs:
     needs: [changes, core-tests, web-tests]
     if: needs.changes.outputs.migrations == 'true'
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -487,7 +509,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Install XcodeGen
@@ -539,7 +561,7 @@ jobs:
           node .github/scripts/verify-native-smoke.mjs build/native-smoke-summary.json
       - name: Retain native interaction results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cadence-native-interactions-${{ github.sha }}
           path: |
@@ -607,7 +629,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -647,12 +669,12 @@ jobs:
       contents: write
     steps:
       - name: Download signed store artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Cadence-store
           path: dist
       - name: Download simulator artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Cadence-simulator
           path: dist
@@ -721,7 +743,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Download artifact built by this workflow
         if: needs.web-tests.outputs.release-artifact-source == 'build'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Cadence-store
           path: dist
@@ -746,7 +768,7 @@ jobs:
           IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
           CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
         run: bash .github/scripts/verify-release-artifact.sh
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
         with:
           ruby-version: "3.3"
           bundler-cache: true

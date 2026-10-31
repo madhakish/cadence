@@ -47,8 +47,10 @@ enum SessionCompletion {
     /// timing are reported in the summary rather than exported with guesses.
     @discardableResult
     static func finish(_ session: WorkoutSession, context: ModelContext,
-                       healthTiming: HealthWorkoutTiming? = nil) throws -> SessionSummary {
-        let exportTiming = healthTiming?.export(endingAt: Date())
+                       healthTiming: HealthWorkoutTiming? = nil, endedAt: Date? = nil) throws -> SessionSummary {
+        // A session ended on the watch ends when the watch says, not when its
+        // last operation happened to reach the phone.
+        let exportTiming = healthTiming?.export(endingAt: endedAt ?? Date())
         // Idempotence backstop (mirrors web completeSession): finishing twice
         // would duplicate milestones and double-advance tracks/programs.
         guard !session.isCompleted else { return SessionSummary(lines: [], milestones: [], coachingNotes: []) }
@@ -191,7 +193,11 @@ enum SessionCompletion {
 
         var healthExport: Task<HealthWorkoutSaveResult, Never>?
         var healthExportNotice: String?
+        // A workout the watch saved (or may have saved) owns Health for this
+        // session: exporting another would duplicate it (design #339 section 6).
+        let watchOutcome = session.watchHealthOutcome
         let wantsHealthExport = session.hasCompletedWork && healthKitEnabled(context)
+            && SyncSessionRules.phoneMayExportAtBank(watchOutcome: watchOutcome)
         if wantsHealthExport, let timing = exportTiming,
            Calendar.current.isDate(timing.start, inSameDayAs: session.date) {
             let completedKinds = session.exercises.compactMap { entry -> CompletedExerciseKind? in
@@ -227,6 +233,9 @@ enum SessionCompletion {
             }
         } else if wantsHealthExport {
             healthExportNotice = "Your session is saved in Cadence. It wasn't sent to Apple Health because reliable timing for this session's day is unavailable."
+        }
+        if watchOutcome == .unknown, session.hasCompletedWork, healthKitEnabled(context) {
+            healthExportNotice = "Your watch may already have saved this workout to Apple Health, so Cadence didn't send another. Check Health to confirm it's there."
         }
 
         let allPlannedWork = session.exercises.flatMap(\.plannedWorkingSets)

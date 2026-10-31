@@ -62,4 +62,37 @@ enum SessionCorrectionService {
         )
         return Outcome(rebuiltMilestones: rebuilt, programStateReplayed: false)
     }
+
+    /// Late watch changes a value correction cannot express (design #339
+    /// section 5): a set the watch added or removed, warmup, effort tags and
+    /// the drop-load reason. Written through the same merged-view projection
+    /// as an open shared session, then the touched lifts' milestones rebuild
+    /// under the rules above; program state is never replayed. Run after
+    /// `applyAndRebuild` has taken the value corrections.
+    @MainActor @discardableResult
+    static func applyWatchStructure(
+        _ view: SyncSessionView,
+        pendingSetIDs: [String],
+        phone: WatchSessionSync.PhoneContext?,
+        to session: WorkoutSession,
+        context: ModelContext,
+        intervals: [TrainingIntervalSnapshot] = [],
+        formatWeight: @escaping (Double) -> String = { String(format: "%g lb", $0) }
+    ) throws -> Outcome {
+        let pending = Set(pendingSetIDs)
+        guard !pending.isEmpty else { return Outcome(rebuiltMilestones: 0, programStateReplayed: false) }
+        var affected: Set<String> = []
+        for entry in session.exercises where entry.sets.contains(where: { pending.contains($0.syncID) }) {
+            if let name = entry.exercise?.name { affected.insert(name) }
+        }
+        for item in view.exercises where item.sets.contains(where: { pending.contains($0.id) }) {
+            affected.insert(item.catalog.name)
+        }
+        try WatchSessionSync.project(view, onto: session, phone: phone, context: context)
+        let rebuilt = try MilestoneProjection.rebuild(
+            exerciseNames: affected, context: context,
+            intervals: intervals, formatWeight: formatWeight
+        )
+        return Outcome(rebuiltMilestones: rebuilt, programStateReplayed: false)
+    }
 }

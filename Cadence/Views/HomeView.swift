@@ -193,6 +193,26 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
+                // A session from the watch that waits for the owner comes first:
+                // nothing banks it until they decide (design #339 sections 4-5).
+                ForEach(openSessions.filter { $0.syncReviewReasonRaw != nil }) { flagged in
+                    Section("From your watch") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(openSessionLabel(flagged)).font(.headline)
+                            Text(WatchSessionBanking.reviewExplanation(flagged.syncReviewReasonRaw) ?? "")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Button("Keep and save") {
+                            do { try WatchSessionBanking.keep(flagged, context: context) }
+                            catch { PersistenceErrorCenter.shared.message = "Saving the watch session failed: \(error.localizedDescription)" }
+                        }
+                        .accessibilityIdentifier("keep-watch-session")
+                        Button("Review sets") { activeSession = flagged }
+                        Button(role: .destructive) { discardSession = flagged } label: {
+                            Label("Discard", systemImage: "trash")
+                        }
+                    }
+                }
                 // The first card is always the next action: resume beats plan.
                 if let open = openSessions.max(by: { $0.date < $1.date }) {
                     Section {
