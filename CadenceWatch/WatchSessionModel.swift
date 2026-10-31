@@ -37,8 +37,18 @@ final class WatchSessionModel: ObservableObject {
 
     private let fileURL: URL
 
+    /// Debug builds only: `--watch-fixture` runs against a synthetic plan in a
+    /// scratch directory with HealthKit off, for the watch UI smoke test.
+    let isFixture: Bool
+
     init(directory: URL? = nil) {
-        let base = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if DEBUG
+        isFixture = ProcessInfo.processInfo.arguments.contains("--watch-fixture")
+        #else
+        isFixture = false
+        #endif
+        let scratch = isFixture ? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) : nil
+        let base = scratch ?? directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         fileURL = base.appendingPathComponent("watch-session.json")
         if let data = try? Data(contentsOf: fileURL), let stored = try? JSONDecoder().decode(Stored.self, from: data) {
@@ -47,7 +57,29 @@ final class WatchSessionModel: ObservableObject {
             healthSetting = stored.healthSetting
             sessionStartedAt = stored.sessionStartedAt
         }
+        #if DEBUG
+        if isFixture { plan = WatchSessionModel.fixturePlan() }
+        #endif
     }
+
+    #if DEBUG
+    static func fixturePlan(now: Date = Date()) -> WatchPlan {
+        let bench = SyncCatalogExercise(exerciseID: "fixture-bench", name: "Bench Press")
+        let row = SyncCatalogExercise(exerciseID: "fixture-row", name: "Barbell Row")
+        func sets(_ weight: Double, _ reps: Int) -> [SyncPlannedSet] {
+            (0..<2).map { _ in SyncPlannedSet(id: UUID().uuidString, reps: reps, weightLb: weight, plannedReps: reps,
+                                         plannedWeightLb: weight) }
+        }
+        let snapshot = SyncSessionSnapshot(title: "Day A", position: nil, builtAt: now, exercises: [
+            SyncPlannedExercise(id: UUID().uuidString, catalog: bench, programRole: "main", sets: sets(185, 5)),
+            SyncPlannedExercise(id: UUID().uuidString, catalog: row, sets: sets(135, 8)),
+        ])
+        let settings = WatchSettings(accessoryRestSeconds: 90, secondaryRestSeconds: 180, mainUpperRestSeconds: 180,
+                                     mainCompoundRestSeconds: 180, autoStartRest: true, haptics: false, unit: "lb",
+                                     healthKitEnabled: false)
+        return WatchPlan(next: snapshot, settings: settings, sentAt: now)
+    }
+    #endif
 
     // MARK: Reading
 
@@ -118,6 +150,7 @@ final class WatchSessionModel: ObservableObject {
         focusExerciseID = nil
         send(.operations([op]))
         save()
+        guard !isFixture else { return }
         Task { await recorder.start() }
     }
 

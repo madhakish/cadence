@@ -152,6 +152,24 @@ targets:
         MARKETING_VERSION: 0.1.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
+  # Watch simulator smoke test (design #339 verification): start, log a set,
+  # rest, end, against the debug-only `--watch-fixture` plan.
+  CadenceWatchUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - CadenceWatchUITests
+    dependencies:
+      - target: CadenceWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence.watchkitapp.uitests
+        TEST_TARGET_NAME: CadenceWatch
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+
   # Hostless macOS test bundle for on-disk SwiftData compatibility. It compiles
   # only persistence models + program codecs/seeding so CI can create real old
   # SQLite stores and prove the current schema opens them without simulator UI.
@@ -255,3 +273,7 @@ schemes:
     build:
       targets:
         CadenceWatch: all
+    test:
+      config: Debug
+      targets:
+        - CadenceWatchUITests

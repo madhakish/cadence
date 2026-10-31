@@ -9,7 +9,7 @@ struct CadenceWatchApp: App {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(model.recorder)
-                .task { WatchLink.shared.activate(model) }
+                .task { if !model.isFixture { WatchLink.shared.activate(model) } }
         }
     }
 }

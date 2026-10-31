@@ -37,6 +37,7 @@ struct StartView: View {
                     }
                     Button("Start") { model.start() }
                         .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("start")
                         .accessibilityHint("Starts \(next.title) on your watch")
                 } else {
                     Text("Open Cadence on your iPhone")
@@ -90,6 +91,7 @@ struct SetView: View {
                 HStack {
                     Text(set.isWarmup ? "Warmup" : "Set \(index) of \(exercise.sets.count)")
                         .font(.caption2).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("setPosition")
                     Spacer()
                     HeartRateBadge()
                 }
@@ -102,7 +104,9 @@ struct SetView: View {
                 .accessibilityHint("Adjust the load. Turn the Digital Crown to change reps.")
                 Button("Done") { model.complete(set, reps: Int(reps), weightLb: weightLb) }
                     .buttonStyle(.borderedProminent).controlSize(.large)
+                    .accessibilityIdentifier("done")
                 Button("Skip", role: .destructive) { model.skip(set) }
+                    .accessibilityIdentifier("skipSet")
                     .font(.footnote).buttonStyle(.plain).foregroundStyle(.secondary)
             }
             .focusable()
@@ -152,7 +156,11 @@ struct RestView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
-                HStack { Text("Rest").font(.caption2).foregroundStyle(.secondary); Spacer(); HeartRateBadge() }
+                HStack {
+                    Text("Rest").font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("restTitle")
+                    Spacer()
+                    HeartRateBadge()
+                }
                 if let rest = model.view?.rest {
                     let end = Date(timeIntervalSince1970: rest.endEpoch)
                     if rest.paused {
@@ -165,7 +173,7 @@ struct RestView: View {
                 }
                 HStack {
                     Button("+30 s") { model.addRest(30) }
-                    Button("Skip") { model.endRest() }
+                    Button("Skip") { model.endRest() }.accessibilityIdentifier("skipRest")
                 }
                 if let setID = model.lastLoggedSetID {
                     EffortTags(setID: setID)
@@ -192,6 +200,7 @@ struct EffortTags: View {
             HStack(spacing: 4) {
                 ForEach([("clean", "Clean"), ("grindy", "Grindy"), ("wobble", "Wobble")], id: \.0) { value, label in
                     tagButton(label, selected: flags.contains(value)) { model.tag(setID, quality: value, rir: nil) }
+                        .accessibilityIdentifier("quality-\(value)")
                 }
             }
             HStack(spacing: 4) {
@@ -239,11 +248,12 @@ struct EndView: View {
         VStack(spacing: 10) {
             Button("End workout", role: .destructive) { confirming = true }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("endWorkout")
                 .disabled(model.isEnding)
             if model.isEnding { ProgressView() }
         }
         .confirmationDialog("End this workout?", isPresented: $confirming) {
-            Button("End workout", role: .destructive) { Task { await model.end() } }
+            Button("End now", role: .destructive) { Task { await model.end() } }
             Button("Keep going", role: .cancel) {}
         }
     }
@@ -256,7 +266,8 @@ struct SummaryView: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: "checkmark.seal.fill").font(.title).foregroundStyle(.green)
-            Text("\(summary.sets) working sets").font(.headline)
+            Text(summary.sets == 1 ? "1 working set" : "\(summary.sets) working sets").font(.headline)
+                .accessibilityIdentifier("summarySets")
             Text(model.display(summary.volumeLb) + " volume").font(.footnote)
             Text(Duration.seconds(summary.duration).formatted(.time(pattern: .hourMinute)))
                 .font(.footnote).foregroundStyle(.secondary)
