@@ -296,6 +296,11 @@ verdict naming **both** numbers; adopting one is an explicit act by the
 lifter. A session with nothing in Health is not a discrepancy, and no
 comparison ever rewrites a logged set on its own.
 
+Cadence's own writes are never a second opinion, and that includes the
+workout Cadence's watch app records. What that watch's sensors measured
+(heart rate, energy) is a real reading and stays one; every other watch app
+remains a foreign source.
+
 > The log is the source of truth and the only copy that a backup can restore.
 > A watch left on the charger would otherwise silently erase a ruck, and a GPS
 > track through a parking garage would silently inflate one. Both instruments
