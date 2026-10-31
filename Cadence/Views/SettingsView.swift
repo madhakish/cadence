@@ -147,6 +147,9 @@ struct SettingsView: View {
                                     get: { settings.healthKitEnabled },
                                     set: { on in
                                         settings.healthKitEnabled = on
+                                        // The watch writes to Health only with consent confirmed during
+                                        // its session; an opt-out must reach it at once (#339 section 6).
+                                        PhoneWatchLink.shared.pushPlan()
                                         if on {
                                             Task { _ = await HealthKitService.shared.requestWriteAuthorization() }
                                         }
@@ -171,6 +174,14 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         } label: {
                             SettingsGroupLabel(title: "Rest & training behavior", value: mmss(settings.mainCompoundRestSeconds))
+                        }
+                    }
+
+                    Section("Watch") {
+                        NavigationLink {
+                            MotionRecordingsView()
+                        } label: {
+                            Label("Motion recordings", systemImage: "applewatch.radiowaves.left.and.right")
                         }
                     }
 

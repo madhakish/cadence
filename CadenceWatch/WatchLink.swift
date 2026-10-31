@@ -14,6 +14,7 @@ final class WatchLink: NSObject {
     func activate(_ model: WatchSessionModel) {
         self.model = model
         model.send = { [weak self] wire in self?.send(wire) }
+        model.transferRecording = { [weak self] folder in self?.transfer(folder) }
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
@@ -30,10 +31,30 @@ final class WatchLink: NSObject {
         case .operations:
             // Always queued too: the fast path is best effort.
             session.transferUserInfo(message)
-        case .ack, .requestPlan, .join:
+        case .ack, .requestPlan, .join, .recordingStored:
             if !session.isReachable { session.transferUserInfo(message) }
         case .plan:
             break
+        }
+    }
+
+    /// Queue a finished recording for the phone; the sidecar rides along as
+    /// metadata. Kept on the watch until the phone says it stored it.
+    func transfer(_ folder: URL) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated,
+              let sidecar = try? Data(contentsOf: folder.appendingPathComponent("sidecar.json")) else { return }
+        let samples = folder.appendingPathComponent("samples.cdmr")
+        let queued = WCSession.default.outstandingFileTransfers.map(\.file.fileURL)
+        guard !queued.contains(samples) else { return }
+        WCSession.default.transferFile(samples, metadata: [WatchWire.motionMetadataKey: sidecar])
+    }
+
+    /// Recordings left from earlier sessions (the phone was away, the app was
+    /// relaunched) go again; the phone ignores one it already stored.
+    func resendPendingRecordings() {
+        let active = model?.motion.activeRecordingID
+        for folder in MotionRecorder.pending() where folder.lastPathComponent != active {
+            transfer(folder)
         }
     }
 
@@ -47,7 +68,10 @@ extension WatchLink: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState,
                              error: Error?) {
         let context = session.receivedApplicationContext
-        Task { @MainActor in self.deliver(context) }
+        Task { @MainActor in
+            self.deliver(context)
+            self.resendPendingRecordings()
+        }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
