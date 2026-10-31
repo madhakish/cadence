@@ -806,6 +806,26 @@ the number as a bar-and-plates stack, which machines and dumbbells never get):
 > next target is rounded mass 220 + 10 = 230 lb, resolved against the available
 > rack before its physical load is stored.
 
+### INV-WATCH-SYNC-PERFORMED-WORK
+*platforms: native*
+
+Watch ⇄ phone sync never loses a set the owner performed. Completed work on
+one device beats a concurrent removal of that set or its exercise on the other:
+the set comes back, with its performed values, and is listed for review. Work
+performed as an exercise the other device has since swapped keeps its own
+movement in a separate entry; it is never recorded as the new exercise. Only a
+removal made after seeing the latest status removes performed work, and edits
+that carry no work stay rejected.
+
+### INV-WATCH-SYNC-CONVERGES
+*platforms: native*
+
+The phone and the watch end with the same merged session whatever order the
+transport delivers operations in. Each device's operations apply in its own
+sequence order, redelivery is a no-op, edits to different fields of a set both
+survive, and concurrent edits to one field pick the same winner on both
+devices by Lamport version, never by wall clock.
+
 ## Grading
 
 ### INV-BELOW-PLAN-IS-BELOW-PLAN
