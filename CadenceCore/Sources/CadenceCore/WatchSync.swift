@@ -154,12 +154,19 @@ public struct SyncSessionSnapshot: Codable, Hashable, Sendable {
     public var position: SyncProgramPosition?
     public var builtAt: Date
     public var exercises: [SyncPlannedExercise]
+    /// Planning detail only the phone reads (prescription style, phase, bar,
+    /// TFH anchor, plan names…), encoded by the app. The watch never decodes
+    /// it and returns it unchanged in `sessionStarted`, so a session started on
+    /// the watch banks with exactly the plan the phone built.
+    public var phoneContext: Data?
 
-    public init(title: String, position: SyncProgramPosition?, builtAt: Date, exercises: [SyncPlannedExercise]) {
+    public init(title: String, position: SyncProgramPosition?, builtAt: Date, exercises: [SyncPlannedExercise],
+                phoneContext: Data? = nil) {
         self.title = title
         self.position = position
         self.builtAt = builtAt
         self.exercises = exercises
+        self.phoneContext = phoneContext
     }
 }
 

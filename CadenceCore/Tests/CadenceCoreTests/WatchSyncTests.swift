@@ -70,6 +70,17 @@ final class WatchSyncTests: XCTestCase {
 
     // MARK: Basics
 
+    func testThePhoneContextTravelsThroughTheWatchUnchanged() throws {
+        var snap = snapshot()
+        snap.phoneContext = Data([0x00, 0xFF, 0x7B, 0x22])
+        var watch = SyncEndpoint(device: .watch)
+        var phone = SyncEndpoint(device: .phone)
+        let start = watch.start(sessionID: "s2", snapshot: snap, operationID: opID(), now: t0)!
+        let wire = try JSONDecoder().decode(SyncOperation.self, from: JSONEncoder().encode(start))
+        XCTAssertEqual(phone.receive(wire), .applied)
+        XCTAssertEqual(phone.replica!.snapshot.phoneContext, snap.phoneContext)
+    }
+
     func testJoiningCopiesTheStartedSession() {
         let (phone, watch) = joined()
         XCTAssertEqual(phone.replica!.view(), watch.replica!.view())
