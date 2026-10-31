@@ -273,6 +273,122 @@ enum WatchSessionSync {
         }
     }
 
+    // MARK: Phone-side edits
+
+    /// Turn every difference between `session`'s rows and the merged view into
+    /// phone operations on `endpoint`, applied there first. The phone's logger
+    /// edits rows directly; capturing before each projection means a phone
+    /// edit is never overwritten by the merge, and reaches the watch as an
+    /// ordinary operation. Returns the operations issued (empty when the rows
+    /// already match).
+    static func captureLocalEdits(of session: WorkoutSession, into endpoint: inout SyncEndpoint,
+                                  now: Date, makeID: () -> String = { UUID().uuidString }) -> [SyncOperation] {
+        guard let replica = endpoint.replica else { return [] }
+        var issued: [SyncOperation] = []
+        func issue(_ payload: SyncPayload) {
+            if let op = endpoint.issue(payload, operationID: makeID(), now: now) { issued.append(op) }
+        }
+        let view = replica.view()
+        // Rows for entries the merge derived are its output, not phone edits.
+        var viewIDBySyncID: [String: String] = [:]
+        for item in view.exercises { viewIDBySyncID[entrySyncID(forViewID: item.id)] = item.id }
+        let derived = Set(view.exercises.filter { UUID(uuidString: $0.id) == nil }.map { entrySyncID(forViewID: $0.id) })
+        let viewSets = Dictionary(view.exercises.flatMap(\.sets).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let entries = session.orderedExercises.filter { !derived.contains($0.syncID) }
+        let rowSetIDs = Set(entries.flatMap(\.sets).map(\.syncID))
+
+        // Entries: added, swapped, reordered.
+        var previousEntryID: String?
+        for entry in entries {
+            if let viewID = viewIDBySyncID[entry.syncID] {
+                let item = view.exercises.first { $0.id == viewID }!
+                if let catalogID = entry.exerciseID, catalogID != item.catalog.exerciseID {
+                    issue(.exerciseReplaced(exerciseID: viewID, catalog: SyncCatalogExercise(
+                        exerciseID: catalogID, name: entry.exercise?.name ?? item.catalog.name,
+                        isPerSide: entry.orderedSets.first?.isPerSide ?? item.catalog.isPerSide,
+                        loadBasis: LoadBasis(rawValue: entry.exercise?.loadBasisRaw ?? "") ?? item.catalog.loadBasis,
+                        implementCount: entry.exercise?.implementCount ?? item.catalog.implementCount)))
+                }
+                // The live order (earlier moves in this pass already applied),
+                // without the merge's derived entries.
+                let order = (endpoint.replica?.view().exercises.map(\.id) ?? []).filter { UUID(uuidString: $0) != nil }
+                let currentPrevious = order.firstIndex(of: viewID).flatMap { $0 > 0 ? order[$0 - 1] : nil }
+                if currentPrevious != previousEntryID {
+                    issue(.exerciseMoved(exerciseID: viewID, after: previousEntryID))
+                }
+            } else if let added = try? snapshotEntry(entry) {
+                issue(.exerciseAdded(after: previousEntryID, exercise: added))
+                viewIDBySyncID[entry.syncID] = entry.syncID
+            }
+            previousEntryID = viewIDBySyncID[entry.syncID]
+        }
+        let rowEntryIDs = Set(entries.map(\.syncID))
+        for item in view.exercises where UUID(uuidString: item.id) != nil && !rowEntryIDs.contains(item.id) {
+            issue(.exerciseRemoved(exerciseID: item.id,
+                                   sawStatus: endpoint.replica?.newestStatusStamp(inExercise: item.id)
+                                       ?? SyncStamp(version: 0, device: .phone)))
+        }
+
+        // Sets: added, removed, edited.
+        let current = endpoint.replica?.view() ?? view
+        let currentSets = Dictionary(current.exercises.flatMap(\.sets).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for entry in entries {
+            guard let viewID = viewIDBySyncID[entry.syncID] else { continue }
+            var previousSetID: String?
+            for set in entry.orderedSets {
+                if let value = currentSets[set.syncID] ?? viewSets[set.syncID] {
+                    var patch = SyncSetPatch()
+                    var changed = false
+                    if set.status != value.status {
+                        patch.status = set.status; changed = true
+                        if set.status == .completed { patch.performedAs = entry.exerciseID }
+                    }
+                    if set.reps != value.reps { patch.reps = set.reps; changed = true }
+                    if set.weightLb != value.weightLb { patch.weightLb = set.weightLb; changed = true }
+                    if set.durationSeconds != value.durationSeconds, let seconds = set.durationSeconds {
+                        patch.durationSeconds = seconds; changed = true
+                    }
+                    if set.isWarmup != value.isWarmup { patch.isWarmup = set.isWarmup; changed = true }
+                    let reason = set.autoregReasonRaw.flatMap(AutoregReason.init(rawValue:))
+                    if reason != value.autoregReason { patch.autoregReason = SyncValue(reason); changed = true }
+                    if changed { issue(.setPerformed(setID: set.syncID, patch: patch)) }
+                    if set.flagsRaw != value.flags { issue(.setFlags(setID: set.syncID, flags: set.flagsRaw)) }
+                } else {
+                    issue(.setAdded(exerciseID: viewID, after: previousSetID, set: plannedSet(set)))
+                }
+                previousSetID = set.syncID
+            }
+        }
+        for item in current.exercises where rowEntryIDs.contains(entrySyncID(forViewID: item.id)) {
+            for value in item.sets where !rowSetIDs.contains(value.id) {
+                issue(.setRemoved(setID: value.id, sawStatus: endpoint.replica?.statusStamp(ofSet: value.id)
+                    ?? SyncStamp(version: 0, device: .phone)))
+            }
+        }
+        return issued
+    }
+
+    private static func plannedSet(_ set: SetEntry) -> SyncPlannedSet {
+        SyncPlannedSet(id: set.syncID, status: set.status, reps: set.reps, weightLb: set.weightLb,
+                       durationSeconds: set.durationSeconds, isWarmup: set.isWarmup, flags: set.flagsRaw,
+                       autoregReason: set.autoregReasonRaw.flatMap(AutoregReason.init(rawValue:)),
+                       plannedReps: set.plannedReps, plannedWeightLb: set.plannedWeightLb,
+                       plannedDurationSeconds: set.plannedDurationSeconds,
+                       prescriptionBlock: PrescriptionBlockKind(rawValue: set.prescriptionBlockRaw) ?? .work)
+    }
+
+    private static func snapshotEntry(_ entry: SessionExercise) throws -> SyncPlannedExercise {
+        let exercise = entry.exercise
+        return SyncPlannedExercise(
+            id: entry.syncID,
+            catalog: SyncCatalogExercise(exerciseID: entry.exerciseID ?? exercise?.id ?? "", name: exercise?.name ?? "",
+                                         isPerSide: entry.orderedSets.first?.isPerSide ?? false,
+                                         loadBasis: LoadBasis(rawValue: exercise?.loadBasisRaw ?? "") ?? .totalBar,
+                                         implementCount: exercise?.implementCount ?? 0),
+            programSlotID: entry.programSlotID, programRole: entry.programRole,
+            sets: entry.orderedSets.map(plannedSet))
+    }
+
     // MARK: Persisted sync state
 
     static func phoneContext(of replica: SyncReplica) throws -> PhoneContext? {

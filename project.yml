@@ -137,6 +137,11 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.madhakish.Cadence
+        # The workout session keeps the app running with the wrist down and
+        # supplies heart rate (design #339 section 6).
+        WKBackgroundModes: [workout-processing]
+        NSHealthShareUsageDescription: Cadence reads your heart rate during a workout so it can show it on the set and rest screens.
+        NSHealthUpdateUsageDescription: Cadence saves workouts run on your watch to Apple Health when Health writing is on in Cadence's settings.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.madhakish.Cadence.watchkitapp
