@@ -37,6 +37,11 @@ assert_classification \
   'CadenceWatch/CadenceWatchApp.swift'
 
 assert_classification \
+  "watch smoke test changes" \
+  $'native=true\nmigrations=false\nweb=false' \
+  'CadenceWatchUITests/CadenceWatchSmokeTests.swift'
+
+assert_classification \
   "persistence changes" \
   $'native=true\nmigrations=true\nweb=false' \
   $'Cadence/Models/SessionModels.swift\nCadenceMigrationTests/PersistenceMigrationTests.swift'

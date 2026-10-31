@@ -172,14 +172,21 @@ public enum HealthComparison {
     /// cannot prove is ours would silently drop a real second opinion, and the
     /// failure mode of the other choice — offering the lifter their own number
     /// back — is visible the first time it happens.
+    ///
+    /// Cadence's own watch app (`<app>.watchkitapp`) writes the workouts it
+    /// records, and those are Cadence's own. The heart rate and energy its
+    /// workout session measures are sensor readings, a real second opinion, so
+    /// `isSensorReading` keeps them foreign. Any other watch app stays foreign.
     public static func sourceIsForeign(
-        bundleIdentifier: String?, appBundleIdentifier: String?
+        bundleIdentifier: String?, appBundleIdentifier: String?, isSensorReading: Bool = false
     ) -> Bool {
         guard let app = appBundleIdentifier?.trimmingCharacters(in: .whitespaces),
               !app.isEmpty else { return true }
         guard let source = bundleIdentifier?.trimmingCharacters(in: .whitespaces),
               !source.isEmpty else { return true }
-        return source.caseInsensitiveCompare(app) != .orderedSame
+        if source.caseInsensitiveCompare(app) == .orderedSame { return false }
+        if source.caseInsensitiveCompare(app + ".watchkitapp") == .orderedSame { return isSensorReading }
+        return true
     }
 
     // MARK: - Bodyweight

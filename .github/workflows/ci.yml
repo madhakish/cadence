@@ -154,7 +154,7 @@ jobs:
       # Parsing alone does not type-check SwiftUI or SwiftData usage.
       - name: Parse app-target Swift (syntax fail-fast)
         run: |
-          find Cadence CadenceWatch CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
+          find Cadence CadenceWatch CadenceWatchUITests CadenceWidgets CadenceMigrationTests -name '*.swift' -print0 \
             | xargs -0 xcrun swiftc -parse
       - name: Run unit tests
         working-directory: CadenceCore
@@ -304,6 +304,28 @@ jobs:
           -destination 'generic/platform=watchOS Simulator'
           -derivedDataPath build/watch
           CODE_SIGNING_ALLOWED=NO
+      # Design #339's watch smoke test: start, log a set, rest, end, on a real
+      # watch simulator against the debug-only fixture plan.
+      - name: Watch simulator smoke test
+        run: |
+          watch_id="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "watchOS" not in runtime:
+                  continue
+              for device in devices[runtime]:
+                  if device.get("isAvailable") and device.get("name", "").startswith("Apple Watch"):
+                      print(device["udid"])
+                      raise SystemExit(0)
+          raise SystemExit("No available Apple Watch simulator")
+          ')"
+          xcodebuild test \
+            -project Cadence.xcodeproj \
+            -scheme CadenceWatch \
+            -destination "platform=watchOS Simulator,id=$watch_id" \
+            -derivedDataPath build/watch-test \
+            CODE_SIGNING_ALLOWED=NO
       - name: Package device artifact
         run: |
           mkdir -p dist/Payload
