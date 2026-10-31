@@ -15,11 +15,19 @@ final class PhoneWatchLink: NSObject {
     /// Endpoints for watch sessions whose start has not arrived yet.
     private var waiting: [String: SyncEndpoint] = [:]
     private var saveObserver: NSObjectProtocol?
+    private var restObserver: NSObjectProtocol?
     private var capturing = false
 
     func activate(container: ModelContainer) {
         self.container = container
         guard WCSession.isSupported() else { return }
+        if restObserver == nil {
+            restObserver = NotificationCenter.default.addObserver(forName: .phoneRestChanged, object: nil,
+                                                                  queue: .main) { [weak self] note in
+                let change = note.object as? RestTimer.Change
+                Task { @MainActor in self?.sendRest(change?.state) }
+            }
+        }
         if saveObserver == nil {
             // The logger saves directly; every save is a chance to send its
             // edits of a shared session to the watch.
@@ -111,6 +119,12 @@ final class PhoneWatchLink: NSObject {
                     try WatchSessionSync.project(replica.view(), onto: session,
                                                  phone: try WatchSessionSync.phoneContext(of: replica), context: context)
                 }
+                if group.contains(where: { if case .restChanged = $0.payload { return true } else { return false } }) {
+                    let view = replica.view()
+                    let next = view.exercises.first { $0.sets.contains { $0.status == .planned } }?.catalog.name ?? ""
+                    NotificationCenter.default.post(name: .watchRestChanged,
+                                                    object: RestTimer.Change(state: view.rest, exerciseName: next))
+                }
                 // A banked session keeps late operations in its sync state; they are
                 // listed for the owner and never dropped (design section 5).
                 guard let session else { continue }
@@ -164,6 +178,22 @@ final class PhoneWatchLink: NSObject {
             try? WatchSessionSync.store(endpoint, in: session)
             _ = PersistenceErrorCenter.shared.save(context, operation: "Sending your edits to the watch")
             send(.operations(ops))
+        }
+    }
+
+    /// The phone's rest changed by a phone action: share it with the watch for
+    /// every open shared session whose rest differs.
+    private func sendRest(_ state: RestClock.State?) {
+        guard let context = container?.mainContext,
+              let open = try? context.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { !$0.isCompleted }))
+        else { return }
+        for session in open where session.syncStateData != nil {
+            guard var endpoint = try? WatchSessionSync.endpoint(of: session),
+                  endpoint.replica.map({ $0.view().rest != state }) == true,
+                  let op = endpoint.issue(.restChanged(state), operationID: UUID().uuidString, now: .now) else { continue }
+            try? WatchSessionSync.store(endpoint, in: session)
+            _ = PersistenceErrorCenter.shared.save(context, operation: "Sharing the rest timer with the watch")
+            send(.operations([op]))
         }
     }
 

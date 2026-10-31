@@ -15,8 +15,22 @@ import UIKit
 /// (tone through the active route, haptic when enabled, VoiceOver); a
 /// background finish is the notification carrying the same tone, and
 /// `reconcileFromActivity` never replays it on return.
+extension Notification.Name {
+    /// The phone's rest clock changed by a phone action; `object` is the new
+    /// `RestClock.State?` boxed in `RestTimer.Change`. The watch link forwards it.
+    static let phoneRestChanged = Notification.Name("cadence.phoneRestChanged")
+    /// A watch operation changed a shared session's rest; `RootView` adopts it.
+    static let watchRestChanged = Notification.Name("cadence.watchRestChanged")
+}
+
 @Observable
 final class RestTimer {
+    /// Payload for the rest notifications above.
+    struct Change {
+        var state: RestClock.State?
+        var exerciseName: String
+    }
+
     private(set) var remaining: TimeInterval = 0
     private(set) var isRunning = false
     private(set) var exerciseName = ""
@@ -75,6 +89,31 @@ final class RestTimer {
         isRunning = true
         WorkoutActivityController.startRestDetached(state, exerciseName: exerciseName)
         startTicking()
+        broadcast()
+    }
+
+    /// Adopt a rest the watch set on a shared session (design #339 section 4):
+    /// the countdown, its notification and the Live Activity follow as if the
+    /// set had been tapped here, without echoing the change back to the watch.
+    func adopt(_ state: RestClock.State?, exerciseName: String) {
+        guard state != clock else { return }
+        guard let state, RestClock.remaining(state, now: now) > 0 || state.paused else {
+            if isRunning {
+                stopLocalOnly()
+                WorkoutActivityController.applyRestDetached(nil, exerciseName: exerciseName)
+            }
+            return
+        }
+        self.exerciseName = exerciseName
+        clock = state
+        remaining = RestClock.remaining(state, now: now)
+        isRunning = true
+        WorkoutActivityController.startRestDetached(state, exerciseName: exerciseName)
+        if state.paused { invalidate() } else { startTicking() }
+    }
+
+    private func broadcast() {
+        NotificationCenter.default.post(name: .phoneRestChanged, object: Change(state: clock, exerciseName: exerciseName))
     }
 
     /// Skip the rest. The workout activity reverts to its elapsed face (the
@@ -82,6 +121,7 @@ final class RestTimer {
     func stop() {
         stopLocalOnly()
         WorkoutActivityController.applyRestDetached(nil, exerciseName: exerciseName)
+        broadcast()
     }
 
     func add(seconds: Int) {
@@ -159,6 +199,7 @@ final class RestTimer {
         clock = state
         remaining = RestClock.remaining(state, now: now)
         WorkoutActivityController.applyRestDetached(state, exerciseName: exerciseName)
+        broadcast()
     }
 
     private func startTicking() {
