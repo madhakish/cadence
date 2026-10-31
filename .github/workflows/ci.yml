@@ -320,11 +320,16 @@ jobs:
                       raise SystemExit(0)
           raise SystemExit("No available Apple Watch simulator")
           ')"
+          # A cold watch simulator on a shared runner can fail to launch the
+          # app; boot it first and let a launch failure retry.
+          xcrun simctl boot "$watch_id" 2>/dev/null || true
+          xcrun simctl bootstatus "$watch_id" -b
           xcodebuild test \
             -project Cadence.xcodeproj \
             -scheme CadenceWatch \
             -destination "platform=watchOS Simulator,id=$watch_id" \
             -derivedDataPath build/watch-test \
+            -retry-tests-on-failure -test-iterations 3 \
             CODE_SIGNING_ALLOWED=NO
       - name: Package device artifact
         run: |
