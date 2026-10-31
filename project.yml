@@ -194,6 +194,9 @@ targets:
       # Legacy recovery-bridge reconciliation is models-only; compiling it
       # here pins pointer repair and the open-session guard on real rows.
       - Cadence/Services/RecoveryBridgeService.swift
+      # Watch session sync is models-only: snapshot, watch-start materialization
+      # and merged-view projection run on real SwiftData rows (#335).
+      - Cadence/Services/WatchSessionSync.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore
