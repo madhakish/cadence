@@ -253,12 +253,17 @@ final class WatchSessionModel: ObservableObject {
 
     func complete(_ set: SyncSessionView.Set, reps: Int, weightLb: Double, durationSeconds: Int? = nil,
                   startRest: Bool = true, detected: Bool = false) {
-        guard let exercise = currentExercise else { return }
+        // The set's own exercise, not the one in focus: a detected set confirmed
+        // after the owner moved on must still be performed as what it was.
+        guard let exercise = view?.exercises.first(where: { $0.sets.contains { $0.id == set.id } }) ?? currentExercise
+        else { return }
         if !detected {
             // A manual Done consumes this set's motion: the detector must not
-            // later log the same physical set onto the next planned one.
+            // later log the same physical set onto the next planned one, and a
+            // pending proposal for it must not log it a second time.
             detector?.reset()
             autoLoggedReps = nil
+            proposal = nil
         }
         issue(.setPerformed(setID: set.id, patch: SyncSetPatch(
             status: .completed, reps: reps, weightLb: weightLb,

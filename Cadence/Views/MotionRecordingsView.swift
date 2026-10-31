@@ -50,6 +50,14 @@ struct MotionRecordingsView: View {
                     .onDelete { offsets in
                         for index in offsets { try? MotionRecordingStore.delete(recordingID: recordings[index].recordingID) }
                         reload()
+                        // The verdicts were learned from what was just deleted.
+                        Task.detached(priority: .utility) {
+                            _ = try? MotionRecordingStore.refreshAutocomplete()
+                            await MainActor.run {
+                                autocomplete = MotionRecordingStore.autocompleteState()
+                                PhoneWatchLink.shared.pushPlan()
+                            }
+                        }
                     }
                 }
             }
@@ -84,6 +92,7 @@ struct MotionRecordingsView: View {
             Button("Delete \(recordings.count) recordings", role: .destructive) {
                 try? MotionRecordingStore.deleteAll()
                 reload()
+                PhoneWatchLink.shared.pushPlan()  // the watch drops its signatures
             }
         } message: {
             Text("They are removed from this iPhone. Your logged workouts are not affected.")
