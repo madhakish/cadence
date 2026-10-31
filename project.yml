@@ -220,6 +220,9 @@ targets:
       # Watch session sync is models-only: snapshot, watch-start materialization
       # and merged-view projection run on real SwiftData rows (#335).
       - Cadence/Services/WatchSessionSync.swift
+      # Motion recordings are files outside SwiftData; the store's idempotence,
+      # backup exclusion and zip export are pinned here (#336).
+      - Cadence/Services/MotionRecordingStore.swift
       - CadenceMigrationTests
     dependencies:
       - package: CadenceCore

@@ -20,14 +20,23 @@ final class WatchSessionModel: ObservableObject {
     @Published private(set) var endpoint: SyncEndpoint?
     @Published private(set) var healthSetting: SyncHealthSetting?
     @Published private(set) var sessionStartedAt: Date?
-    @Published var focusExerciseID: String?
+    @Published var focusExerciseID: String? {
+        didSet {
+            if let id = focusExerciseID, id != oldValue {
+                motion.note(.focusChanged, exerciseID: view?.exercises.first { $0.id == id }?.catalog.exerciseID)
+            }
+        }
+    }
     /// Shown after ending until the next session starts.
     @Published private(set) var summary: Summary?
     @Published private(set) var isEnding = false
 
     let recorder = WorkoutRecorder()
+    let motion = MotionRecorder()
     /// Set by `WatchLink`: hands a message to WatchConnectivity.
     var send: (WatchWire) -> Void = { _ in }
+    /// Set by `WatchLink`: queues a finished motion recording for the phone.
+    var transferRecording: (URL) -> Void = { _ in }
 
     struct Summary: Equatable {
         var sets: Int
@@ -125,6 +134,8 @@ final class WatchSessionModel: ObservableObject {
         case .ack(let ack):
             endpoint?.acknowledge(ack)
             finishIfDelivered()
+        case .recordingStored(let id):
+            MotionRecorder.discard(recordingID: id)
         case .requestPlan, .join:
             break
         }
@@ -136,6 +147,7 @@ final class WatchSessionModel: ObservableObject {
     private func joiningEndpoint(for ops: [SyncOperation]) -> SyncEndpoint? {
         guard let first = ops.first, case .sessionStarted = first.payload, first.device == .phone else { return nil }
         sessionStartedAt = first.timestamp
+        motion.start(sessionID: first.sessionID)
         return SyncEndpoint(device: .watch)
     }
 
@@ -149,6 +161,7 @@ final class WatchSessionModel: ObservableObject {
                                       operationID: UUID().uuidString, now: Date()) else { return }
         self.endpoint = endpoint
         sessionStartedAt = op.timestamp
+        motion.start(sessionID: op.sessionID)
         summary = nil
         focusExerciseID = nil
         send(.operations([op]))
@@ -176,8 +189,11 @@ final class WatchSessionModel: ObservableObject {
             status: .completed, reps: reps, weightLb: weightLb,
             durationSeconds: durationSeconds ?? set.durationSeconds, performedAs: exercise.catalog.exerciseID)))
         lastLoggedSetID = set.id
+        motion.note(.setCompleted, setID: set.id, exerciseID: exercise.catalog.exerciseID, reps: reps,
+                    weightLb: weightLb, isWarmup: set.isWarmup)
         if settings?.haptics ?? true { WKInterfaceDevice.current().play(.success) }
         if settings?.autoStartRest ?? true {
+            motion.note(.restStarted)
             let seconds = Double(settings?.restSeconds(forRole: exercise.programRole) ?? 120)
             issue(.restChanged(RestClock.start(total: seconds, now: Date().timeIntervalSince1970)))
         }
@@ -204,11 +220,13 @@ final class WatchSessionModel: ObservableObject {
 
     func skip(_ set: SyncSessionView.Set) {
         issue(.setPerformed(setID: set.id, patch: SyncSetPatch(status: .skipped)))
+        motion.note(.setSkipped, setID: set.id, exerciseID: currentExercise?.catalog.exerciseID)
     }
 
     /// Undo a logged set back to planned (the rest screen's Edit).
     func reopen(_ setID: String) {
         issue(.setPerformed(setID: setID, patch: SyncSetPatch(status: .planned)))
+        motion.note(.setEdited, setID: setID)
         if lastLoggedSetID == setID { lastLoggedSetID = nil }
     }
 
@@ -219,6 +237,7 @@ final class WatchSessionModel: ObservableObject {
 
     func endRest() {
         issue(.restChanged(nil))
+        motion.note(.restEnded)
     }
 
     /// Optional effort tags (owner decision 8): one quality and one reps-in-reserve.
@@ -245,6 +264,7 @@ final class WatchSessionModel: ObservableObject {
                           duration: ended.timeIntervalSince(started))
         let ids = endpoint?.unacknowledgedOperationIDs ?? []
         issue(.sessionEnded(SyncSessionEnd(endedAt: ended, operationIDs: ids, health: health)))
+        if let recording = motion.stop() { transferRecording(recording) }
     }
 
     // MARK: Plumbing
