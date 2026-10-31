@@ -25,4 +25,24 @@ enum WatchSessionBanking {
         let timing = WatchSessionSync.healthTiming(startedAt: session.date, view: view)
         return try SessionCompletion.finish(session, context: context, healthTiming: timing, endedAt: end.endedAt)
     }
+
+    /// Why a watch session is waiting for the owner, in plain words.
+    static func reviewExplanation(_ reason: String?) -> String? {
+        switch reason {
+        case "duplicate": return "You started this program day on both devices. Keep this one, or discard it and keep the other."
+        case "stalePlan": return "This was started from a plan built on an earlier day. Confirm it was the right day before it's saved."
+        case "recovered": return "These sets came back from your watch after a restore. Check them before they're saved."
+        case nil: return nil
+        default: return "This session needs a look before it's saved."
+        }
+    }
+
+    /// The owner chose to keep a session that was waiting for review: clear the
+    /// flag and bank it if the watch has already ended it.
+    @discardableResult
+    static func keep(_ session: WorkoutSession, context: ModelContext) throws -> SessionSummary? {
+        session.syncReviewReasonRaw = nil
+        try context.save()
+        return try bankIfReady(session, context: context)
+    }
 }
