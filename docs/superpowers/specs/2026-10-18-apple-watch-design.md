@@ -239,13 +239,26 @@ These came from the owner and are not open to the builder:
 - **Set edits:**
   - `setPerformed` covers status, performed reps, performed load, performed
     duration (`durationSeconds`, for holds, carries and conditioning), flags
-    and the warmup flag;
+    and the warmup flag. It also carries the catalog exercise ID the set was
+    performed as, so the phone can tell when the entry has since been
+    swapped to another movement (below);
   - `setAdded` and `setRemoved`. `setAdded` carries the ID of the set it
     follows (none for first), so sets added on both devices while apart land
     in a deterministic order: inserts after the same set order by
     (version, device);
-  - `exerciseAdded` and `exerciseRemoved` exist only for phone-originated
-    changes, since the watch cannot add exercises;
+  - `exerciseAdded`, `exerciseRemoved`, `exerciseMoved` and
+    `exerciseReplaced` exist only for phone-originated changes, since the
+    watch cannot add, reorder or swap exercises:
+    - `exerciseMoved` carries the ID of the exercise it now follows (none for
+      first) and orders like `setAdded`, so the phone's reorder
+      (`moveExercise`) reaches the watch;
+    - `exerciseReplaced` carries the new catalog exercise, its per-side flag,
+      load basis and implement count, and the planned sets that result,
+      including the warmups the phone rebuilt (`swap(to:)` and
+      `reconcileWarmups`), as `setAdded`/`setRemoved` operations in the same
+      batch. The phone only swaps an entry with no completed sets
+      (`SwapRules.canReplaceEntry`); a watch set performed as the old
+      exercise while apart is handled by the performed-work rule below;
   - `setFlags` covers the effort tags.
 - **Session control.** `restStarted`/`restEnded` carry an absolute end time;
   `sessionPaused`/`sessionResumed` carry timing events; `sessionEnded` means
@@ -253,7 +266,20 @@ These came from the owner and are not open to the builder:
 - **Conflict rule.** Each field of a set is last-writer-wins by
   (version, device), applied per field so an edited weight never resets
   reps (training-data invariant). `setRemoved` wins over later edits to the
-  same set.
+  same set, with one exception.
+  - **Performed work is never lost.** A `setPerformed` that records work
+    (status completed, with its reps, load or duration) beats a concurrent
+    `setRemoved`: the phone reinstates the set at its tombstone position with
+    the performed values and lists it in the session's review notice. The
+    owner can remove it again; sync never does that silently (anti-goal 1).
+    Edits that record no work (planned values, flags, skip) on a removed set
+    stay rejected.
+  - The same rule covers a swap. If a `setPerformed` names a catalog
+    exercise other than the entry's current one, because the phone swapped
+    the entry while the devices were apart, the phone does not record that
+    work as the new movement. It reinstates the old exercise as its own entry
+    directly before the replacement, holding the performed sets, and lists it
+    in the review notice.
   - A person edits one set on one device at a time, so true conflicts are rare.
     The rule exists to make the rare case deterministic, not clever.
 - **This logic lives in CadenceCore** and is tested on Linux with scripted
@@ -264,14 +290,31 @@ These came from the owner and are not open to the builder:
   Live Activity behave as if the set were tapped on the phone.
 - **Duplicate starts.** If both devices start the same program day while apart,
   the phone ends up with two sessions for one day.
+  - The planned-session snapshot carries the program position it was built
+    for: program ID, cycle, week and day index (and the TFH policy ID for TFH
+    programs).
   - On receiving `sessionStarted`, the phone applies the same open-session
     matching `ProgramSession.make` uses for resuming. A watch-minted session
     that matches an open session is a duplicate.
+  - That lookup fetches only open sessions, so a `sessionStarted` delayed
+    until after the phone's own session for that day was banked would slip
+    past it. The phone therefore also checks completed sessions: a watch
+    session whose program position already has a banked session, or whose
+    position the program has already advanced past, is a duplicate too.
   - The phone flags the newer one, lets the user keep one and discard the
-    other, and never merges them silently.
+    other, and never merges them silently. When the other session is already
+    banked, keeping the watch session banks it as an extra session excluded
+    from progression, the same way an off-program session is, so the program
+    still advances once.
   - A flagged duplicate is never banked automatically, even when
     `sessionEnded` arrives. It waits for the user's choice, so the program
     cannot advance twice.
+  - Health ownership follows the user's choice. If the watch saved a Health
+    workout (or reported *unknown*) for the session it discards, the retained
+    session takes that outcome and its marker, so its bank-time export is
+    skipped. In practice the case is narrow: sessions started while apart
+    are the ones that duplicate, and the watch writes to Health only after
+    the phone confirmed the setting during the session (section 6).
   - When the devices are in contact, starting on one device joins the
     other's active session instead of creating a new one.
   - *Assistant's call.*
@@ -287,8 +330,10 @@ These came from the owner and are not open to the builder:
   phone always knows who owns the Health workout before it banks.
 - **The phone banks the session** with `SessionCompletion.finish` once it has
   received `sessionEnded` and accounted for every operation it lists
-  (applied, or recorded as rejected under the rules in section 4, so one
-  rejected edit cannot hold the session unbanked forever), so PRs,
+  (applied, reinstated under the performed-work rule, or recorded as
+  rejected under the rules in section 4, so one rejected edit cannot hold
+  the session unbanked forever; a rejected edit never carries performed
+  work, so banking never runs without a set the owner logged), so PRs,
   milestones and progression are computed exactly once, in one place, over
   every set. WatchConnectivity does not order `sendMessage` against
   `transferUserInfo`, so `sessionEnded` can arrive before sets queued earlier.
@@ -355,13 +400,27 @@ These came from the owner and are not open to the builder:
     the background-capable type stops after about an hour, so the watch must
     warn the user before that happens.
   - *Builder to verify that limit against Apple's documentation.*
-- **Writing to Health follows the existing setting.**
-  - If `healthKitEnabled` is on, the watch ends its builder and saves the
-    workout. It carries heart rate, Apple's energy estimate and the pause and
-    resume events.
-  - If the setting is off, the watch discards the builder
-    (`discardWorkout`), so nothing is written. This keeps the existing rule
-    that Health writes are off by default.
+- **Writing to Health follows the existing setting, as the phone confirms
+  it.**
+  - A cached setting is not consent. If the owner turns Health writing off on
+    the phone while the watch is out of reach, the watch's cached `true`
+    must not authorise a write.
+  - The watch saves only when the phone confirmed `healthKitEnabled` is on
+    during this session: in the fresh snapshot at Start, or in any message
+    or application context received after the session began. Turning the
+    setting off on the phone is sent at once (`sendMessage`, with
+    `transferUserInfo` as the fallback), and the latest value the watch has
+    received wins.
+  - With a confirmation, the watch ends its builder and saves the workout. It
+    carries heart rate, Apple's energy estimate and the pause and resume
+    events.
+  - Without one (the setting is off, or the phone was never reached during
+    the session), the watch discards the builder (`discardWorkout`) and
+    reports *not written*. The phone then decides at bank time with its
+    current setting, as today, from the timing in `sessionEnded`. This keeps
+    the existing rule that Health writes are off by default; the price is
+    that a session run entirely out of the phone's reach has no watch heart
+    rate in Health.
 - **Workout type and distance.**
   - The watch's workout uses the `WorkoutClassification` of the planned day,
     because the type is fixed when the workout session starts.
