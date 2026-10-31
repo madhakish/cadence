@@ -47,6 +47,15 @@ build_app() {
 launch_app() {
   xcrun simctl install "$device_id" "$built_app"
   xcrun simctl launch "$device_id" com.madhakish.Cadence
+  # A first launch seeds the store, which can take longer than a fixed pause
+  # on a busy runner: wait for the store file (up to a minute), then let the
+  # first save settle before terminating.
+  local container
+  for _ in $(seq 1 60); do
+    container="$(xcrun simctl get_app_container "$device_id" com.madhakish.Cadence data 2>/dev/null || true)"
+    if [[ -n "$container" && -f "$container/Library/Application Support/default.store" ]]; then break; fi
+    sleep 1
+  done
   sleep 5
   xcrun simctl terminate "$device_id" com.madhakish.Cadence 2>/dev/null || true
 }
