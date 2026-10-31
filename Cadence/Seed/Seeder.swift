@@ -381,30 +381,24 @@ enum Seeder {
         }
     }
 
-    /// Schema V16 watch-sync identity. Every session entry and set gets a
-    /// stable random UUID so the phone and watch address them by ID, never by
-    /// position (design #339, section 2). Valid unique IDs are preserved;
-    /// empty (the V15 literal default), malformed or duplicated ones are
-    /// re-minted. Only the ID column is fetched, so a large history stays
-    /// cheap at launch. Idempotent — a second run changes nothing.
+    /// Schema V16 watch-sync identity. Rows from older stores arrive with an
+    /// empty `syncID`; mint one, keep every valid ID and repair duplicates, the
+    /// same way `ensureWorkoutSessionIDs` does. Idempotent: a second run
+    /// changes nothing.
     static func ensureSyncIDs(context: ModelContext) throws {
-        var entries = FetchDescriptor<SessionExercise>()
-        entries.propertiesToFetch = [\.syncID]
-        var seen: Set<String> = []
-        for entry in try context.fetch(entries) {
-            if UUID(uuidString: entry.syncID) == nil || seen.contains(entry.syncID) {
-                repeat { entry.syncID = UUID().uuidString } while seen.contains(entry.syncID)
+        var seenEntries: Set<String> = []
+        for entry in try context.fetch(FetchDescriptor<SessionExercise>()) {
+            if UUID(uuidString: entry.syncID) == nil || seenEntries.contains(entry.syncID) {
+                repeat { entry.syncID = UUID().uuidString } while seenEntries.contains(entry.syncID)
             }
-            seen.insert(entry.syncID)
+            seenEntries.insert(entry.syncID)
         }
-        var sets = FetchDescriptor<SetEntry>()
-        sets.propertiesToFetch = [\.syncID]
-        seen = []
-        for set in try context.fetch(sets) {
-            if UUID(uuidString: set.syncID) == nil || seen.contains(set.syncID) {
-                repeat { set.syncID = UUID().uuidString } while seen.contains(set.syncID)
+        var seenSets: Set<String> = []
+        for set in try context.fetch(FetchDescriptor<SetEntry>()) {
+            if UUID(uuidString: set.syncID) == nil || seenSets.contains(set.syncID) {
+                repeat { set.syncID = UUID().uuidString } while seenSets.contains(set.syncID)
             }
-            seen.insert(set.syncID)
+            seenSets.insert(set.syncID)
         }
     }
 

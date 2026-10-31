@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Frozen schema shipped as V15 (Exercise favorites).
+/// Frozen schema shipped as V15 (exercise favorites).
 /// Do not edit this historical model shape.
 enum CadenceSchemaV15: VersionedSchema {
     static var versionIdentifier = Schema.Version(15, 0, 0)
@@ -28,7 +28,6 @@ enum CadenceSchemaV15: VersionedSchema {
         var defaultRestSeconds: Int
         var notes: String
         var isShelved: Bool
-        var isFavorite: Bool = false
         var shelvedNote: String
         var watchSiteRaw: String?
         var movementGroup: String = ""
@@ -46,6 +45,7 @@ enum CadenceSchemaV15: VersionedSchema {
         var reEntryTestSets: Int = 3
         var reEntryTestReps: Int = 5
         var stationDenominationRaw: String?
+        var isFavorite: Bool = false
         var createdAt: Date
 
         init(name: String, categoryRaw: String = "Accessory", typeRaw: String = "dumbbell") {
@@ -284,6 +284,8 @@ enum CadenceSchemaV15: VersionedSchema {
         @Attribute(.unique) var name: String
         var templateID: String?
         var focusRaw: String
+        var equipmentPolicyRaw: String = "any"
+        var tfhPolicyData: Data?
         var cycleNumber: Int
         var currentWeek: Int
         var nextDayIndex: Int
@@ -293,8 +295,6 @@ enum CadenceSchemaV15: VersionedSchema {
         var reliableHistoryStart: Date?
         var preferredSessionSpacingDays: Int = 3
         var maximumAddedSetsPerRotation: Int = 6
-        var equipmentPolicyRaw: String = "any"
-        var tfhPolicyData: Data?
         @Relationship(deleteRule: .cascade, inverse: \ProgramDay.program)
         var days: [ProgramDay]
         var createdAt: Date

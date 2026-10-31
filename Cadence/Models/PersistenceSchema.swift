@@ -1,10 +1,9 @@
 import SwiftData
 
-/// Current V16 adds watch-sync identity: stable `syncID`s on SessionExercise
-/// and SetEntry, and the per-session sync state and watch Health outcome on
-/// WorkoutSession. V15 is frozen in PersistenceSchemaV15.swift. Every new
-/// column has a literal default; IDs are minted by an idempotent post-open
-/// backfill (`Seeder.ensureSyncIDs`).
+/// Current V16 adds watch-sync identity: a stable `syncID` on `SessionExercise`
+/// and `SetEntry`, and the session's sync state, watch Health outcome and
+/// review reason on `WorkoutSession`. V15 is frozen in
+/// PersistenceSchemaV15.swift; existing rows get IDs from `Seeder.ensureSyncIDs`.
 enum CadenceSchemaV16: VersionedSchema {
     static var versionIdentifier = Schema.Version(16, 0, 0)
 
@@ -428,9 +427,9 @@ enum CadenceV14MigrationPlan: SchemaMigrationPlan {
     }
 }
 
-/// V15 -> V16: two String columns with a literal empty sentinel and four
-/// optionals, so SwiftData can add them without touching a row. Stable sync
-/// IDs are minted after open by `Seeder.ensureSyncIDs`.
+/// V15 -> V16: watch-sync identity. Every new column has a literal default
+/// ("" or nil), so SwiftData adds them without touching a row; the idempotent
+/// `Seeder.ensureSyncIDs` mints the missing IDs after open.
 enum CadenceV15MigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] { [CadenceSchemaV15.self, CadenceSchemaV16.self] }
     static var stages: [MigrationStage] {
