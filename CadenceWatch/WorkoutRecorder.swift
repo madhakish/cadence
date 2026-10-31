@@ -16,15 +16,15 @@ final class WorkoutRecorder: NSObject, ObservableObject {
 
     /// Asks for Health permission the first time (owner decision 12), then
     /// starts collecting. Declining still lets the session run on the watch.
-    func start() async {
+    func start(modality: WorkoutModality? = nil) async {
         guard HKHealthStore.isHealthDataAvailable(), session == nil else { return }
         let share: Set<HKSampleType> = [HKObjectType.workoutType()]
         let read: Set<HKObjectType> = [HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
         do {
             try await store.requestAuthorization(toShare: share, read: read)
             let configuration = HKWorkoutConfiguration()
-            configuration.activityType = .traditionalStrengthTraining
-            configuration.locationType = .indoor
+            configuration.activityType = Self.activityType(for: modality ?? .traditionalStrength)
+            configuration.locationType = modality == .hiking ? .outdoor : .indoor
             let session = try HKWorkoutSession(healthStore: store, configuration: configuration)
             let builder = session.associatedWorkoutBuilder()
             builder.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: configuration)
@@ -38,6 +38,21 @@ final class WorkoutRecorder: NSObject, ObservableObject {
         } catch {
             session = nil
             builder = nil
+        }
+    }
+
+    /// Same mapping as the phone's `HealthKitService`, so a workout recorded on
+    /// the watch has the type the phone would have exported.
+    static func activityType(for modality: WorkoutModality) -> HKWorkoutActivityType {
+        switch modality {
+        case .traditionalStrength: return .traditionalStrengthTraining
+        case .crossTraining: return .crossTraining
+        case .running: return .running
+        case .walking: return .walking
+        case .hiking: return .hiking
+        case .cycling: return .cycling
+        case .rowing: return .rowing
+        case .swimming: return .swimming
         }
     }
 

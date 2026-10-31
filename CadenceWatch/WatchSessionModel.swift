@@ -154,7 +154,8 @@ final class WatchSessionModel: ObservableObject {
         send(.operations([op]))
         save()
         guard !isFixture else { return }
-        Task { await recorder.start() }
+        let modality = plan?.nextModality
+        Task { await recorder.start(modality: modality) }
     }
 
     /// Continue the session the phone has open.

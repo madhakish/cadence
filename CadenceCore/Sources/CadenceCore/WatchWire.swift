@@ -54,14 +54,18 @@ public struct WatchPlan: Codable, Hashable, Sendable {
     public var activeSessionID: String?
     public var settings: WatchSettings
     public var sentAt: Date
+    /// The planned day's `WorkoutClassification`, so the watch's workout takes
+    /// the type the phone would export (design section 6). Fixed at start.
+    public var nextModality: WorkoutModality?
 
     public init(next: SyncSessionSnapshot?, active: SyncSessionSnapshot? = nil, activeSessionID: String? = nil,
-                settings: WatchSettings, sentAt: Date) {
+                settings: WatchSettings, sentAt: Date, nextModality: WorkoutModality? = nil) {
         self.next = next
         self.active = active
         self.activeSessionID = activeSessionID
         self.settings = settings
         self.sentAt = sentAt
+        self.nextModality = nextModality
     }
 
     /// A cached plan built on an earlier day may be out of date (design
