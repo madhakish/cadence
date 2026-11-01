@@ -14,6 +14,12 @@ SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
+# Match CI's Ruby 3 (macOS's system Ruby is 2.6): prefer Homebrew's.
+RUBY_BIN := $(firstword $(wildcard /opt/homebrew/opt/ruby/bin /usr/local/opt/ruby/bin))
+ifneq ($(RUBY_BIN),)
+export PATH := $(RUBY_BIN):$(PATH)
+endif
+
 PHONE_SIM ?= iPhone 17
 WATCH_SIM ?= Apple Watch SE 3 (40mm)
 DERIVED   ?= build/DerivedData

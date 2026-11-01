@@ -101,7 +101,7 @@ class SigningPreflight
     owner, repo = certs_repo
     return @errors << "MATCH_GIT_URL must be a GitHub repository URL" unless owner
 
-    status, body = get("certs_repo", "https://api.github.com/repos/#{owner}/#{repo}", "Authorization" => auth)
+    status, body = get("certs_repo", "https://api.github.com/repos/#{owner}/#{repo}", { "Authorization" => auth })
     unless status == 200
       return @errors << "the certs repo token cannot read #{owner}/#{repo} (HTTP #{status}). " \
                         "Re-create MATCH_GIT_BASIC_AUTHORIZATION as base64(\"<user>:<fine-grained PAT>\") " \
@@ -114,7 +114,7 @@ class SigningPreflight
         @errors << "MATCH_READONLY=false but the certs repo token cannot write to #{owner}/#{repo}; " \
                    "match could not save new profiles. Use a Contents read-and-write PAT for the provisioning run"
       end
-      status, = get("certs_pulls", "https://api.github.com/repos/#{owner}/#{repo}/pulls?per_page=1", "Authorization" => auth)
+      status, = get("certs_pulls", "https://api.github.com/repos/#{owner}/#{repo}/pulls?per_page=1", { "Authorization" => auth })
       unless status == 200
         @errors << "MATCH_READONLY=false but the certs repo token cannot use pull requests on #{owner}/#{repo} " \
                    "(HTTP #{status}); provisioning lands by pull request. Give it Pull requests: Read and write"
@@ -123,7 +123,7 @@ class SigningPreflight
 
     branch = certs_branch
     status, tree = get("certs_tree", "https://api.github.com/repos/#{owner}/#{repo}/git/trees/#{branch}?recursive=1",
-                       "Authorization" => auth)
+                       { "Authorization" => auth })
     return @errors << "cannot list branch #{branch} of the certs repo (HTTP #{status})" unless status == 200
 
     paths = (tree["tree"] || []).map { |e| e["path"] }
@@ -171,7 +171,7 @@ class SigningPreflight
     ids = @app_ids.join(",")
     status, body = get("asc_bundle_ids",
                        "https://api.appstoreconnect.apple.com/v1/bundleIds?filter%5Bidentifier%5D=#{ids}&limit=200",
-                       "Authorization" => "Bearer #{token}")
+                       { "Authorization" => "Bearer #{token}" })
     unless status == 200
       details = (body["errors"] || []).map { |e| [e["code"], e["detail"]].compact.join(": ") }.join("; ")
       if details =~ /agreement/i

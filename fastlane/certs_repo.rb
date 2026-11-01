@@ -29,7 +29,7 @@ class CertsRepo
   # an orphan, so it sees and reuses the existing certificate and profiles.
   def start_branch(name, base:)
     sha = call(:get, "git/ref/heads/#{base}").fetch("object").fetch("sha")
-    call(:post, "git/refs", "ref" => "refs/heads/#{name}", "sha" => sha)
+    call(:post, "git/refs", { "ref" => "refs/heads/#{name}", "sha" => sha })
     sha
   end
 
@@ -39,8 +39,8 @@ class CertsRepo
 
   # Open a PR and merge it. Rebase keeps the protected branch's linear history.
   def merge_by_pull_request(branch, base:, title:, body:)
-    pr = call(:post, "pulls", "title" => title, "head" => branch, "base" => base, "body" => body)
-    call(:put, "pulls/#{pr.fetch('number')}/merge", "merge_method" => "rebase")
+    pr = call(:post, "pulls", { "title" => title, "head" => branch, "base" => base, "body" => body })
+    call(:put, "pulls/#{pr.fetch('number')}/merge", { "merge_method" => "rebase" })
     pr.fetch("html_url")
   end
 
