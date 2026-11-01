@@ -27,30 +27,41 @@ final class CadenceWatchScreenshotTests: XCTestCase {
         return app
     }
 
-    /// Start, the set, the load sheet, rest after a manual Done, the summary.
-    func testCaptureTheManualPath() {
+    /// Each capture is its own short launch: a long walk through every screen
+    /// is one more chance for a busy simulator to drop the app mid-walk.
+    private func startAndLogASet() -> XCUIApplication {
+        let app = launch(["--watch-fixture"])
+        app.buttons["start"].tap()
+        XCTAssertTrue(app.buttons["done"].waitForExistence(timeout: 5))
+        app.buttons["done"].tap()
+        XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
+        return app
+    }
+
+    /// Start, the set, the load sheet.
+    func testCaptureStartSetAndLoad() {
         let app = launch(["--watch-fixture"])
         shoot("01-start")
         app.buttons["start"].tap()
-
         XCTAssertTrue(app.buttons["done"].waitForExistence(timeout: 5))
         shoot("02-set")
         app.buttons["load"].tap()
         XCTAssertTrue(app.buttons["loadDone"].waitForExistence(timeout: 5))
         shoot("03-load-adjuster")
-        app.buttons["loadDone"].tap()
+    }
 
-        // A tap while the sheet is still sliding away lands on the sheet.
-        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.buttons["loadDone"])
-        wait(for: [gone], timeout: 5)
-        XCTAssertTrue(app.buttons["done"].waitForExistence(timeout: 5))
-        app.buttons["done"].tap()
-        XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
+    /// Rest after a manual Done, its first screen and what scrolls below it.
+    func testCaptureRest() {
+        let app = startAndLogASet()
         shoot("04-rest")
         app.swipeUp()
         shoot("05-rest-scrolled")
-        app.buttons["skipRest"].firstMatch.tap()
+    }
 
+    /// The summary after one logged set.
+    func testCaptureSummary() {
+        let app = startAndLogASet()
+        app.buttons["skipRest"].tap()
         let end = app.buttons["endWorkout"]
         for _ in 0..<8 where !(end.waitForExistence(timeout: 3) && end.isHittable) { app.swipeUp() }
         end.tap()
