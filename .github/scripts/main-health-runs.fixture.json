@@ -1,0 +1,49 @@
+{
+  "total_count": 4,
+  "workflow_runs": [
+    {
+      "id": 9004,
+      "run_number": 404,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "4444444444444444444444444444444444444444",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "created_at": "2026-10-31T23:40:00Z",
+      "html_url": "https://github.com/example/cadence/actions/runs/9004"
+    },
+    {
+      "id": 9003,
+      "run_number": 403,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "3333333333333333333333333333333333333333",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-31T22:10:00Z",
+      "html_url": "https://github.com/example/cadence/actions/runs/9003"
+    },
+    {
+      "id": 9002,
+      "run_number": 402,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "2222222222222222222222222222222222222222",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-10-31T19:00:00Z",
+      "html_url": "https://github.com/example/cadence/actions/runs/9002"
+    },
+    {
+      "id": 9001,
+      "run_number": 401,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "1111111111111111111111111111111111111111",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-31T16:00:00Z",
+      "html_url": "https://github.com/example/cadence/actions/runs/9001"
+    }
+  ]
+}

@@ -24,6 +24,8 @@ run_gate() {
     SIGNING_RESULT="${15:-skipped}" \
     WATCH_SMOKE_REQUIRED="${16:-false}" \
     WATCH_SMOKE_RESULT="${17:-skipped}" \
+    MAIN_HEALTH_REQUIRED="${18:-false}" \
+    MAIN_HEALTH_RESULT="${19:-skipped}" \
     bash "$gate"
 }
 
@@ -116,5 +118,15 @@ expect_fail "native PR with watch smoke tests skipped" \
   success success success true success false skipped false skipped false skipped true success false skipped true skipped
 expect_fail "watch smoke tests ran when not required" \
   success success success false skipped false skipped false skipped false skipped false skipped false skipped false success
+
+# The main-health gate runs on every PR: a release-producing PR while main's
+# release path is red must fail the aggregate, and a skipped gate must not pass
+# for a held one.
+docs_pr="success success success false skipped false skipped false skipped false skipped false skipped false skipped false skipped"
+expect_pass "PR with main healthy or the PR exempt" $docs_pr true success
+expect_fail "release-producing PR while main is red" $docs_pr true failure
+expect_fail "PR with the main-health gate skipped" $docs_pr true skipped
+expect_fail "PR with the main-health gate cancelled" $docs_pr true cancelled
+expect_fail "main-health gate ran on a main push" $docs_pr false success
 
 echo "CI job aggregate contract tests passed ($scenarios scenarios)"

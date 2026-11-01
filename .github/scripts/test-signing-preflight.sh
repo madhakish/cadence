@@ -76,13 +76,35 @@ no_watch_paths='["certs/distribution/ABC.cer",
   "profiles/appstore/AppStore_com.madhakish.Cadence.Widgets.mobileprovision"]'
 all_ids='["com.madhakish.Cadence","com.madhakish.Cadence.Widgets","com.madhakish.Cadence.watchkitapp"]'
 
-write_fixture() { # name repo_status push(true|false) tree_paths asc_status asc_body [pulls_status]
+# Apple's expirationDate, `days` from now (an hour past, so whole days hold).
+expires_in() { ruby -e 'puts (Time.now.utc + Integer(ARGV[0]) * 86_400 + 3600).strftime("%Y-%m-%dT%H:%M:%S.000+0000")' -- "$1"; }
+
+certificates() { # days-until-expiry...
+  ruby -rjson -e 'puts({ "data" => ARGV.each_with_index.map { |d, i|
+    { "type" => "certificates", "id" => "CERT#{i}", "attributes" => { "displayName" => "Example", "expirationDate" => d } } } }.to_json)' \
+    $(for d in "$@"; do expires_in "$d"; done)
+}
+
+profiles() { # app-id=days-until-expiry...: active App Store profiles with their bundle IDs included
+  local args=() pair
+  for pair in "$@"; do args+=("${pair%%=*}" "$(expires_in "${pair#*=}")"); done
+  ruby -rjson -e 'pairs = ARGV.each_slice(2).to_a
+    puts({ "data" => pairs.each_with_index.map { |(_, d), i| { "type" => "profiles", "id" => "P#{i}",
+             "attributes" => { "name" => "match AppStore", "expirationDate" => d },
+             "relationships" => { "bundleId" => { "data" => { "type" => "bundleIds", "id" => "B#{i}" } } } } },
+           "included" => pairs.each_with_index.map { |(id, _), i|
+             { "type" => "bundleIds", "id" => "B#{i}", "attributes" => { "identifier" => id } } } }.to_json)' "${args[@]}"
+}
+
+far_profiles="$(profiles com.madhakish.Cadence=300 com.madhakish.Cadence.Widgets=300 com.madhakish.Cadence.watchkitapp=300)"
+
+write_fixture() { # name repo_status push(true|false) tree_paths asc_status asc_body [pulls_status [certificates [profiles]]]
   local tree
   tree="$(ruby -rjson -e 'puts({ "tree" => JSON.parse(ARGV[0]).map { |p| { "path" => p } } }.to_json)' "$4")"
   # push=true: the token can create (and delete) a scratch branch.
   local scratch=403; [[ "$3" == true ]] && scratch=201
-  printf '{"certs_repo":{"status":%s,"body":{}},"certs_branch_ref":{"status":200,"body":{"object":{"sha":"abc"}}},"certs_scratch_create":{"status":%s,"body":{}},"certs_scratch_delete":{"status":204,"body":{}},"certs_pulls":{"status":%s,"body":{}},"certs_tree":{"status":200,"body":%s},"asc_bundle_ids":{"status":%s,"body":%s}}\n' \
-    "$2" "$scratch" "${7:-200}" "$tree" "$5" "$6" > "$work/$1.json"
+  printf '{"certs_repo":{"status":%s,"body":{}},"certs_branch_ref":{"status":200,"body":{"object":{"sha":"abc"}}},"certs_scratch_create":{"status":%s,"body":{}},"certs_scratch_delete":{"status":204,"body":{}},"certs_pulls":{"status":%s,"body":{}},"certs_tree":{"status":200,"body":%s},"asc_bundle_ids":{"status":%s,"body":%s},"asc_certificates":{"status":200,"body":%s},"asc_profiles":{"status":200,"body":%s}}\n' \
+    "$2" "$scratch" "${7:-200}" "$tree" "$5" "$6" "${8:-$(certificates 300)}" "${9:-$far_profiles}" > "$work/$1.json"
 }
 
 bundle_ids() { ruby -rjson -e 'puts({ "data" => JSON.parse(ARGV[0]).map { |i| { "attributes" => { "identifier" => i } } } }.to_json)' "$1"; }
@@ -92,6 +114,7 @@ run_preflight() { # fixture readonly(true|false) [mode]
     MATCH_GIT_URL="https://github.com/example/certs.git" MATCH_GIT_BASIC_AUTHORIZATION="Zm9vOmJhcg==" \
     MATCH_READONLY="$([[ "$2" == true ]] && echo true || echo false)" \
     ASC_KEY_ID=K ASC_ISSUER_ID=I ASC_KEY_CONTENT=C SIGNING_PREFLIGHT="${3:-required}" \
+    SIGNING_FINDINGS="$work/$1.findings.md" \
     SIGNING_HTTP_FIXTURES="$work/$1.json" ruby "$scripts/check-signing-material.rb"
 }
 
@@ -109,6 +132,9 @@ expect_fail() { # label fixture readonly expected-text
 
 write_fixture ok 200 false "$all_paths" 200 "$(bundle_ids "$all_ids")"
 expect_pass "everything in place" ok true "Signing preflight passed"
+out="$(run_preflight ok true 2>&1)"
+[[ "$out" != *"expires on"* ]] || fail "preflight: material a year from expiry must not warn, got: $out"
+[[ ! -s "$work/ok.findings.md" ]] || fail "preflight: a clean run must leave no findings, got: $(cat "$work/ok.findings.md")"
 
 # A wrong token pasted into MATCH_GIT_BASIC_AUTHORIZATION.
 write_fixture bad-token 401 false "$all_paths" 200 "$(bundle_ids "$all_ids")"
@@ -146,6 +172,43 @@ expect_fail "watch App ID not registered" unregistered true "App ID com.madhakis
 write_fixture unregistered-provision 200 true "$no_watch_paths" 200 \
   "$(bundle_ids '["com.madhakish.Cadence","com.madhakish.Cadence.Widgets"]')"
 expect_fail "unregistered App ID on a provisioning run" unregistered-provision false "match cannot register it"
+
+# Certificates and profiles lapse a year after match creates them, outside the
+# repository. A month ahead is a notice the daily health check turns into an
+# issue; past the date nothing can sign.
+all_ok="$(bundle_ids "$all_ids")"
+# The newest certificate decides; an older one lapsing beside it is noise.
+write_fixture cert-mixed 200 false "$all_paths" 200 "$all_ok" 200 "$(certificates 400 20)"
+expect_pass "newest distribution certificate far from expiry" cert-mixed true "Signing preflight passed"
+[[ ! -s "$work/cert-mixed.findings.md" ]] || fail "preflight: an older lapsing certificate must not warn"
+write_fixture cert-20 200 false "$all_paths" 200 "$all_ok" 200 "$(certificates 20)"
+expect_pass "distribution certificate expiring in 20 days" cert-20 true "distribution certificate expires on"
+[[ "$(cat "$work/cert-20.findings.md")" == "- **Expiring:** the distribution certificate expires on "*", in 20 days."* ]] \
+  || fail "preflight: the expiry warning must reach the findings, got: $(cat "$work/cert-20.findings.md")"
+write_fixture cert-expired 200 false "$all_paths" 200 "$all_ok" 200 "$(certificates -2)"
+expect_fail "expired distribution certificate" cert-expired true "the distribution certificate expired on"
+write_fixture no-cert 200 false "$all_paths" 200 "$all_ok" 200 '{"data":[]}'
+expect_fail "no distribution certificate" no-cert true "the developer account has no distribution certificate"
+
+write_fixture profile-20 200 false "$all_paths" 200 "$all_ok" 200 "" \
+  "$(profiles com.madhakish.Cadence=300 com.madhakish.Cadence.Widgets=20 com.madhakish.Cadence.watchkitapp=300)"
+expect_pass "widget profile expiring in 20 days" profile-20 true \
+  "active App Store profile for com.madhakish.Cadence.Widgets expires on"
+write_fixture profile-expired 200 false "$all_paths" 200 "$all_ok" 200 "" \
+  "$(profiles com.madhakish.Cadence=300 com.madhakish.Cadence.Widgets=300 com.madhakish.Cadence.watchkitapp=-1)"
+expect_fail "expired watch profile" profile-expired true \
+  "active App Store profile for com.madhakish.Cadence.watchkitapp expired on"
+[[ "$(cat "$work/profile-expired.findings.md")" == "- **Error:** the active App Store profile for com.madhakish.Cadence.watchkitapp expired on "* ]] \
+  || fail "preflight: errors must reach the findings, got: $(cat "$work/profile-expired.findings.md")"
+write_fixture profile-missing 200 false "$all_paths" 200 "$all_ok" 200 "" \
+  "$(profiles com.madhakish.Cadence=300 com.madhakish.Cadence.Widgets=300)"
+expect_fail "watch App ID without an active profile" profile-missing true \
+  "the developer account has no active App Store profile for com.madhakish.Cadence.watchkitapp"
+# A provisioning run is how a missing or lapsed profile is replaced.
+write_fixture profile-missing-provision 200 true "$no_watch_paths" 200 "$all_ok" 200 "" \
+  "$(profiles com.madhakish.Cadence=300 com.madhakish.Cadence.Widgets=300)"
+expect_pass "provisioning run replaces the missing profile" profile-missing-provision false \
+  "no active App Store profile for com.madhakish.Cadence.watchkitapp; this provisioning run will create it"
 
 # No credentials at all: a notice on fork/Dependabot PRs, a failure elsewhere.
 out="$(env -i PATH="$PATH" HOME="$HOME" SIGNING_PREFLIGHT=optional ruby "$scripts/check-signing-material.rb" 2>&1)" \

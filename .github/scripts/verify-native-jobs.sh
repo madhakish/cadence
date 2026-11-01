@@ -48,5 +48,6 @@ require_job_result "shipped-store migration tests" "${MIGRATIONS_REQUIRED:-}" "$
 require_job_result "native interaction tests" "${NATIVE_SMOKE_REQUIRED:-}" "${NATIVE_SMOKE_RESULT:-}"
 require_job_result "watch simulator smoke tests" "${WATCH_SMOKE_REQUIRED:-}" "${WATCH_SMOKE_RESULT:-}"
 require_job_result "signing preflight" "${SIGNING_REQUIRED:-}" "${SIGNING_RESULT:-}"
+require_job_result "main release health" "${MAIN_HEALTH_REQUIRED:-}" "${MAIN_HEALTH_RESULT:-}"
 
 echo "Required CI jobs passed"

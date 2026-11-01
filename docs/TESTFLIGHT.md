@@ -84,13 +84,15 @@ Every main run and manual dispatch runs the **Signing preflight** job
 repository preflight. In about a minute it proves what the signed build needs:
 the certs token can read the certs repo, every App ID that ships in the app has
 an App Store profile there, the App Store Connect key is accepted, Apple is not
-blocking the account on an unaccepted agreement, and every App ID is registered
-(match cannot register one). On a provisioning run (`MATCH_READONLY=false`) it
-also proves the token can push a branch, by creating and deleting a scratch
-branch, and can use pull requests. The signed build and the `App build (macOS)`
-aggregate wait on it, so a broken token, a missing profile or a pending Program
-License Agreement fails in a minute instead of 25 minutes into the release
-build.
+blocking the account on an unaccepted agreement, every App ID is registered
+(match cannot register one), and Apple still holds an unexpired distribution
+certificate and an active App Store profile for every App ID (a notice within
+30 days of expiry; see [signing health](#signing-health)). On a provisioning
+run (`MATCH_READONLY=false`) it also proves the token can push a branch, by
+creating and deleting a scratch branch, and can use pull requests. The signed
+build and the `App build (macOS)` aggregate wait on it, so a broken token, a
+missing profile or a pending Program License Agreement fails in a minute
+instead of 25 minutes into the release build.
 
 Signing secrets never reach pull-request code, so pull requests don't run the
 live check. Run it yourself before pushing a signing change: `make signing`
@@ -124,6 +126,42 @@ To add a target with its own App ID (an extension, a watch app):
    to the protected `main` directly.
 5. Once `make signing` passes, delete `MATCH_READONLY` and return the token to
    **Contents: Read-only**. The preflight then guards the steady state again.
+
+## Signing health
+
+Signing material also breaks without a commit: certificates and profiles lapse
+a year after match creates them, a token is revoked, Apple publishes a new
+agreement. `.github/workflows/signing-health.yml` runs the Signing preflight
+every day at 06:17 UTC and on demand (**Actions → Signing health → Run
+workflow**), read-only whatever `MATCH_READONLY` says, with the same secrets.
+Its expiry checks read the account's newest distribution certificate and each
+shipped App ID's active App Store profiles: 30 days or fewer before the date
+is a notice; an expired certificate, or an App ID with no active App Store
+profile, is an error.
+
+A failure or a notice opens one issue, **Signing health: action needed**,
+listing the findings, or refreshes the one already open. Changed findings add
+a comment, and the first clean run closes it. Renew before the date:
+
+- **Profile:** delete the expiring profile under **Profiles** in the developer
+  portal, then make a provisioning run straight away (steps 3–5 above). match
+  replaces a profile Apple no longer lists.
+- **Distribution certificate:** revoke it under **Certificates**, remove its
+  files from the certs repo's `certs/distribution/` by pull request, then make
+  a provisioning run. match creates a new certificate and new profiles.
+
+### Main-health merge gate
+
+While the newest completed push run of CI on `main` (ignoring cancelled and
+skipped runs) concluded failure, a pull request whose title would release
+(`feat`, `fix`, `perf` or `!`, judged by semantic-release's own analyzer)
+fails the **Main release health** job, and with it the required
+`App build (macOS)` check. Fix main first. Pull requests that change the
+release path (`.github/**`, `fastlane/**`, `Gemfile*`, `project.yml`) are
+exempt, as is any pull request labelled **`release-fix`**: use the label for a
+fix to main that lives elsewhere. The run reads the label and title from the
+event that started it, so after adding the label push a commit or close and
+reopen the pull request. Once main is green again, re-run the failed jobs.
 
 ## Configure the repo
 
