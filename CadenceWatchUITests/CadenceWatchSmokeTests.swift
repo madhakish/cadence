@@ -92,4 +92,35 @@ final class CadenceWatchSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
     }
+
+    /// Tap-to-confirm: a manual Done on a detected set clears its proposal, so
+    /// Confirm can't log the same set a second time.
+    func testAManualDoneClearsAPendingDetectedSet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion", "--watch-confirm-detected"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        // Detection starts rest and proposes the set without logging it.
+        let confirm = app.buttons["confirmDetected"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20), "the synthetic set is detected and proposed")
+        XCTAssertTrue(app.staticTexts["Detected 5 reps"].exists)
+        XCTAssertFalse(app.buttons["autoLogged"].exists, "a proposal isn't logged before Confirm")
+
+        // Log that set by hand instead.
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+        app.buttons["done"].tap()
+
+        // The manual Done took the proposal with it: nothing is left to confirm.
+        XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Detected 5 reps"].exists)
+        XCTAssertFalse(confirm.exists)
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 2 of 2", "the set was logged once")
+        XCTAssertFalse(confirm.exists)
+    }
 }

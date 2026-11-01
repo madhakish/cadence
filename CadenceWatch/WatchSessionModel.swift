@@ -65,7 +65,8 @@ final class WatchSessionModel: ObservableObject {
     private let fileURL: URL
 
     /// Debug builds only: `--watch-fixture` runs against a synthetic plan in a
-    /// scratch directory with HealthKit off, for the watch UI smoke test.
+    /// scratch directory with HealthKit off, for the watch UI smoke test;
+    /// `--watch-confirm-detected` adds tap-to-confirm.
     let isFixture: Bool
 
     init(directory: URL? = nil) {
@@ -78,7 +79,10 @@ final class WatchSessionModel: ObservableObject {
         let base = scratch ?? directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         fileURL = base.appendingPathComponent("watch-session.json")
-        confirmBeforeLogging = UserDefaults.standard.bool(forKey: Self.confirmKey)
+        // A fixture run takes the setting from `--watch-confirm-detected` alone,
+        // never from the defaults; assigned once so `didSet` doesn't persist it.
+        confirmBeforeLogging = isFixture ? ProcessInfo.processInfo.arguments.contains("--watch-confirm-detected")
+                                         : UserDefaults.standard.bool(forKey: Self.confirmKey)
         if let data = try? Data(contentsOf: fileURL), let stored = try? JSONDecoder().decode(Stored.self, from: data) {
             plan = stored.plan
             endpoint = stored.endpoint
