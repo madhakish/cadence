@@ -253,35 +253,25 @@ final class VisualProofUITests: XCTestCase {
         openDisclosure("Rest & training behavior")
         let duration = app.buttons["Squat & deadlift mains"]
         XCTAssertTrue(duration.waitForExistence(timeout: 3))
-        // Bring the whole row below navigation chrome before tapping it;
-        // isHittable alone can be true for a partially obscured list row.
-        let window = app.windows.firstMatch.frame
-        let visible = CGRect(x: window.minX, y: window.minY + 100,
-                             width: window.width, height: window.height - 220)
-        for _ in 0..<10 where !visible.contains(duration.frame) {
-            // Full-screen swipes bounce this short row across the viewport
-            // in a plain List. Pan by about 130 points to land it in the cut.
-            let above = duration.frame.minY < visible.minY
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
-            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
-            start.press(forDuration: 0.01, thenDragTo: end)
-        }
-        XCTAssertTrue(visible.contains(duration.frame))
+        let visible = panIntoView(duration)
         capture("after-settings-rest-iphone")
+        XCTAssertEqual(duration.value as? String, "5 minutes")
         duration.tap()
-        XCTAssertTrue(app.textFields["Hours"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.textFields["Minutes"].exists)
-        XCTAssertTrue(app.textFields["Seconds"].exists)
+        let readout = element("duration-readout")
+        XCTAssertTrue(readout.waitForExistence(timeout: 5))
+        XCTAssertEqual(readout.value as? String, "5 minutes")
+        XCTAssertTrue(app.buttons["5 minutes"].isSelected, "the stored rest is the lit preset")
+        XCTAssertFalse(app.buttons["2 minutes"].isSelected)
+        XCTAssertTrue(element("duration-zero").exists)
         capture("after-duration-picker-iphone")
+        app.buttons["Add 15 seconds"].tap()
+        XCTAssertEqual(readout.value as? String, "5 minutes, 15 seconds")
+        XCTAssertFalse(app.buttons["5 minutes"].isSelected)
         app.navigationBars.buttons["Cancel"].firstMatch.tap()
+        XCTAssertEqual(duration.value as? String, "5 minutes", "Cancel writes nothing")
 
         let sound = app.switches["Completion sound"]
-        for _ in 0..<10 where !visible.contains(sound.frame) {
-            let above = sound.frame.minY < visible.minY
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
-            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
-            start.press(forDuration: 0.01, thenDragTo: end)
-        }
+        _ = panIntoView(sound)
         XCTAssertTrue(sound.isHittable)
         XCTAssertTrue(visible.contains(sound.frame), "The complete audio switch must be clear of the tab bar")
         capture("after-settings-audio-iphone")
@@ -313,6 +303,46 @@ final class VisualProofUITests: XCTestCase {
         }
         XCTAssertTrue(deleteConfirmation.waitForNonExistence(timeout: 3))
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 3), "cancelling keeps the banked activity")
+
+        // The duration editor at the largest text size: the figure scales
+        // down instead of clipping and every preset stays a full-width tap.
+        app.terminate()
+        app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
+        openDisclosure("Rest & training behavior")
+        let largeDuration = app.buttons["Squat & deadlift mains"]
+        XCTAssertTrue(largeDuration.waitForExistence(timeout: 3))
+        _ = panIntoView(largeDuration)
+        largeDuration.tap()
+        XCTAssertTrue(element("duration-readout").waitForExistence(timeout: 5))
+        capture("duration-editor-accessibility-iphone")
+        let zero = element("duration-zero")
+        for _ in 0..<4 where !zero.isHittable { app.swipeUp() }
+        XCTAssertTrue(zero.isHittable, "the Off choice is reachable at accessibility sizes")
+        capture("duration-editor-accessibility-lower-iphone")
+        app.navigationBars.buttons["Cancel"].firstMatch.tap()
+    }
+
+    /// Pans a short list row into the band between navigation chrome and the
+    /// tab bar; returns that band. Full-screen swipes bounce a short row
+    /// across the viewport in a plain List, so pan about 130 points at a time.
+    /// isHittable alone can be true for a partially obscured row.
+    @discardableResult
+    private func panIntoView(_ target: XCUIElement) -> CGRect {
+        let window = app.windows.firstMatch.frame
+        let visible = CGRect(x: window.minX, y: window.minY + 100,
+                             width: window.width, height: window.height - 220)
+        for _ in 0..<10 where !visible.contains(target.frame) {
+            let above = target.frame.minY < visible.minY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.60 : 0.50))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(visible.contains(target.frame))
+        return visible
     }
 
     func test06ComplementaryTrainingFocusIsTruthful() {

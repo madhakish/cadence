@@ -26,88 +26,196 @@ struct DurationEditorButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
-        .accessibilityValue(seconds == 0 ? zeroLabel : RestDuration.label(seconds))
-        .accessibilityHint("Edit hours, minutes and seconds")
+        .accessibilityValue(seconds == 0 ? zeroLabel : DurationEditor.spoken(seconds))
+        .accessibilityHint("Opens presets and fine adjustment")
         .sheet(isPresented: $showingEditor) {
             DurationEditor(title: title, seconds: seconds, zeroLabel: zeroLabel) { seconds = $0 }
         }
     }
 
     private var value: some View {
-        Label(seconds == 0 ? zeroLabel : RestDuration.label(seconds), systemImage: "timer")
-            .monospacedDigit()
-            .foregroundStyle(Theme.accent)
+        HStack(spacing: 6) {
+            Text(seconds == 0 ? zeroLabel : mmss(seconds))
+                .font(.body.weight(.heavy).width(.condensed))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
     }
 }
 
+/// Rest is chosen, not typed: the value big, the usual rests one tap away,
+/// ±15 s for the odd ones, and the caller's zero state (Off, End rest, Use
+/// default) as its own button. Nothing is written until Save.
 struct DurationEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var figureSize: CGFloat = 104
     let title: String
     let zeroLabel: String
     let onSave: (Int) -> Void
-    @State private var hours: String
-    @State private var minutes: String
-    @State private var seconds: String
+    @State private var draft: Int
 
     init(title: String, seconds: Int, zeroLabel: String, onSave: @escaping (Int) -> Void) {
         self.title = title
         self.zeroLabel = zeroLabel
         self.onSave = onSave
-        _hours = State(initialValue: String(seconds / 3600))
-        _minutes = State(initialValue: String(seconds / 60 % 60))
-        _seconds = State(initialValue: String(seconds % 60))
+        _draft = State(initialValue: seconds)
     }
 
-    private var duration: Int? { RestDuration.parse(hours: hours, minutes: minutes, seconds: seconds) }
+    private var isValid: Bool { (0...RestDuration.maximumSeconds).contains(draft) }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    let layout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-                        : AnyLayout(HStackLayout(spacing: 12))
-                    layout {
-                        field("Hours", text: $hours)
-                        field("Minutes", text: $minutes)
-                        field("Seconds", text: $seconds)
-                    }
-                    Text(duration.map { $0 == 0 ? zeroLabel : RestDuration.label($0) } ?? "Enter a duration from 00:00:00 to 01:00:00.")
-                        .font(.body.monospacedDigit())
-                        .foregroundStyle(duration == nil ? Theme.warn : Color.primary)
-                        .accessibilityLabel("Selected duration")
-                        .accessibilityValue(duration.map { $0 == 0 ? zeroLabel : RestDuration.label($0) } ?? "Invalid duration")
-                    Button(zeroLabel) { hours = "0"; minutes = "0"; seconds = "0" }
-                } footer: {
-                    Text("Up to one hour. Extra seconds and minutes carry into the next unit when saved. Changes apply only when you tap Save.")
+            ScrollView {
+                VStack(spacing: 20) {
+                    readout
+                    steppers
+                    presets
+                    choice(zeroLabel, selected: draft == 0, font: .headline) { set(0) }
+                        .accessibilityIdentifier("duration-zero")
+                    Text("Up to 60:00. Nothing changes until you tap Save.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
+            .background(Theme.background)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        guard let duration else { return }
-                        onSave(duration)
+                        onSave(draft)
                         dismiss()
                     }
-                    .disabled(duration == nil)
+                    .fontWeight(.semibold)
+                    .disabled(!isValid)
                 }
             }
         }
     }
 
-    private func field(_ label: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.subheadline)
-            TextField("0", text: text)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-                .font(.title2.monospacedDigit())
-                .frame(minHeight: 44)
-                .accessibilityLabel(label)
+    // The number is the screen. Condensed heavy so 60:00 still fits a
+    // phone at accessibility sizes before the scale factor has to step in.
+    private var readout: some View {
+        VStack(spacing: 2) {
+            Text(mmss(max(0, draft)))
+                .font(.system(size: figureSize, weight: .heavy).width(.condensed))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+                .foregroundStyle(draft == 0 ? .secondary : .primary)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: Double(draft)))
+            // Always laid out so the figure does not hop when zero toggles.
+            Text(zeroLabel)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .opacity(draft == 0 ? 1 : 0)
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(draft == 0 ? zeroLabel : Self.spoken(draft))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: step(up: true)
+            case .decrement: step(up: false)
+            @unknown default: break
+            }
+        }
+        .accessibilityIdentifier("duration-readout")
+    }
+
+    private var steppers: some View {
+        HStack(spacing: 12) {
+            stepButton(up: false)
+            stepButton(up: true)
+        }
+    }
+
+    private func stepButton(up: Bool) -> some View {
+        let atLimit = up ? draft >= RestDuration.maximumSeconds : draft <= 0
+        return Button { step(up: up) } label: {
+            Label {
+                Text("\(RestDuration.stepSeconds) s")
+            } icon: {
+                Image(systemName: up ? "plus" : "minus")
+            }
+            .labelStyle(.titleAndIcon)
+            .font(.title3.weight(.heavy).width(.condensed))
+            .frame(maxWidth: .infinity, minHeight: Theme.bigTap)
+        }
+        .buttonStyle(DurationChipStyle(selected: false))
+        .buttonRepeatBehavior(.enabled)
+        .disabled(atLimit)
+        .accessibilityLabel(up ? "Add \(RestDuration.stepSeconds) seconds" : "Subtract \(RestDuration.stepSeconds) seconds")
+    }
+
+    private var presets: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 12),
+                            count: dynamicTypeSize.isAccessibilitySize ? 2 : 3)
+        return LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(RestDuration.presets, id: \.self) { preset in
+                choice(mmss(preset), selected: draft == preset,
+                       font: .title2.weight(.heavy).width(.condensed)) { set(preset) }
+                    .accessibilityLabel(Self.spoken(preset))
+            }
+        }
+    }
+
+    private func choice(_ label: String, selected: Bool, font: Font,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(font)
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, minHeight: Theme.bigTap)
+        }
+        .buttonStyle(DurationChipStyle(selected: selected))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func set(_ seconds: Int) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: Theme.shortMotion)) { draft = seconds }
+    }
+
+    private func step(up: Bool) { set(RestDuration.stepped(draft, up: up)) }
+
+    /// "1 minute, 30 seconds" — what VoiceOver should say instead of "1:30".
+    static func spoken(_ seconds: Int) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .full
+        formatter.zeroFormattingBehavior = .dropAll
+        return formatter.string(from: TimeInterval(max(0, seconds))) ?? mmss(max(0, seconds))
+    }
+}
+
+/// Square-shouldered plates, not pills. The current value is the one thing
+/// lit in the accent; everything else is steel on the canvas.
+private struct DurationChipStyle: ButtonStyle {
+    let selected: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius)
+        configuration.label
+            .foregroundStyle(selected ? Theme.onAccent : Color.primary)
+            .background(selected ? Theme.accent : Theme.card, in: shape)
+            .overlay { shape.stroke(selected ? Color.clear : Theme.hairline, lineWidth: 1) }
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)
+            .contentShape(shape)
     }
 }

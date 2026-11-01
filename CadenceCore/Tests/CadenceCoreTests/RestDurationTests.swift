@@ -18,6 +18,16 @@ final class RestDurationTests: XCTestCase {
         XCTAssertEqual(RestDuration.maximumSeconds, 3600)
     }
 
+    func testSteppingSnapsToTheQuarterMinuteAndStaysInRange() {
+        for (start, up, expected) in [(90, true, 105), (90, false, 75), (97, true, 105), (97, false, 90),
+                                      (0, false, 0), (10, false, 0), (3600, true, 3600), (3590, true, 3600),
+                                      (-5, true, 15), (4000, false, 3585)] {
+            XCTAssertEqual(RestDuration.stepped(start, up: up), expected, "\(start) \(up ? "+" : "-")")
+        }
+        XCTAssertEqual(RestDuration.presets, [60, 90, 120, 180, 240, 300])
+        XCTAssertTrue(RestDuration.presets.allSatisfy { (1...RestDuration.maximumSeconds).contains($0) })
+    }
+
     func testEditingRemainingPreservesElapsedAndPauseWithoutRevivingExpiredRest() throws {
         let clock = RestClock.start(total: 300, now: 100)
         let updated = try XCTUnwrap(RestClock.settingRemaining(clock, seconds: 97, now: 200))
