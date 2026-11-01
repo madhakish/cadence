@@ -1,4 +1,9 @@
+import notify
 import XCTest
+
+/// `WatchSessionModel.fixtureMotionSignal`: under `--watch-fixture-motion-on-signal`
+/// the fixture's synthetic set plays when the test posts this, not on a timer.
+private let fixtureMotionSignal = "com.madhakish.Cadence.watch-fixture.play-motion"
 
 /// The watch smoke test from design #339's verification plan: start → log a
 /// set → rest → end, on a watch simulator, against the debug-only fixture plan.
@@ -140,12 +145,12 @@ final class CadenceWatchSmokeTests: XCTestCase {
     /// logs the load the watch showed, not the planned one.
     func testADetectedSetLogsTheLoadAdjustedOnTheWatch() {
         let app = XCUIApplication()
-        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion"]
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion", "--watch-fixture-motion-on-signal"]
         app.launch()
         XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
         app.buttons["start"].tap()
 
-        // During the fixture's lead-in: 185 lb planned, 190 lb on the bar.
+        // Before the fixture plays its set: 185 lb planned, 190 lb on the bar.
         let load = app.buttons["load"]
         XCTAssertTrue(load.waitForExistence(timeout: 5))
         XCTAssertTrue(load.label.hasPrefix("185 lb"), load.label)
@@ -158,6 +163,9 @@ final class CadenceWatchSmokeTests: XCTestCase {
         XCTAssertTrue(load.label.hasPrefix("190 lb"), load.label)
         XCTAssertFalse(app.buttons["autoLogged"].exists, "the load is adjusted before the set is detected")
 
+        // Only now is the set lifted: a slow runner can't detect it while the
+        // load is still being adjusted (#368).
+        notify_post(fixtureMotionSignal)
         let logged = app.buttons["autoLogged"]
         XCTAssertTrue(logged.waitForExistence(timeout: 30), "the synthetic set is detected and logged")
         // Edit reopens the logged set, showing the load it was logged with.
