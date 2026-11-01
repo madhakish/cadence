@@ -60,6 +60,21 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<4 where !program.isHittable { app.swipeUp() }
         XCTAssertTrue(program.isHittable)
         capture("after-01d-home-accessibility-program-iphone")
+
+        // A library edit must not relabel the already-open session. The
+        // fixture gives its heaviest prescribed sets captured meanings that
+        // differ from both the lighter sets and today's exercise definition.
+        app.terminate()
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryL"
+        app.launchArguments.append("--today-load-basis-proof")
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        for (name, load) in [("Back Squat", "60 lb each"), ("Romanian Deadlift", "80 lb assistance")] {
+            let row = app.buttons["today-session-lift-\(name)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertTrue(row.label.contains(load), row.label)
+        }
+        capture("after-01e-home-captured-load-basis-iphone")
     }
 
     func test02CurrentSessionAndExactPlateStack() {

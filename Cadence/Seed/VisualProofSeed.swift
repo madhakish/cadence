@@ -146,6 +146,25 @@ enum VisualProofSeed {
         }) {
             try ExportService.jsonData(context: context).write(to: fixtureURL, options: .atomic)
         }
+        // The library can change after sets have captured their load meaning.
+        // Make the last prescribed set the heaviest, with a different basis
+        // from both its siblings and the current exercise definition.
+        if ProcessInfo.processInfo.arguments.contains("--today-load-basis-proof"),
+           let session = try context.fetch(FetchDescriptor<WorkoutSession>()).first(where: { !$0.isCompleted }) {
+            let loads: [(Double, LoadBasis)] = [(60, .perImplement), (80, .assisted)]
+            for (entry, load) in zip(session.orderedExercises, loads) {
+                for set in entry.prescribedSets {
+                    set.weightLb = 30
+                    set.loadBasis = .externalTotal
+                }
+                if let heaviest = entry.prescribedSets.last {
+                    heaviest.weightLb = load.0
+                    heaviest.loadBasis = load.1
+                }
+                entry.exercise?.loadBasis = .externalTotal
+            }
+            try context.save()
+        }
         // Screenshot-only empty states, after exporting the canonical matrix
         // fixture. This container is disposable; no production data is opened.
         if ProcessInfo.processInfo.arguments.contains("--equipment-empty-proof") {
