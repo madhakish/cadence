@@ -182,6 +182,44 @@ final class RepDetectorTests: XCTestCase {
         }
     }
 
+    /// Review on #356: a set longer than the old sliding window lost its first
+    /// reps on the watch (14 logged for 15, 20 and 30), while the batch
+    /// detector the evaluation trusts counted them all.
+    func testStreamingCountsLongSetsLikeTheBatchDetector() throws {
+        let training = session(seed: 30, sets: [(bench, 5), (bench, 6), (bench, 5), (bench, 4)])
+        let signature = try XCTUnwrap(RepDetector.signature(exerciseID: "bench",
+                                                            from: DetectorEvaluation.labelledSets("bench", in: training)))
+        let live = session(seed: 32, sets: [(bench, 15), (bench, 20), (bench, 30)])
+        let batch = RepDetector.detect(live.samples, signature: signature).map(\.reps)
+        XCTAssertEqual(batch, [15, 20, 30], "the batch detector counts the synthetic sets exactly")
+        var detector = StreamingSetDetector(signature: signature)
+        var fired: [Int] = []
+        var index = 0
+        while index < live.samples.count {
+            let batch = Array(live.samples[index..<min(index + 50, live.samples.count)])
+            index += 50
+            if let set = detector.append(batch) { fired.append(set.reps) }
+        }
+        XCTAssertEqual(fired, batch, "streamed in one-second batches, every long set keeps its first reps")
+    }
+
+    /// The watch runs the batch detector on every one-second batch, so what the
+    /// streaming detector keeps must stay bounded through long quiet stretches.
+    func testStreamingKeepsABoundedBuffer() throws {
+        let training = session(seed: 30, sets: [(bench, 5), (bench, 6), (bench, 5), (bench, 4)])
+        let signature = try XCTUnwrap(RepDetector.signature(exerciseID: "bench",
+                                                            from: DetectorEvaluation.labelledSets("bench", in: training)))
+        var detector = StreamingSetDetector(signature: signature)
+        for second in 0..<900 {  // fifteen minutes with nothing to report
+            let batch = (0..<50).map { i in
+                MotionSample(t: Float(Double(second) + Double(i) / rate), userAcceleration: .zero, rotationRate: .zero,
+                             gravity: SIMD3(0, -1, 0), attitude: SIMD4(0, 0, 0, 1))
+            }
+            XCTAssertNil(detector.append(batch))
+        }
+        XCTAssertLessThanOrEqual(Double(detector.buffer.count), detector.window * rate + 50)
+    }
+
     func testOnlyExercisesThatPassTheBarGetASignature() {
         let recordings = [
             session(seed: 40, sets: [(bench, 5), (bench, 5), (bench, 5), (bench, 6), (curl, 10)]),

@@ -250,13 +250,13 @@ public enum RepDetector {
 }
 
 /// Live set detection on the watch (design section 10): the batch detector run
-/// over a sliding window, reporting each set once, after no further rep could
-/// still join it. Feed it samples as they arrive; reset it when the exercise
-/// in focus changes.
+/// over the motion since the last reported set, reporting each set once, after
+/// no further rep could still join it. Feed it samples as they arrive; reset it
+/// when the exercise in focus changes.
 public struct StreamingSetDetector: Sendable {
     public let signature: RepSignature
     public let sampleRate: Double
-    private var buffer: [MotionSample] = []
+    private(set) var buffer: [MotionSample] = []
     private var reportedThrough = -Double.infinity
 
     public init(signature: RepSignature, sampleRate: Double = MotionRecording.defaultSampleRate) {
@@ -264,8 +264,11 @@ public struct StreamingSetDetector: Sendable {
         self.sampleRate = sampleRate
     }
 
-    /// Seconds of motion kept: room for a long set plus its lead-in.
-    public var window: Double { max(30, 14 * signature.repPeriod + signature.endLag) }
+    /// Seconds of motion kept at most: room for the longest plausible set, a
+    /// two-rep lead-in, 50 reps and the settle after them. `RepDetector.detect`
+    /// is linear in the samples it is given and runs on every batch, so this
+    /// bounds the watch's work per batch; a longer set loses its first reps.
+    public var window: Double { 52 * signature.repPeriod + settle }
 
     /// Seconds after the last rep before a set is final: its learned end lag,
     /// and at least long enough that a slow final rep would already have come.
@@ -274,7 +277,10 @@ public struct StreamingSetDetector: Sendable {
     public mutating func append(_ samples: [MotionSample]) -> DetectedSet? {
         buffer += samples
         guard let now = buffer.last.map({ Double($0.t) }) else { return nil }
-        if let keep = buffer.firstIndex(where: { Double($0.t) >= now - window }), keep > 0 {
+        // Drop what was already reported, but never trim into a set that has not
+        // been: a set longer than a short window would lose its first reps.
+        let keepFrom = max(reportedThrough, now - window)
+        if let keep = buffer.firstIndex(where: { Double($0.t) >= keepFrom }), keep > 0 {
             buffer.removeFirst(keep)
         }
         let sets = RepDetector.detect(buffer, signature: signature, sampleRate: sampleRate)
