@@ -275,17 +275,14 @@ struct HistoryView: View {
                                     .foregroundStyle(.secondary)
                                 if let detail = session.activityDetail {
                                     Text(detail.kind?.exerciseName ?? "Ad-hoc work")
-                                        .font(.callout.bold())
+                                        .font(.display(.headline))
                                     Text(activityRowLine(session))
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.accent)
+                                        .font(.caption.monospacedDigit())
                                         .lineLimit(2)
                                 } else if let lead = leadLift(session) {
                                     HStack(spacing: 6) {
-                                        Text(lead.name).font(.callout.bold())
-                                        Text(lead.set)
-                                            .font(.callout.bold().monospacedDigit())
-                                            .foregroundStyle(Theme.accent)
+                                        Text(lead.name).font(.display(.headline))
+                                        Text(lead.set).font(.figure(.headline))
                                     }
                                 }
                                 let rest = session.activityDetail == nil ? restLine(session) : ""
@@ -300,7 +297,7 @@ struct HistoryView: View {
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
                                             Capsule().fill(Color(.tertiarySystemFill))
-                                            Capsule().fill(Theme.accent.opacity(0.75))
+                                            Capsule().fill(.secondary)
                                                 .frame(width: max(4, geo.size.width * vol / maxVolume))
                                         }
                                     }
@@ -755,14 +752,13 @@ struct SessionDetailView: View {
                     .tracking(0.9)
                     .foregroundStyle(Theme.accent)
                 Text(kind?.exerciseName ?? "Ad-hoc work")
-                    .font(.title2.bold())
+                    .font(.display(.title2))
                 Text(session.date.formatted(date: .long, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(activityDurationLabel(durationSeconds))
-                        .font(.system(size: 32, weight: .black, design: .rounded))
-                        .monospacedDigit()
+                        .font(.figure(.largeTitle))
                     if let rpe = detail.sessionRPE {
                         Text("RPE \(Weight.trim(rpe))")
                             .font(.title3.bold())
