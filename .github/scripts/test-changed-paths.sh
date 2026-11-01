@@ -100,6 +100,21 @@ assert_lines "push with an empty before lists the full tree" \
   "$full_tree" \
   "$(changed push "" "$main_later")"
 
+# A move out of a migration-bearing path lists both sides, so the migration
+# suite still runs. With rename detection only the new path appears.
+git -C "$repo" checkout -q -b move "$main_later"
+mkdir -p "$repo/Cadence/Archive"
+git -C "$repo" mv Cadence/Models/SessionModels.swift Cadence/Archive/SessionModels.swift
+git -C "$repo" commit -qm "move the session model"
+move_head="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" checkout -q main
+assert_lines "a moved model lists both its old and new paths" \
+  $'Cadence/Archive/SessionModels.swift\nCadence/Models/SessionModels.swift' \
+  "$(changed pull_request "$main_later" "$move_head")"
+assert_lines "a moved model still runs the migration suite" \
+  $'native=true\nmigrations=true\nweb=false' \
+  "$(changed pull_request "$main_later" "$move_head" | bash "$classifier")"
+
 # Unrelated histories must fail loudly, not classify an empty diff.
 orphan="$(git -C "$repo" commit-tree "$(git -C "$repo" mktree < /dev/null)" -m orphan)"
 scenarios=$((scenarios + 1))
