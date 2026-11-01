@@ -20,3 +20,20 @@ matter, not the pixels.
 | `lock-screen.png` | Live Activity | "Complete set · rest" controls and the current set on the Lock Screen |
 
 Decisions taken while implementing them are recorded in `../DECISIONS.md`.
+
+## Photographic platform direction (2026-11-01)
+
+The owner supplied a further set of generated stills on 2026-11-01: a loaded
+bar on an oak platform with the Vitruvian gorilla burned in, rubber side
+mats, a dark gym behind, and plate-loading and session screens built around
+it. They are kept outside this public repository until he says otherwise.
+Codex's concept pack from the same day, recommending honey oak with blue
+bumpers, is published separately under `docs/design-pass/astra-2026-11-01/`
+by its own PR (`docs/astra-visual-handoff`).
+
+Neither set is approved yet, and neither replaces the references above. The
+plan for reaching that look without giving up the deterministic renderer is
+in [`../codex/ASSET-SPEC.md`](../codex/ASSET-SPEC.md) and
+[`../codex/COMPOSITOR.md`](../codex/COMPOSITOR.md); any renderer change it
+leads to still needs a side-by-side against these references and the
+owner's sign-off.
