@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { openFirstInstall } from './first-install.mjs';
 import { startServer } from './server.mjs';
 
 const openLibrary = async (page) => {
@@ -68,9 +69,7 @@ test('[WEB-EQUIPMENT-CONTEXT] category artwork reserves geometry during decode a
     }
 
     // The normal worker must fetch these assets before any category is opened.
-    await page.goto(server.url);
-    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller
-      && performance.getEntriesByType('navigation')[0]?.type === 'reload').catch(() => false)).toBe(true);
+    await openFirstInstall(page, server.url);
     server.disconnect();
     await page.reload();
     await openLibrary(page);
