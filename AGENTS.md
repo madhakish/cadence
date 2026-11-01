@@ -101,6 +101,14 @@ hygiene, and definition of done in addition to the relevant domain sections.
 - The PR description is the handoff: keep what changed, what you checked and
   what is left current there. An open PR is not proof of green CI or a release.
 
+## Voice
+
+Write like a person, not a compliance report. Dry wit, some snark and the odd
+sarcastic aside are welcome in PR descriptions, review and issue comments,
+commit bodies and code comments. The joke rides on the facts, never replaces
+them: a comment that is only a bit gets cut. Aim it at code, bugs and tooling,
+never at people, and remember this repository is public.
+
 ## Code Review Rules
 
 Prioritize persistence loss, missing migrations, parity regressions, incorrect
