@@ -31,6 +31,10 @@ struct ActiveSessionView: View {
     @State private var bankErrorMessage = ""
     @State private var showIncompleteBankConfirmation = false
     @State private var showEarlierExercises = false
+    /// The brief "logged" receipt that takes the Done slot after a completion.
+    /// Presentation only: the verdict is already saved when it appears.
+    @State private var stamp: LoggedStamp?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var currentOrFirst: SessionExercise? {
         currentEntry
@@ -103,6 +107,72 @@ struct ActiveSessionView: View {
         WorkoutCommandService.projection(for: session, focus: currentOrFirst)
     }
 
+    /// The set the bottom bar's Done logs: the focused lift's current set, by
+    /// the same first-unresolved rule the hero and the Lock Screen draw. Holds
+    /// and conditioning keep their own start/log flow in the row, so a big
+    /// button never logs a plank nobody timed or a ruck with no distance.
+    private var doneTarget: (set: SetEntry, entry: SessionExercise)? {
+        guard let entry = currentOrFirst, let type = entry.exercise?.type,
+              type != .timed, type != .conditioning else { return nil }
+        let sets = entry.orderedSets
+        let states = sets.map { SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status) }
+        return SetLifecycle.currentPresentationIndex(states).map { (sets[$0], entry) }
+    }
+
+    private var doneAction: SessionDoneAction? {
+        guard let target = doneTarget else { return nil }
+        let (set, entry) = target
+        let words = SetWords(set: set, in: entry)
+        return SessionDoneAction(
+            work: words.work,
+            position: words.position,
+            spoken: words.spoken,
+            perform: { complete(set, in: entry) }
+        )
+    }
+
+    /// Done goes through the one status writer, exactly like the row's
+    /// control and the Lock Screen; only what follows is decided here.
+    private func complete(_ set: SetEntry, in entry: SessionExercise) {
+        let previous = set.status
+        guard previous == .planned else { return }
+        do {
+            try WorkoutCommandService.setStatus(.completed, of: set, context: context)
+        } catch {
+            PersistenceErrorCenter.shared.report(error, operation: "Completing the set", context: context)
+            return
+        }
+        followVerdict(on: set, in: entry, previous: previous, status: .completed)
+    }
+
+    /// What follows any verdict on this screen — Done, the row's status
+    /// control, or the hold timer: move focus, arm rest by the shared rule,
+    /// and say "logged" once.
+    private func followVerdict(on set: SetEntry, in entry: SessionExercise, previous: SetStatus, status: SetStatus) {
+        if status == .planned { currentEntry = entry } else { focusAfterResolving(entry) }
+        // A verdict changes the current set even when focus stays on the
+        // same lift; the Lock Screen face must follow every time (#200).
+        pushActivityContext()
+        // The same decision the Lock Screen's commands make: a new completion
+        // with auto-start on and no rest running arms the rest.
+        let decision = WorkoutCommandService.decision(
+            after: previous, status: status, set: set, entry: entry, session: session,
+            settings: settingsList.first, restRunning: restTimer.isRunning
+        )
+        if let seconds = decision.restSeconds {
+            restTimer.start(seconds: seconds, exerciseName: nextRestExerciseName(after: entry))
+        }
+        if status == .completed, previous != .completed {
+            let words = SetWords(set: set, in: entry)
+            withAnimation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion)) {
+                stamp = LoggedStamp(text: "\(words.title) logged · \(words.work)")
+            }
+            UIAccessibility.post(notification: .announcement, argument: "\(words.title) logged, \(words.spoken)")
+        } else if stamp != nil {
+            stamp = nil
+        }
+    }
+
     var body: some View {
         List {
             if session.tfhPolicyID != nil { TFHEvidenceView(session: session) }
@@ -159,8 +229,19 @@ struct ActiveSessionView: View {
                 pausedAt: workoutClock.pausedAt,
                 restLabel: nextRestExerciseName(after: currentOrFirst),
                 restSeconds: currentRestSeconds,
+                done: doneAction,
+                stamp: stamp?.text,
                 onStart: startWorkout
             )
+        }
+        // The receipt is short and owns nothing: it lapses on its own, and a
+        // newer verdict replaces it (cancelling this wait).
+        .task(id: stamp?.id) {
+            guard stamp != nil, (try? await Task.sleep(for: .seconds(1.4))) != nil else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion)) { stamp = nil }
+        }
+        .sensoryFeedback(.success, trigger: stamp?.id) { _, new in
+            new != nil && (settingsList.first?.haptics ?? true)
         }
         // The logger has its own persistent bottom bar. Keyboard safe-area
         // state can otherwise strand that bar at the keyboard's former top
@@ -470,10 +551,11 @@ struct ActiveSessionView: View {
             lastTime: recallLine(for: entry, in: recall),
             adHocExposure: mostRecentTopExposure(for: entry),
             onDropLoad: { autoregEntry = entry },
-            // A verdict changes the current set even when focus stays on the
-            // same lift; the Lock Screen face must follow every time (#200).
             onWork: { currentEntry = $0; pushActivityContext() },
             onResolve: { focusAfterResolving($0); pushActivityContext() },
+            onVerdict: { set, previous, status in
+                followVerdict(on: set, in: entry, previous: previous, status: status)
+            },
             restTargetName: { nextRestExerciseName(after: entry) },
             onRemove: { removeExercise(entry) },
             onMove: { moveExercise(entry, direction: $0) }
@@ -716,6 +798,51 @@ private func agoLabel(_ date: Date) -> String {
 }
 
 /// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
+/// What the bottom bar's Done needs: the words for the set and the act.
+private struct SessionDoneAction {
+    let work: String        // "6 × 138.7 lb"
+    let position: String    // "working set 2 of 3"
+    let spoken: String      // "6 reps at 138.7 lb"
+    let perform: () -> Void
+}
+
+private struct LoggedStamp: Equatable {
+    let id = UUID()
+    let text: String
+}
+
+/// One set in words, from its own performed values — the same unit it was
+/// entered in, the same basis suffix the row shows. Display only.
+private struct SetWords {
+    let title: String       // "Set 2" / "Warmup 1"
+    let position: String
+    let work: String
+    let spoken: String
+
+    init(set: SetEntry, in entry: SessionExercise) {
+        let phase = entry.orderedSets.filter { $0.isWarmup == set.isWarmup }
+        let ordinal = (phase.firstIndex { $0.persistentModelID == set.persistentModelID } ?? 0) + 1
+        title = set.isWarmup ? "Warmup \(ordinal)" : "Set \(ordinal)"
+        position = "\(set.isWarmup ? "warmup" : "working set") \(ordinal) of \(phase.count)"
+        let load: String
+        if set.weightLb == 0 {
+            load = "BW"
+        } else {
+            let value = set.enteredUnit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb
+            load = "\(Weight.trim(value)) \(set.enteredUnit == .kg ? "kg" : "lb")\(set.loadBasis.shortSuffix)"
+        }
+        let side = set.isPerSide ? "/side" : ""
+        // [INV-CARRY-LOGS-DISTANCE] A carry is yards under a load, not reps.
+        if let yards = set.carryYards {
+            work = "\(Weight.trim(yards)) yd\(side) × \(load)"
+            spoken = "\(Weight.trim(yards)) yards\(set.isPerSide ? " per side" : "") at \(set.weightLb == 0 ? "bodyweight" : load)"
+        } else {
+            work = "\(set.reps)\(side) × \(load)"
+            spoken = "\(set.reps) reps\(set.isPerSide ? " per side" : "") at \(set.weightLb == 0 ? "bodyweight" : load)"
+        }
+    }
+}
+
 private struct SummaryBox: Identifiable {
     let id = UUID()
     let summary: SessionSummary
@@ -768,6 +895,10 @@ private struct ExerciseSection: View {
     let onWork: (SessionExercise) -> Void
     /// Recomputes the active position after a completed or skipped verdict.
     let onResolve: (SessionExercise) -> Void
+    /// A set's status changed (already saved). The screen decides what
+    /// follows — focus, rest, the "logged" receipt — the same way it does
+    /// for the bottom bar's Done.
+    let onVerdict: (_ set: SetEntry, _ previous: SetStatus, _ status: SetStatus) -> Void
     let restTargetName: () -> String
     /// Remove this exercise from the session. Unlike a swap, removal leaves no
     /// performed entry carrying the program slot identity.
@@ -967,19 +1098,18 @@ private struct ExerciseSection: View {
         return SetLifecycle.focusedPresentationIndices(states).map { ordered[$0] }
     }
 
-    private var setStateSummary: String {
-        let warmups = entry.orderedSets.filter(\.isWarmup)
-        let work = entry.orderedSets.filter { !$0.isWarmup }
-        let warmupsDone = warmups.filter { $0.status != .planned }.count
-        let workDone = work.filter { $0.status != .planned }.count
-        let phase = currentSet?.isWarmup == true ? warmups : work
-        let currentOrdinal = currentSet.flatMap { current in
-            phase.firstIndex { $0.persistentModelID == current.persistentModelID }
-        }.map { $0 + 1 }
-        let phaseName = currentSet?.isWarmup == true ? "Warmup" : "Work set"
-        let position = currentOrdinal.map { "\(phaseName) \($0) of \(phase.count)" }
-            ?? "Work \(workDone) of \(work.count)"
-        return "Warmups \(warmupsDone)/\(warmups.count) · \(position) · \(work.count - workDone) work sets remaining"
+    /// The hero states the current set's reps and load, so its row carries
+    /// only what the hero doesn't: the edit door, tags, and the status menu.
+    private var heroShown: Bool {
+        guard emphasized, currentSet != nil, let type = entry.exercise?.type else { return false }
+        return type != .conditioning && type != .timed
+    }
+
+    /// Role and phase in one readable line under the name. The movement
+    /// group is dropped: "Back Squat" already says squat.
+    private var slotLine: String? {
+        let parts = [entry.programRole?.capitalized, entry.truthfulPhaseLabel].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
     private var restBinding: Binding<Int> {
         Binding(get: { entry.exercise?.defaultRestSeconds ?? 0 },
@@ -1047,20 +1177,10 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
-            if emphasized, let exercise = entry.exercise {
-                HStack(spacing: 8) {
-                    Text(exercise.movementGroup.replacingOccurrences(of: "_", with: " ").uppercased())
-                    if let role = entry.programRole {
-                        Text(role.uppercased())
-                    }
-                    if let phase = entry.truthfulPhaseLabel {
-                        Text(phase.uppercased()).foregroundStyle(Theme.accent)
-                    }
-                }
-                .font(.caption2.bold())
-                .tracking(0.7)
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
+            if emphasized, let slotLine {
+                Text(slotLine)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
             // The approved hierarchy for the lift you're on: the set track,
             // then the current set's position, reps, and load — stated once,
@@ -1068,9 +1188,9 @@ private struct ExerciseSection: View {
             // re-solve; the diagram under the set row stays the loading truth.
             if emphasized, !entry.plannedWorkingSets.isEmpty {
                 SetTrackView(sets: entry.plannedWorkingSets, currentID: currentSet?.persistentModelID)
+                    .accessibilityIdentifier("current-exercise-\(entry.exercise?.name ?? "Exercise")")
             }
-            if emphasized, let current = currentSet,
-               let type = entry.exercise?.type, type != .conditioning, type != .timed {
+            if heroShown, let current = currentSet {
                 let phaseSets = entry.orderedSets.filter { $0.isWarmup == current.isWarmup }
                 CurrentSetHero(
                     set: current,
@@ -1087,40 +1207,16 @@ private struct ExerciseSection: View {
                     .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .accessibilityLabel("Effort target: \(complementaryEffortCue)")
             }
-            if emphasized && !showAllSets {
-                Text(setStateSummary)
-                    .font(.callout.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Set progress, \(setStateSummary)")
-            }
             ForEach(displayedSets) { set in
                 // Warmups and work share the same authored next-action order.
                 let isCurrent = currentSet?.persistentModelID == set.persistentModelID
                 let showLoadout = showAllSets || isCurrent || loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 4) {
-                    if emphasized && isCurrent {
-                        Text("CURRENT SET · NEXT ACTION")
-                            .font(.caption.bold())
-                            .tracking(0.8)
-                            .foregroundStyle(Theme.accent)
-                            .accessibilityIdentifier("current-exercise-\(entry.exercise?.name ?? "Exercise")")
-                    }
                     SetRow(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: effectiveBar, isCurrent: isCurrent,
                            compact: !showAllSets && !isCurrent,
+                           heroCarriesLoad: heroShown && isCurrent,
                            targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onStatusChange: { previous, status in
-                        if status == .planned { onWork(entry) }
-                        else { onResolve(entry) }
-                        // What follows a verdict is the same decision the
-                        // Lock Screen's commands make: a new completion with
-                        // auto-start on and no rest running arms the rest.
-                        guard let session = entry.session else { return }
-                        let decision = WorkoutCommandService.decision(
-                            after: previous, status: status, set: set, entry: entry, session: session,
-                            settings: settings, restRunning: restTimer.isRunning
-                        )
-                        if let seconds = decision.restSeconds {
-                            restTimer.start(seconds: seconds, exerciseName: restTargetName())
-                        }
+                        onVerdict(set, previous, status)
                     }, onRemove: { removeSet(set) })
                     // Discloses where the first working set's ad-hoc history
                     // suggestion came from — only for that set, and only when
@@ -1243,9 +1339,14 @@ private struct ExerciseSection: View {
                     Button {
                         liftInfo = exercise
                     } label: {
+                        // Color.primary, not the hierarchical `.primary`: in a
+                        // section header the latter resolves to the header's
+                        // own gray, which made the lift you're on look disabled.
                         Text(exercise.name)
-                            .font(emphasized ? .title2.bold() : .headline)
-                            .foregroundStyle(.primary)
+                            .font(emphasized ? .title.weight(.heavy) : .headline)
+                            .fontWidth(emphasized ? .condensed : .standard)
+                            .foregroundStyle(Color.primary)
+                            .multilineTextAlignment(.leading)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("exercise-info-\(exercise.name)")
@@ -1590,6 +1691,10 @@ private struct SetRow: View {
     let isCurrent: Bool
     /// Completed/future rows retain every control but give the current set the cockpit.
     let compact: Bool
+    /// The hero above already states this set's reps and load (and the bottom
+    /// bar's Done logs it), so the row drops its duplicate headline and card
+    /// and keeps the edit door, the tags, and the status menu.
+    var heroCarriesLoad = false
     /// The program/track weight this session recommends — the picker anchors here.
     let targetLb: Double?
     var onStatusChange: (_ previous: SetStatus, _ current: SetStatus) -> Void
@@ -1620,7 +1725,7 @@ private struct SetRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout(spacing: 12))
         layout {
-            if isCurrent {
+            if isCurrent && !heroCarriesLoad {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Theme.accent)
                     .frame(width: 3, height: 34)
@@ -1629,70 +1734,39 @@ private struct SetRow: View {
             Button {
                 showDetail = true
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(isCurrent ? "NOW" : (set.status == .completed ? "COMPLETED" : (set.status == .skipped ? "SKIPPED" : "UPCOMING")))
-                        .font(.caption2.bold())
-                        .tracking(0.7)
-                        .foregroundStyle(isCurrent ? Theme.accent : .secondary)
-                    // Cardio uses the shared CadenceCore formatter; lifts show
-                    // weight in the unit used for entry.
-                    Text(isCardio
-                         ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
-                                                 durationSeconds: set.durationSeconds,
-                                                 inclinePercent: set.inclinePercent,
-                                                 loadLb: set.weightLb,
-                                                 flights: set.flights)
-                         : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
-                        .font((isCurrent ? Font.title2 : (compact ? Font.callout : Font.title3)).bold().monospacedDigit())
-                        .foregroundStyle(set.isWarmup ? .secondary : .primary)
-                    HStack(spacing: 6) {
-                        if !isCardio && !isTimed {
-                            Text("× \(repsOrDistance)")
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        } else if isCardio {
-                            Text("tap to log \(cardioHint)")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text("tap to adjust hold time")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                if heroCarriesLoad {
+                    // The edit door for the set the hero states. Every path
+                    // the old card offered (reps, load, unit, body flag,
+                    // delete) is still one tap away in the same sheet.
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "slider.horizontal.3")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Adjust reps or load")
+                                .font(.callout.weight(.semibold))
+                            tagLine(showsWork: false)
                         }
-                        if !isCardio && !isTimed, set.carryYards == nil,
-                           let plannedWeight = set.plannedWeightLb,
-                           let plannedReps = set.plannedReps,
-                           abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
-                            let plannedLoad = set.enteredUnit == .kg
-                                ? "\(Weight.trim(Weight.kg(fromLb: plannedWeight))) kg"
-                                : "\(Weight.trim(plannedWeight)) lb"
-                            Text("planned \(plannedLoad)×\(plannedReps)")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                        if set.isWarmup {
-                            Text(set.prescriptionBlock == .primer ? "primer" : "warmup")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        } else if set.prescriptionBlock == .topSingle {
-                            Text("top single").font(.caption2).foregroundStyle(Theme.accent)
-                        } else if set.prescriptionBlock == .ramp {
-                            Text("ramp").font(.caption2).foregroundStyle(.secondary)
-                        } else if set.prescriptionBlock == .backoff {
-                            Text("back-off").font(.caption2).foregroundStyle(.secondary)
-                        } else if set.prescriptionBlock == .amrap {
-                            // The prescribed reps are a FLOOR on this set. Without
-                            // saying so, 5/3/1's week 3 reads as a plain single and
-                            // the "+" — the whole progression engine — never happens.
-                            Text("AMRAP — \(set.plannedReps ?? set.reps)+ reps, stop when a rep turns grindy")
-                                .font(.caption2).foregroundStyle(Theme.accent)
-                        }
-                        if let reason = set.autoregReason {
-                            Text("↓ \(reason.rawValue)").font(.caption2).foregroundStyle(Theme.warn)
-                        }
-                        if set.bodyFlagSite != nil {
-                            Image(systemName: "bolt.heart.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Theme.hardStop)
-                        }
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isCurrent ? "NOW" : (set.status == .completed ? "COMPLETED" : (set.status == .skipped ? "SKIPPED" : "UPCOMING")))
+                            .font(.caption2.bold())
+                            .tracking(0.7)
+                            .foregroundStyle(isCurrent ? Theme.accent : .secondary)
+                        // Cardio uses the shared CadenceCore formatter; lifts show
+                        // weight in the unit used for entry.
+                        Text(isCardio
+                             ? CardioFormat.setLabel(distanceMiles: set.distanceMiles,
+                                                     durationSeconds: set.durationSeconds,
+                                                     inclinePercent: set.inclinePercent,
+                                                     loadLb: set.weightLb,
+                                                     flights: set.flights)
+                             : (isTimed ? CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0) : weightLabel))
+                            .font((isCurrent ? Font.title2 : (compact ? Font.callout : Font.title3)).bold().monospacedDigit())
+                            .foregroundStyle(set.isWarmup ? .secondary : .primary)
+                        tagLine(showsWork: true)
                     }
                 }
             }
@@ -1711,9 +1785,9 @@ private struct SetRow: View {
             }
             SetVerdictControl(set: set, allowsQuality: !isCardio && !isTimed, onStatusChange: onStatusChange)
         }
-        .padding(isCurrent ? 12 : 0)
+        .padding(isCurrent && !heroCarriesLoad ? 12 : 0)
         .background {
-            if isCurrent {
+            if isCurrent && !heroCarriesLoad {
                 RoundedRectangle(cornerRadius: Theme.cornerRadius)
                     .fill(Theme.accent.opacity(0.10))
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.accent.opacity(0.55)))
@@ -1739,6 +1813,62 @@ private struct SetRow: View {
                 SetDetailSheet(set: set, entry: entry, exercise: exercise, gym: gym, bar: bar,
                                targetLb: targetLb, onDelete: onRemove)
                     .presentationDetents([.large])
+            }
+        }
+    }
+
+    /// Planned-vs-actual, block, warmup, autoreg and body-flag tags. With
+    /// `showsWork` off the reps (and the cardio/hold hints) are left to the
+    /// hero that already states them.
+    @ViewBuilder
+    private func tagLine(showsWork: Bool) -> some View {
+        HStack(spacing: 6) {
+            if showsWork && !isCardio && !isTimed {
+                Text("× \(repsOrDistance)")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            } else if showsWork && isCardio {
+                Text("tap to log \(cardioHint)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else if showsWork {
+                Text("tap to adjust hold time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            if !isCardio && !isTimed, set.carryYards == nil,
+               let plannedWeight = set.plannedWeightLb,
+               let plannedReps = set.plannedReps,
+               abs(plannedWeight - set.weightLb) > 0.001 || plannedReps != set.reps {
+                let plannedLoad = set.enteredUnit == .kg
+                    ? "\(Weight.trim(Weight.kg(fromLb: plannedWeight))) kg"
+                    : "\(Weight.trim(plannedWeight)) lb"
+                Text("planned \(plannedLoad)×\(plannedReps)")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if set.isWarmup {
+                Text(set.prescriptionBlock == .primer ? "primer" : "warmup")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else if set.prescriptionBlock == .topSingle {
+                Text("top single").font(.caption2).foregroundStyle(Theme.accent)
+            } else if set.prescriptionBlock == .ramp {
+                Text("ramp").font(.caption2).foregroundStyle(.secondary)
+            } else if set.prescriptionBlock == .backoff {
+                Text("back-off").font(.caption2).foregroundStyle(.secondary)
+            } else if set.prescriptionBlock == .amrap {
+                // The prescribed reps are a FLOOR on this set. Without
+                // saying so, 5/3/1's week 3 reads as a plain single and
+                // the "+" — the whole progression engine — never happens.
+                Text("AMRAP — \(set.plannedReps ?? set.reps)+ reps, stop when a rep turns grindy")
+                    .font(.caption2).foregroundStyle(Theme.accent)
+            }
+            if let reason = set.autoregReason {
+                Text("↓ \(reason.rawValue)").font(.caption2).foregroundStyle(Theme.warn)
+            }
+            if set.bodyFlagSite != nil {
+                Image(systemName: "bolt.heart.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.hardStop)
             }
         }
     }
@@ -2471,6 +2601,10 @@ private struct SessionBottomBar: View {
     let pausedAt: Date?
     let restLabel: String
     let restSeconds: Int
+    /// The set the thumb logs next; nil for holds, conditioning, or nothing left.
+    let done: SessionDoneAction?
+    /// The short "logged" receipt, while it lasts.
+    let stamp: String?
     let onStart: () -> Void
 
     var body: some View {
@@ -2482,91 +2616,43 @@ private struct SessionBottomBar: View {
                 .scaleEffect(x: 1, y: restTimer.isRunning ? 2 : 1, anchor: .top)
                 .animation(reduceMotion ? nil : .easeOut(duration: Theme.shortMotion), value: restTimer.isRunning)
 
-            // Give the countdown its own row; rest actions below it stay
-            // reachable without shrinking the weight-room glance text.
+            // Utility row: the workout clock (or the explicit start) and the
+            // manual rest. Steel, not accent — they're rarely the next thing.
             HStack(spacing: 10) {
-                // Session stopwatch — always visible, with an icon so it reads
-                // as a running clock.
-                if let sessionStart {
-                    TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
-                        Label(elapsedLabel(at: pausedAt ?? timeline.date),
-                              systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
-                            .font(.callout.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                } else {
-                    Button(action: onStart) {
-                        Label("Start workout", systemImage: "play.fill")
-                            .font(.callout.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .primaryActionStyle()
-                    .accessibilityHint("Begins the workout clock for this session")
-                }
-
+                clock
                 Spacer(minLength: 4)
-
                 if restTimer.isRunning {
-                    VStack(alignment: .trailing, spacing: 0) {
-                        if !restTimer.exerciseName.isEmpty {
-                            Text("resting · \(restTimer.exerciseName)")
-                                .font(.caption2).foregroundStyle(.secondary)
-                                .lineLimit(1).truncationMode(.middle)
-                        }
-                        Button {
-                            restAtOpen = max(0, Int(restTimer.remaining.rounded()))
-                            editingRest = true
-                        } label: {
-                            Text(restTimer.display)
-                                .font(.system(size: 28, weight: .heavy).monospacedDigit())
-                                .foregroundStyle(Theme.accent)
-                                .lineLimit(1)
-                                .frame(minHeight: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Edit remaining rest")
-                        .accessibilityValue(restTimer.display)
-                        .layoutPriority(1)
+                    if !restTimer.exerciseName.isEmpty {
+                        Text("Next · \(restTimer.exerciseName)")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
                     }
-
                 } else {
-                    Button {
-                        restTimer.start(seconds: restSeconds, exerciseName: restLabel)
-                    } label: {
-                        Label("Rest \(mmss(restSeconds))", systemImage: "timer")
-                            .font(.body.weight(.semibold).monospacedDigit())
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .padding(.horizontal, 4)
-                    }
-                    .primaryActionStyle()
+                    restButton
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 10)
-            if restTimer.isRunning {
-                    HStack(spacing: 12) {
-                        Button {
-                            restTimer.isPaused ? restTimer.resume() : restTimer.pause()
-                        } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
-                        Button { restTimer.add(seconds: -60) } label: { Image(systemName: "gobackward.60").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel("Subtract one minute")
-                        Button { restTimer.add(seconds: 60) } label: { Image(systemName: "goforward.60").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel("Add one minute")
-                        Button {
-                            restTimer.stop()
-                        } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
-                            .accessibilityLabel("Skip rest")
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(minHeight: 44)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 10)
+            .padding(.top, 8)
+            .padding(.bottom, primarySlotIsEmpty ? 10 : 6)
+
+            // The primary slot, in the thumb zone. One thing lives here at a
+            // time: the receipt for the set just logged, the rest countdown,
+            // or Done for the set you're on.
+            Group {
+                if let stamp {
+                    stampView(stamp)
+                        .transition(.opacity)
+                } else if restTimer.isRunning {
+                    restSlot
+                        .transition(.opacity)
+                } else if let done {
+                    doneButton(done)
+                        .transition(.opacity)
+                }
             }
+            .padding(.horizontal)
+            .padding(.bottom, primarySlotIsEmpty ? 0 : 10)
         }
         .background(.bar)
         .sheet(isPresented: $editingRest) {
@@ -2576,8 +2662,178 @@ private struct SessionBottomBar: View {
         }
     }
 
+    private var primarySlotIsEmpty: Bool { stamp == nil && !restTimer.isRunning && done == nil }
+
+    @ViewBuilder
+    private var clock: some View {
+        if let sessionStart {
+            // Session stopwatch, with an icon so it reads as a running clock.
+            TimelineView(.periodic(from: sessionStart, by: 1)) { timeline in
+                Label(elapsedLabel(at: pausedAt ?? timeline.date),
+                      systemImage: pausedAt == nil ? "stopwatch" : "pause.fill")
+                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        } else {
+            // Starting the clock is explicit and optional: sets log without
+            // it. With Done on screen it is a secondary control; with nothing
+            // else to do it keeps the primary treatment.
+            Button(action: onStart) {
+                Label("Start workout", systemImage: "play.fill")
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(minHeight: 32)
+            }
+            .modifier(SecondaryUnlessAlone(alone: done == nil))
+            .accessibilityHint("Begins the workout clock for this session")
+        }
+    }
+
+    private var restButton: some View {
+        Button {
+            restTimer.start(seconds: restSeconds, exerciseName: restLabel)
+        } label: {
+            Label("Rest \(mmss(restSeconds))", systemImage: "timer")
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(minHeight: 32)
+        }
+        .modifier(SecondaryUnlessAlone(alone: done == nil))
+    }
+
+    private func doneButton(_ done: SessionDoneAction) -> some View {
+        Button(action: done.perform) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    doneWord
+                    Spacer(minLength: 8)
+                    doneWork(done)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    doneWord
+                    doneWork(done)
+                }
+            }
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .primaryActionStyle()
+        .controlSize(.large)
+        .accessibilityIdentifier("done-set")
+        .accessibilityLabel("Done, \(done.position)")
+        .accessibilityValue(done.spoken)
+        .accessibilityHint("Logs the set as performed. Adjust reps or load on the set above first if they changed.")
+    }
+
+    private var doneWord: some View {
+        Label("Done", systemImage: "checkmark")
+            .font(.title3.weight(.black))
+            .fontWidth(.condensed)
+            .lineLimit(1)
+    }
+
+    private func doneWork(_ done: SessionDoneAction) -> some View {
+        Text(done.work)
+            .font(.title2.weight(.heavy).monospacedDigit())
+            .fontWidth(.condensed)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+    }
+
+    /// The set just logged, stamped in steel where Done was. It holds no
+    /// action, so a double tap on Done can't log the next set by accident;
+    /// undo stays on the set row's status control, as before.
+    private func stampView(_ text: String) -> some View {
+        Label(text, systemImage: "checkmark.seal.fill")
+            .font(.title3.weight(.heavy).monospacedDigit())
+            .fontWidth(.condensed)
+            .lineLimit(2)
+            .minimumScaleFactor(0.7)
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
+            .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.hairline))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("set-logged-stamp")
+    }
+
+    /// Rest owns the thumb zone while it runs: a countdown big enough to read
+    /// from the bench, tap to set it exactly, and the existing adjustments.
+    private var restSlot: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                countdown
+                Spacer(minLength: 4)
+                restControls
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                countdown
+                restControls
+            }
+        }
+        .frame(minHeight: Theme.bigTap)
+    }
+
+    private var countdown: some View {
+        Button {
+            restAtOpen = max(0, Int(restTimer.remaining.rounded()))
+            editingRest = true
+        } label: {
+            Text(restTimer.display)
+                .font(.largeTitle.weight(.black).monospacedDigit())
+                .fontWidth(.condensed)
+                .foregroundStyle(Theme.accent)
+                .lineLimit(1)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit remaining rest")
+        .accessibilityValue(restTimer.display)
+    }
+
+    private var restControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                restTimer.isPaused ? restTimer.resume() : restTimer.pause()
+            } label: { Image(systemName: restTimer.isPaused ? "play.fill" : "pause.fill").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel(restTimer.isPaused ? "Resume rest" : "Pause rest")
+            Button { restTimer.add(seconds: -60) } label: { Image(systemName: "gobackward.60").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Subtract one minute")
+            Button { restTimer.add(seconds: 60) } label: { Image(systemName: "goforward.60").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Add one minute")
+            Button {
+                restTimer.stop()
+            } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Skip rest")
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.primary)
+    }
+
     private func elapsedLabel(at date: Date) -> String {
         mmss(max(0, Int(date.timeIntervalSince(sessionStart ?? date))))
+    }
+}
+
+/// Accent is for the next act. A bar control that isn't it (Start workout,
+/// manual rest while Done is on screen) wears steel instead.
+private struct SecondaryUnlessAlone: ViewModifier {
+    let alone: Bool
+    func body(content: Content) -> some View {
+        if alone {
+            content.primaryActionStyle()
+        } else {
+            content
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+                .tint(Color.primary)
+        }
     }
 }
 
@@ -2676,18 +2932,25 @@ private struct SessionSummarySheet: View {
 /// The focused exercise's set track: one segment per working set, the current
 /// one carrying the accent, resolved ones quieter. Web twin: `.set-track`.
 private struct SetTrackView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let sets: [SetEntry]
     let currentID: PersistentIdentifier?
+    /// The segment that just turned complete gets a brief chalk stamp.
+    @State private var stamped: PersistentIdentifier?
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(Array(sets.enumerated()), id: \.element.persistentModelID) { index, set in
                 let isCurrent = set.persistentModelID == currentID
                 let isDone = !isCurrent && set.status != .planned
+                let isStamped = stamped == set.persistentModelID
                 VStack(alignment: .leading, spacing: 6) {
+                    // scaleEffect, not frame: the stamp must not move the
+                    // track or the hero under it (#185).
                     Rectangle()
-                        .fill(isCurrent ? Theme.accent : isDone ? Color.primary.opacity(0.45) : Theme.hairline)
+                        .fill(isCurrent ? Theme.accent : isStamped ? Color.primary : isDone ? Color.primary.opacity(0.45) : Theme.hairline)
                         .frame(height: 3)
+                        .scaleEffect(x: 1, y: isStamped ? 2.4 : 1, anchor: .bottom)
                     Text(isDone ? "\(set.status == .completed ? "✓" : "−") Set \(index + 1)" : isCurrent ? "Set \(index + 1) · now" : "Set \(index + 1)")
                         .font(isCurrent ? .footnote.bold() : .footnote.weight(.semibold))
                         .foregroundStyle(isCurrent ? .primary : .secondary)
@@ -2701,6 +2964,18 @@ private struct SetTrackView: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Working sets")
+        .onChange(of: sets.map(\.status)) { old, new in
+            // Only a fresh completion stamps; undo, skip and edits don't.
+            guard !reduceMotion, old.count == new.count,
+                  let index = new.indices.first(where: { new[$0] == .completed && old[$0] != .completed })
+            else { return }
+            let id = sets[index].persistentModelID
+            withAnimation(.spring(duration: 0.18, bounce: 0.4)) { stamped = id }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                withAnimation(.easeOut(duration: 0.25)) { if stamped == id { stamped = nil } }
+            }
+        }
     }
 }
 
@@ -2710,26 +2985,33 @@ private struct CurrentSetHero: View {
     let set: SetEntry
     let ordinal: Int
     let total: Int
-    /// The dominant numeral keeps its proportion and still follows Dynamic Type.
-    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 44
+    /// The dominant numeral keeps its proportion and still follows Dynamic
+    /// Type. Condensed width buys the extra size without widening "138.7".
+    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 60
+    @ScaledMetric(relativeTo: .title) private var repsSize: CGFloat = 34
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
+            // Kept even though the track above marks the set: warmups aren't
+            // on the track, and the line must not come and go between a
+            // warmup and the first work set or the hero would jump (#185).
             Text("\(set.isWarmup ? "WARMUP" : "WORKING SET") \(ordinal) OF \(total)")
-                .font(.caption.bold())
-                .tracking(0.8)
-                .foregroundStyle(Theme.accent)
+                .font(.footnote.weight(.heavy))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 // [INV-CARRY-LOGS-DISTANCE] A distance carry states its yards.
                 if let yards = set.carryYards {
                     Text(Weight.trim(yards))
-                        .font(.title2.bold().monospacedDigit())
+                        .font(.system(size: repsSize, weight: .heavy).width(.condensed).monospacedDigit())
                     Text(set.isPerSide ? "yd / side" : "yd")
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(.secondary)
                 } else {
                     Text("\(set.reps)")
-                        .font(.title2.bold().monospacedDigit())
+                        .font(.system(size: repsSize, weight: .heavy).width(.condensed).monospacedDigit())
                     Text(set.isPerSide ? "reps / side" : "reps")
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 if set.prescriptionBlock == .amrap {
@@ -2741,19 +3023,19 @@ private struct CurrentSetHero: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if set.weightLb > 0 {
                     Text(Weight.trim(set.weightLb))
-                        .font(.system(size: numeralSize, weight: .black, design: .rounded).monospacedDigit())
+                        .font(.system(size: numeralSize, weight: .black).width(.condensed).monospacedDigit())
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                     Text("lb")
-                        .font(.title3)
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(Weight.trim(Weight.kg(fromLb: set.weightLb)))
-                        .font(.title.weight(.semibold).monospacedDigit())
+                    // The conversion rides along as a footnote to the number,
+                    // not a rival to it. (No setting governs the hero's pair;
+                    // its size, not its presence, is what changed.)
+                    Text("\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg")
+                        .font(.body.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
-                    Text("kg")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .padding(.leading, 8)
                     // The basis on the number itself: "50 lb · 22.7 kg each".
                     // Without it a per-hand load reads as the total.
                     if !set.loadBasis.shortSuffix.isEmpty {
@@ -2763,13 +3045,13 @@ private struct CurrentSetHero: View {
                     }
                 } else {
                     Text("BW")
-                        .font(.system(size: numeralSize, weight: .black, design: .rounded))
+                        .font(.system(size: numeralSize, weight: .black).width(.condensed))
                 }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(set.weightLb > 0 ? "Set load \(LoadSemantics.heroLoadLabel(weightLb: set.weightLb, basis: set.loadBasis))" : "Bodyweight")
             Text(set.loadBasis == .totalBar ? "Set load · bar included" : "Set load · \(set.loadBasis.label)")
-                .font(.caption)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)

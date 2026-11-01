@@ -30,7 +30,12 @@ final class VisualProofUITests: XCTestCase {
     func test02CurrentSessionAndExactPlateStack() {
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["CURRENT SET · NEXT ACTION"].waitForExistence(timeout: 3))
+        // The next action is the thumb-zone Done for the set the hero shows,
+        // not a mid-screen "CURRENT SET · NEXT ACTION" card (retired).
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertEqual(done.label, "Done, working set 2 of 3")
+        XCTAssertGreaterThanOrEqual(done.frame.height, 56, "Done is at least Theme.bigTap tall")
         capture("after-03-current-session-iphone")
         let inspect = app.buttons["expand-loaded-bar"].firstMatch
         let window = app.windows.firstMatch.frame
@@ -237,6 +242,26 @@ final class VisualProofUITests: XCTestCase {
         app.navigationBars["Hold timer"].buttons["Close"].tap()
         app.buttons["Discard attempt"].tap()
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Discard keeps the set planned")
+    }
+
+    /// The thumb-zone Done and the hero at the largest accessibility size:
+    /// Done stays reachable and labelled, and logging from it still works.
+    func test22SessionDoneAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertTrue(done.isHittable)
+        capture("after-22-session-done-accessibility-iphone")
+        done.tap()
+        XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
+        capture("after-22-session-logged-accessibility-iphone")
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        XCTAssertEqual(done.label, "Done, working set 3 of 3")
     }
 
     private func allowHoldNotificationsIfPrompted() {
@@ -451,11 +476,17 @@ final class VisualProofUITests: XCTestCase {
         let heroBefore = hero.frame
         capture("after-13-session-before-set-iphone")
 
-        let status = app.buttons["Set status"].firstMatch
-        XCTAssertTrue(status.waitForExistence(timeout: 3))
-        status.tap()
+        // Logged from the primary path: the bottom bar's Done. (test07 still
+        // logs through the row's status control, so both paths stay proven.)
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        done.tap()
         XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        // The receipt takes Done's slot briefly; the screenshot shows it.
+        XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
         capture("after-13-session-after-set-iphone")
+        XCTAssertTrue(element("set-logged-stamp").waitForNonExistence(timeout: 4), "the receipt lapses on its own")
+        XCTAssertEqual(done.label, "Done, working set 3 of 3")
         XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
         XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")

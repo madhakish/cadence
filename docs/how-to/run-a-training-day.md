@@ -46,6 +46,14 @@ lifts appear under "Next up" with their own suggestions.
   already completed this session on the same movement with a bar — keeping
   at least the last two — whenever its ramp refreshes after a bar, gym, or
   working-weight change.
+- **Log with Done.** On iOS the bottom bar's **Done** names the set you're
+  on (for example *Done · 6 × 138.7 lb*) and logs it exactly as shown. Change
+  reps or load first with **Adjust reps or load** under the big numbers; the
+  set's status control there still completes, skips, or grades it, and
+  touching and holding it opens quality and reps-in-reserve. A short
+  *Set 2 logged* receipt, with a haptic when haptics are on, confirms the
+  write; then a running rest takes Done's place. Timed holds and
+  conditioning keep their own start/log controls in the set row.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.
@@ -58,7 +66,8 @@ lifts appear under "Next up" with their own suggestions.
 - **Opening a session is not starting it.** The logger opens showing
   **not started** so you can read the plan, check loadouts, or reopen a
   session without logging time you didn't train. **Start workout** — in
-  the bottom bar or the session menu — begins the clock. If you start one
+  the bottom bar or the session menu — begins the clock. Logging sets does
+  not need it. If you start one
   by accident, **Reset to not started** puts it back; the plan and any
   logged sets are untouched. A session that was never started banks
   without writing a Health workout, since it has no honest duration.
