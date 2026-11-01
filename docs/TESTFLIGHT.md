@@ -61,12 +61,11 @@ Two quick browser steps (more reliable than doing it headless):
    bundle id above, SKU `cadence`, your primary language. Create.
 
 The **rest Live Activity** ships in an embedded widget extension with its own
-App ID, `com.madhakish.Cadence.Widgets`. `fastlane match` (while
-`MATCH_READONLY=false` during first-run provisioning) will register it and mint
-its profile on the next CI run — but if your App Store Connect API key can't
-create identifiers, register it by hand too:
+App ID, `com.madhakish.Cadence.Widgets`. Register it by hand (match mints
+profiles but never registers App IDs):
 **Identifiers → + → App IDs → App**, explicit Bundle ID
-`com.madhakish.Cadence.Widgets`, no extra capabilities. (No separate ASC *app
+`com.madhakish.Cadence.Widgets`, no extra capabilities. A provisioning run
+(`MATCH_READONLY=false`) then mints its profile. (No separate ASC *app
 record* — the extension ships inside the Cadence app.)
 
 The **Apple Watch app** ships embedded in the iPhone app with its own App ID,
@@ -86,7 +85,8 @@ repository preflight. In about a minute it proves what the signed build needs:
 the certs token can read the certs repo (and write to it when
 `MATCH_READONLY=false`), every App ID that ships in the app has an App Store
 profile there, the App Store Connect key is accepted, Apple is not blocking the
-account on an unaccepted agreement, and every App ID is registered. The signed
+account on an unaccepted agreement, and every App ID is registered (match
+cannot register one). The signed
 build and the `App build (macOS)` aggregate wait on it, so a broken token, a
 missing profile or a pending Program License Agreement fails the PR, not a
 release run 25 minutes in. Fork and Dependabot PRs receive no secrets and
@@ -102,8 +102,11 @@ before `setup_ci` forces it to true.
 
 To add a target with its own App ID (an extension, a watch app):
 
-1. Add the target to `project.yml` and its App ID to the Fastfile and
-   Matchfile. `make check` fails until all three agree.
+1. Register the App ID in the developer portal (**Identifiers → +**, explicit
+   bundle ID, its capabilities). match cannot register App IDs; it stops with
+   "Couldn't find bundle identifier". Then add the target to `project.yml` and
+   its App ID to the Fastfile and Matchfile. `make check` fails until all three
+   agree.
 2. Open the PR. **Signing preflight** fails with "no App Store provisioning
    profile for …". Do not merge yet.
 3. Set the repository variable `MATCH_READONLY=false` and replace
@@ -112,8 +115,7 @@ To add a target with its own App ID (an extension, a watch app):
    the PR checks: the preflight passes in provisioning mode and confirms the
    token can push a branch and open pull requests.
 4. Merge. The main run starts a `match/provision-<run>` branch from the certs
-   repo's `main`, `match` registers the App ID if needed and writes the new
-   profile there, and the lane lands it on `main` by pull request (rebase
+   repo's `main`, `match` writes the new profile there, and the lane lands it on `main` by pull request (rebase
    merge), then fails the run if any profile is still missing. Nothing pushes
    to the protected `main` directly.
 5. Once `make signing` passes, delete `MATCH_READONLY` and restore the

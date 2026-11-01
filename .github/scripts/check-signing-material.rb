@@ -11,8 +11,8 @@
 #    was read-only).
 # 3. The App Store Connect key works, and Apple is not blocking the account on
 #    an unaccepted agreement (a new Program License Agreement blocked match).
-# 4. Every shipped App ID is registered in the developer portal, or the run
-#    may register it.
+# 4. Every shipped App ID is registered in the developer portal (match cannot
+#    register one, even when provisioning).
 #
 # Never prints a credential. Env (CI passes the same secrets as store-build):
 #   MATCH_GIT_URL, MATCH_GIT_BASIC_AUTHORIZATION, MATCH_GIT_BRANCH (default: the Matchfile git_branch),
@@ -182,13 +182,11 @@ class SigningPreflight
                         "Check ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_CONTENT and the key's App Manager role"
     end
     registered = (body["data"] || []).map { |d| d.dig("attributes", "identifier") }
+    # match never registers App IDs, even when provisioning: it stops with
+    # "Couldn't find bundle identifier" (match/spaceship_ensure.rb).
     (@app_ids - registered).each do |id|
-      if @readonly
-        @errors << "App ID #{id} is not registered in the developer portal. Register it, or let one provisioning " \
-                   "run (MATCH_READONLY=false) register it (docs/TESTFLIGHT.md)"
-      else
-        @notices << "App ID #{id} is not registered yet; this provisioning run will register it"
-      end
+      @errors << "App ID #{id} is not registered in the developer portal, and match cannot register it. " \
+                 "Register it under Certificates, IDs & Profiles > Identifiers (docs/TESTFLIGHT.md)"
     end
   end
 

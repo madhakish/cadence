@@ -140,6 +140,10 @@ expect_fail "revoked App Store Connect key" bad-key true "App Store Connect key 
 write_fixture unregistered 200 false "$all_paths" 200 \
   "$(bundle_ids '["com.madhakish.Cadence","com.madhakish.Cadence.Widgets"]')"
 expect_fail "watch App ID not registered" unregistered true "App ID com.madhakish.Cadence.watchkitapp is not registered"
+# match cannot register an App ID even on a provisioning run.
+write_fixture unregistered-provision 200 true "$no_watch_paths" 200 \
+  "$(bundle_ids '["com.madhakish.Cadence","com.madhakish.Cadence.Widgets"]')"
+expect_fail "unregistered App ID on a provisioning run" unregistered-provision false "match cannot register it"
 
 # No credentials at all: a notice on fork/Dependabot PRs, a failure elsewhere.
 out="$(env -i PATH="$PATH" HOME="$HOME" SIGNING_PREFLIGHT=optional ruby "$scripts/check-signing-material.rb" 2>&1)" \
