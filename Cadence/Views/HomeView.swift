@@ -203,7 +203,7 @@ struct HomeView: View {
         let when = Calendar.current.isDateInToday(session.date)
             ? session.date.formatted(date: .omitted, time: .shortened)
             : session.date.formatted(date: .abbreviated, time: .shortened)
-        return ["Started \(when)", session.programName].compactMap { $0 }.joined(separator: " · ")
+        return "Started \(when)"
     }
 
     /// Heaviest prescribed set as it stands now (edits included) and how many
@@ -271,8 +271,8 @@ struct HomeView: View {
                 .fontWidth(.condensed)
                 .accessibilityAddTraits(.isHeader)
             Text(startedLabel(open))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(HeroInk.steel)
         }
         .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
         .heroBand(topBar == nil ? .edge : .none)
@@ -354,9 +354,8 @@ struct HomeView: View {
             .accessibilityLabel("Preview \(name)")
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("today-hero-preview")
-            Text("\(program.name) · Cycle \(program.cycleNumber)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            // Program and cycle are the section header right below the
+            // band; the picture earned the line this used to take.
         }
         .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
         .heroBand(topBar == nil ? .edge : .none)
@@ -395,7 +394,7 @@ struct HomeView: View {
             if !day.accessories.isEmpty {
                 Text("+ " + day.accessories.map(\.exerciseName).joined(separator: ", "))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HeroInk.steel)
                     .padding(.vertical, 8)
                     .heroBand(.rule)
             }
@@ -403,7 +402,7 @@ struct HomeView: View {
         if let note = spacingNote(program) {
             Text(note)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HeroInk.steel)
                 .padding(.vertical, 8)
                 .heroBand(.rule)
         }
@@ -1095,6 +1094,13 @@ private struct ProgramSwitcherView: View {
     }
 }
 
+/// Secondary ink on the steel band. System secondary is a translucent grey
+/// that the audit measured under 4.5:1 against brushed steel; this is the
+/// same role as a solid colour that clears it in both appearances.
+private enum HeroInk {
+    static let steel = Color(lightHex: 0x454A51, darkHex: 0xB4B9C0)
+}
+
 /// The hero's top line: what state Today is in. A small accent tick marks a
 /// running clock — the one thing on the band that is literally "now".
 private struct HeroKicker: View {
@@ -1110,7 +1116,7 @@ private struct HeroKicker: View {
                 .font(.footnote.weight(.bold))
                 .tracking(1.4)
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HeroInk.steel)
         }
     }
 }
@@ -1238,7 +1244,7 @@ private struct HeroLiftLine<Detail: View>: View {
                 if let scheme {
                     Text(scheme)
                         .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HeroInk.steel)
                 }
             }
             let stack = plates.flatMap { $0.solution.loadout.perSide.isEmpty ? nil : $0 }
@@ -1262,7 +1268,7 @@ private struct HeroLiftLine<Detail: View>: View {
 /// luminance is only a mask, so the lines read as cut metal on any theme.
 private struct EngravedGorilla: View {
     var body: some View {
-        Color(lightHex: 0x4A4F56, darkHex: 0xA6ABB2)
+        HeroInk.steel
             .mask {
                 Image("VitruvianFront")
                     .resizable()
