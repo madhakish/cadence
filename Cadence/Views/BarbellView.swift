@@ -434,6 +434,7 @@ struct LoadoutSummaryView: View {
     let loadout: Loadout
     var plateStyle: PlateVisualStyle = .steel
     var plateTheme: PlateThemeID = .custom
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// The achieved total keeps its display proportion and follows Dynamic Type.
     @ScaledMetric(relativeTo: .largeTitle) private var totalSize: CGFloat = 40
 
@@ -470,33 +471,43 @@ struct LoadoutSummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
+            let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(alignment: .top))
+            summaryLayout {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("ACHIEVED WITH BAR")
                         .font(.caption.bold())
                         .tracking(0.8)
                         .foregroundStyle(.secondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(Weight.trim(loadout.totalLb))
-                            .font(.figure(scaled: totalSize))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-                        Text("lb")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                        Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
-                            .font(.figure(.title2))
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 4)
-                        Text("kg")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    let totalsLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 10))
+                    totalsLayout {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(Weight.trim(loadout.totalLb))
+                                .font(.figure(scaled: totalSize))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                            Text("lb")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
+                                .font(.figure(.title2))
+                                .foregroundStyle(.secondary)
+                            Text("kg")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Spacer(minLength: 8)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                 if let requestedLb, let differenceLb {
                     let sign = differenceLb > 0.005 ? "+" : ""
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
                         Text("\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb")
                             .font(.callout.bold().monospacedDigit())
                             .foregroundStyle(abs(differenceLb) > 0.01 ? Theme.warn : .secondary)
@@ -508,22 +519,28 @@ struct LoadoutSummaryView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
+            .accessibilityIdentifier("loadout-achieved-total")
 
             Divider()
 
-            HStack(alignment: .firstTextBaseline) {
+            let equipmentLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+            equipmentLayout {
                 Text(loadout.bar.label)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                 Text(perSideText)
                     .font(.body.bold().monospacedDigit())
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
             }
             .accessibilityElement(children: .combine)
 
             if !cells.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize
+                          ? [GridItem(.flexible())]
+                          : [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
                     ForEach(cells) { cell in
                         LoadoutCell(cell: cell, style: plateStyle, theme: plateTheme)
                     }

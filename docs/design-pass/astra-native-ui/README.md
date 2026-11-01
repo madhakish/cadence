@@ -50,6 +50,9 @@ The first calculator presentation change puts the existing achieved-load
 summary before the equipment in target and reverse modes. Requested-target
 entry is quieter, and pinned headers have an opaque canvas. Solver results,
 reverse-mode stack order and all readout content remain unchanged.
+At accessibility text sizes, the shared load summary stacks its pound and
+kilogram totals, deviation and equipment details instead of squeezing them
+into horizontal rows. Plate-family cells use one column at those sizes.
 
 This PR begins with reviewable brand exports and calculator hierarchy.
 Selected runtime assets, further screen presentation and native visual proof

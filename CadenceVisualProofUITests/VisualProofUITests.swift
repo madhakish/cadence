@@ -560,6 +560,12 @@ final class VisualProofUITests: XCTestCase {
             units.buttons["kg"].tap()
             XCTAssertTrue(units.buttons["kg"].isSelected)
             XCTAssertEqual(target.value as? String, "139", "switching units preserves the entered number")
+            if name == "accessibility" {
+                let achieved = element("loadout-achieved-total")
+                revealRootListRows([achieved], viewport: inputViewport)
+                XCTAssertTrue(achieved.label.contains("Achieved total, bar included"))
+                capture("after-14-calculator-achieved-accessibility-iphone")
+            }
         }
     }
 
