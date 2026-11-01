@@ -18,6 +18,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(RestTimer.self) private var restTimer
     @Environment(WorkoutClock.self) private var workoutClock
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var tracks: [LiftTrack]
     @Query private var programs: [Program]
     @State private var showProgramSwitcher = false
@@ -248,7 +249,7 @@ struct HomeView: View {
         let tracking = workoutClock.isTracking(sessionID: open.id)
         let title = sessionTitle(open)
         let gym = gyms.first { $0.id == open.gymID } ?? defaultGym
-        let topBar = open.orderedExercises.lazy.compactMap { sessionLoadedBar($0, gym: gym) }.first
+        let topBar = actionFirst ? nil : open.orderedExercises.lazy.compactMap { sessionLoadedBar($0, gym: gym) }.first
         if let topBar { HeroBarImage(loaded: topBar) }
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
@@ -270,12 +271,16 @@ struct HomeView: View {
                 .font(.largeTitle.weight(.black))
                 .fontWidth(.condensed)
                 .accessibilityAddTraits(.isHeader)
+            // Semibold, like the set counts: the audit measured the thinner
+            // weight's anti-aliased strokes against the grain and failed it
+            // intermittently.
             Text(startedLabel(open))
-                .font(.subheadline.weight(.medium))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(HeroInk.steel)
         }
         .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
         .heroBand(topBar == nil ? .edge : .none)
+        if actionFirst { resumeAction(open, title: title, closing: false) }
         ForEach(open.orderedExercises) { entry in
             let name = entry.exercise?.name ?? "Exercise"
             let line = sessionLine(entry)
@@ -288,6 +293,15 @@ struct HomeView: View {
             .accessibilityHint("Shows exercise history, program cycle, and settings")
             .heroBand(.rule)
         }
+        if !actionFirst { resumeAction(open, title: title, closing: true) }
+    }
+
+    /// At accessibility text sizes the hero's picture gives way and the
+    /// primary action moves up under the day name: the lift rows alone are
+    /// taller than a phone there, and Start/Resume must never need a scroll.
+    private var actionFirst: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    private func resumeAction(_ open: WorkoutSession, title: String, closing: Bool) -> some View {
         HStack(spacing: 8) {
             Button { activeSession = open } label: {
                 HeroActionLabel(title: "Resume workout")
@@ -318,15 +332,15 @@ struct HomeView: View {
             .accessibilityIdentifier("session-actions")
         }
         .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, 12).padding(.bottom, 20)
-        .heroBand(.none, bottomEdge: true)
+        .padding(.top, 12).padding(.bottom, closing ? 20 : 14)
+        .heroBand(.none, bottomEdge: closing)
     }
 
     @ViewBuilder
     private func startHero(_ program: Program, _ day: ProgramDay) -> some View {
         let name = workoutName(program, day)
         // Today's top lift, loaded: the day's first barbell slot at its plan.
-        let topBar: LoadedBar? = program.tfhPolicyData != nil ? nil : day.orderedLifts.lazy.compactMap { planLoadedBar(program, $0) }.first
+        let topBar: LoadedBar? = actionFirst || program.tfhPolicyData != nil ? nil : day.orderedLifts.lazy.compactMap { planLoadedBar(program, $0) }.first
         if let topBar { HeroBarImage(loaded: topBar) }
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
@@ -359,6 +373,7 @@ struct HomeView: View {
         }
         .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
         .heroBand(topBar == nil ? .edge : .none)
+        if actionFirst { startAction(program, day, name: name, closing: false) }
         if program.tfhPolicyData != nil {
             ForEach(day.orderedLifts) { lift in
                 TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
@@ -406,13 +421,17 @@ struct HomeView: View {
                 .padding(.vertical, 8)
                 .heroBand(.rule)
         }
+        if !actionFirst { startAction(program, day, name: name, closing: true) }
+    }
+
+    private func startAction(_ program: Program, _ day: ProgramDay, name: String, closing: Bool) -> some View {
         Button { startProgramDay(program, day) } label: {
             HeroActionLabel(title: "Start \(name)")
         }
         .primaryActionStyle()
         .accessibilityIdentifier("start-today")
-        .padding(.top, 12).padding(.bottom, 20)
-        .heroBand(.none, bottomEdge: true)
+        .padding(.top, 12).padding(.bottom, closing ? 20 : 14)
+        .heroBand(.none, bottomEdge: closing)
     }
 
     /// One day of the current rotation. Only the next day is a control (its

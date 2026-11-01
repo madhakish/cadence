@@ -18,6 +18,8 @@ final class VisualProofUITests: XCTestCase {
 
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
+        // The primary action is on the first screen, above the tab bar.
+        assertOnFirstScreen(app.buttons["resume-session"])
         // The membership tag stays one tap from launch (product rule), as a
         // labelled header control rather than a full-width accent block.
         XCTAssertTrue(app.buttons["gym-tag"].isHittable)
@@ -53,10 +55,13 @@ final class VisualProofUITests: XCTestCase {
 
         app.terminate()
         let category = app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName")!
-        app.launchArguments[category + 1] = "UICTContentSizeCategoryAccessibilityL"
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryAccessibilityXXXL"
         app.launch()
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         capture("after-01c-home-accessibility-iphone")
+        // At the largest text size Resume still lands on the first screen
+        // without a scroll; the hero's picture gives way, not the action.
+        assertOnFirstScreen(app.buttons["resume-session"])
         let program = app.buttons["preview-program-day"]
         for _ in 0..<4 where !program.isHittable { app.swipeUp() }
         XCTAssertTrue(program.isHittable)
@@ -200,6 +205,15 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<6 { app.swipeUp() }
         capture("after-11-session-end-clears-plate-button-iphone")
         XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
+    }
+
+    /// Exists, hittable and wholly above the tab bar, without any scrolling.
+    private func assertOnFirstScreen(_ control: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(control.waitForExistence(timeout: 5), "\(control) never materialised", file: file, line: line)
+        XCTAssertTrue(control.isHittable, "\(control) is not hittable", file: file, line: line)
+        let tabBar = app.tabBars.firstMatch.frame
+        XCTAssertLessThanOrEqual(control.frame.maxY, tabBar.minY,
+                                 "\(control.frame) ends under the tab bar at \(tabBar.minY)", file: file, line: line)
     }
 
     private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
