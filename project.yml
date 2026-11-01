@@ -40,7 +40,11 @@ targets:
         # export-exempt. Declaring this clears the "Missing Compliance" hold on
         # every TestFlight/App Store upload (no per-build manual answer).
         ITSAppUsesNonExemptEncryption: false
-        UILaunchScreen: {}
+        # The gorilla on the Foundry canvas. LaunchSplashView draws the same
+        # two assets at the same spot, so the cold open starts on this frame.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchMark
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # No forced UIUserInterfaceStyle: the theme picker drives appearance via
