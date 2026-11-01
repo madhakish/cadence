@@ -269,6 +269,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(app.buttons["5 minutes"].isSelected)
         app.navigationBars.buttons["Cancel"].firstMatch.tap()
         XCTAssertEqual(duration.value as? String, "5 minutes", "Cancel writes nothing")
+        assertExactDurationEntry(duration)
 
         let sound = app.switches["Completion sound"]
         panIntoView(sound)
@@ -326,7 +327,67 @@ final class VisualProofUITests: XCTestCase {
         let zero = element("duration-zero")
         for _ in 0..<4 where !zero.isHittable { app.swipeUp() }
         XCTAssertTrue(zero.isHittable, "the Off choice is reachable at accessibility sizes")
+        let exact = app.staticTexts["Enter exact duration"]
+        panIntoView(exact)
+        exact.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        for component in ["hours", "minutes", "seconds"] {
+            let field = app.textFields["duration-\(component)"]
+            panUntilHittable(field)
+            XCTAssertGreaterThanOrEqual(field.frame.minX, 0)
+            XCTAssertLessThanOrEqual(field.frame.maxX, app.windows.firstMatch.frame.maxX,
+                                     "Exact-entry fields must fit at accessibility sizes")
+        }
+        capture("duration-exact-entry-accessibility-iphone")
         app.navigationBars.buttons["Cancel"].firstMatch.tap()
+    }
+
+    /// #372: presets are shortcuts; every second remains directly editable.
+    private func assertExactDurationEntry(_ duration: XCUIElement) {
+        duration.tap()
+        openDisclosure("Enter exact duration")
+        setDurationField("minutes", to: "1")
+        setDurationField("seconds", to: "37")
+        app.buttons["duration-keyboard-done"].tap()
+        let readout = element("duration-readout")
+        XCTAssertEqual(readout.value as? String, "1 minute, 37 seconds")
+        capture("duration-exact-entry-iphone")
+        app.navigationBars.buttons["Save"].firstMatch.tap()
+        XCTAssertEqual(duration.value as? String, "1 minute, 37 seconds")
+
+        duration.tap()
+        XCTAssertEqual(readout.value as? String, "1 minute, 37 seconds", "Exact seconds survive reopening")
+        app.buttons["Add 15 seconds"].tap()
+        XCTAssertEqual(readout.value as? String, "1 minute, 45 seconds")
+        openDisclosure("Enter exact duration")
+        setDurationField("seconds", to: "37")
+        XCTAssertEqual(readout.value as? String, "1 minute, 37 seconds", "Exact entry can restore a value after stepping")
+
+        setDurationField("hours", to: "1")
+        setDurationField("minutes", to: "0")
+        setDurationField("seconds", to: "1")
+        XCTAssertFalse(app.navigationBars.buttons["Save"].firstMatch.isEnabled, "60:01 cannot be saved")
+        XCTAssertTrue(element("duration-entry-error").exists)
+        setDurationField("seconds", to: "0")
+        XCTAssertTrue(app.navigationBars.buttons["Save"].firstMatch.isEnabled, "60:00 remains valid")
+
+        setDurationField("hours", to: "0")
+        setDurationField("seconds", to: "90")
+        XCTAssertEqual(readout.value as? String, "1 minute, 30 seconds", "Extra seconds normalize through the existing parser")
+        setDurationField("seconds", to: "0")
+        XCTAssertEqual(readout.value as? String, "Off", "Exact zero keeps the caller's zero meaning")
+        app.navigationBars.buttons["Cancel"].firstMatch.tap()
+        XCTAssertEqual(duration.value as? String, "1 minute, 37 seconds", "Cancel discards exact-entry edits too")
+    }
+
+    private func setDurationField(_ component: String, to value: String) {
+        let field = app.textFields["duration-\(component)"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        panUntilHittable(field)
+        let old = field.value as? String ?? ""
+        // The trailing edge places the caret after the right-aligned value.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + value)
+        XCTAssertEqual(field.value as? String, value, "Exact-entry typing must replace the complete component")
     }
 
     private func panUntilHittable(_ target: XCUIElement) {
