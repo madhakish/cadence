@@ -42,10 +42,15 @@ authenticates via `MATCH_GIT_BASIC_AUTHORIZATION` =
 trailing one `base64` emits:
 `printf 'madhakish:github_pat_xxx' | base64 | tr -d '\n'`
 
+The certs repo's default branch is `main` (the Matchfile sets
+`git_branch("main")`; match would otherwise default to `master`). Protect it:
+changes land only by pull request, with linear history.
+
 For the **first run only** (when `match` must *create* the cert + profiles) you
-need write access: temporarily use a Contents **read-and-write** fine-grained
-PAT and set the repo variable `MATCH_READONLY=false`. Once the certs exist in
-the repo, delete that variable and swap the secret back to a read-only PAT.
+need write access: temporarily use a fine-grained PAT with Contents and Pull
+requests **read-and-write** and set the repo variable `MATCH_READONLY=false`.
+Once the certs exist in the repo, delete that variable and swap the secret back
+to a read-only PAT.
 
 ### 4. Register the App ID + app record (one-time, ~3 min)
 Two quick browser steps (more reliable than doing it headless):
@@ -56,22 +61,69 @@ Two quick browser steps (more reliable than doing it headless):
    bundle id above, SKU `cadence`, your primary language. Create.
 
 The **rest Live Activity** ships in an embedded widget extension with its own
-App ID, `com.madhakish.Cadence.Widgets`. `fastlane match` (while
-`MATCH_READONLY=false` during first-run provisioning) will register it and mint
-its profile on the next CI run — but if your App Store Connect API key can't
-create identifiers, register it by hand too:
+App ID, `com.madhakish.Cadence.Widgets`. Register it by hand (match mints
+profiles but never registers App IDs):
 **Identifiers → + → App IDs → App**, explicit Bundle ID
-`com.madhakish.Cadence.Widgets`, no extra capabilities. (No separate ASC *app
+`com.madhakish.Cadence.Widgets`, no extra capabilities. A provisioning run
+(`MATCH_READONLY=false`) then mints its profile. (No separate ASC *app
 record* — the extension ships inside the Cadence app.)
 
 The **Apple Watch app** ships embedded in the iPhone app with its own App ID,
 `com.madhakish.Cadence.watchkitapp` (explicit, **HealthKit** ticked). It needs a
-`match` App Store profile like the other two, so run the temporary read-write
-`match` setup (`MATCH_READONLY=false`) once after it lands. This is an owner
-action; routine CI stays read-only.
+`match` App Store profile like the other two; follow
+[new App IDs](#signing-preflight-and-new-app-ids) so the profile exists before
+anything depends on it. This is an owner action; routine CI stays read-only.
 
 (`fastlane match` then makes the signing cert + profiles for all three App IDs
 automatically on the first CI run.)
+
+## Signing preflight and new App IDs
+
+Every main run and manual dispatch runs the **Signing preflight** job
+(`.github/scripts/check-signing-material.rb`) on Ubuntu right after the
+repository preflight. In about a minute it proves what the signed build needs:
+the certs token can read the certs repo, every App ID that ships in the app has
+an App Store profile there, the App Store Connect key is accepted, Apple is not
+blocking the account on an unaccepted agreement, and every App ID is registered
+(match cannot register one). On a provisioning run (`MATCH_READONLY=false`) it
+also proves the token can push a branch, by creating and deleting a scratch
+branch, and can use pull requests. The signed build and the `App build (macOS)`
+aggregate wait on it, so a broken token, a missing profile or a pending Program
+License Agreement fails in a minute instead of 25 minutes into the release
+build.
+
+Signing secrets never reach pull-request code, so pull requests don't run the
+live check. Run it yourself before pushing a signing change: `make signing`
+(also the pre-push hook for `project.yml`, `fastlane/` and entitlements
+changes) uses your `gh` login for the certs checks and runs the Apple checks
+when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_CONTENT` are exported.
+
+The offline half (`check-signing-coverage.rb`, part of `make check` and the
+CI preflight on every PR) keeps `project.yml`, the Fastfile and the Matchfile
+in step: every embedded target is signed by `match`,
+`update_code_signing_settings` and the export `provisioningProfiles`;
+`build_beta` reads `MATCH_READONLY` before `setup_ci` forces it to true; the
+certs branch is `main`; and provisioning goes through a branch and a PR.
+
+To add a target with its own App ID (an extension, a watch app):
+
+1. Register the App ID in the developer portal (**Identifiers → +**, explicit
+   bundle ID, its capabilities). match cannot register App IDs; it stops with
+   "Couldn't find bundle identifier". Then add the target to `project.yml` and
+   its App ID to the Fastfile and Matchfile. `make check` fails until all three
+   agree.
+2. Open the PR. `make signing` reports "no App Store provisioning profile for
+   …". Do not merge yet.
+3. Set the repository variable `MATCH_READONLY=false` and give the certs token
+   **Contents: Read and write** and **Pull requests: Read and write**.
+4. Merge. The main run's Signing preflight confirms the token can push a branch
+   and use pull requests, then the lane starts a `match/provision-<run>` branch
+   from the certs repo's `main`, `match` writes the new profile there, and the
+   lane lands it on `main` by pull request (rebase merge of exactly that
+   commit), then fails the run if any profile is still missing. Nothing pushes
+   to the protected `main` directly.
+5. Once `make signing` passes, delete `MATCH_READONLY` and return the token to
+   **Contents: Read-only**. The preflight then guards the steady state again.
 
 ## Configure the repo
 
