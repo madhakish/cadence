@@ -18,6 +18,13 @@ final class VisualProofUITests: XCTestCase {
 
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
+        // The primary action is on the first screen, above the tab bar.
+        assertOnFirstScreen(app.buttons["resume-session"])
+        // The membership tag stays one tap from launch (product rule), as a
+        // labelled header control rather than a full-width accent block.
+        XCTAssertTrue(app.buttons["gym-tag"].isHittable)
+        // The program's day list sits on the first screen, not under the tab bar.
+        XCTAssertTrue(app.buttons["preview-program-day"].isHittable)
 
         let activity = app.buttons["activity-quick-log"]
         for _ in 0..<4 where !activity.isHittable { app.swipeUp() }
@@ -25,6 +32,40 @@ final class VisualProofUITests: XCTestCase {
         activity.tap()
         XCTAssertTrue(element("activity-log-screen").waitForExistence(timeout: 5))
         capture("after-02-ad-hoc-work-iphone")
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        // Discard is off the main flow (behind the hero's menu) but still
+        // reachable, and still confirmed before anything is deleted.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertFalse(app.buttons["Discard session"].exists, "discard must not sit beside Resume")
+        app.buttons["session-actions"].tap()
+        let discard = app.buttons["Discard session"].firstMatch
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        let confirm = app.sheets.buttons["Discard session"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(resume.exists, "the menu alone deletes nothing")
+        confirm.tap()
+        XCTAssertTrue(resume.waitForNonExistence(timeout: 5))
+        for _ in 0..<3 { app.swipeDown() }
+        XCTAssertTrue(app.buttons["start-today"].isHittable)
+        capture("after-01b-home-ready-iphone")
+
+        app.terminate()
+        let category = app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName")!
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        capture("after-01c-home-accessibility-iphone")
+        // At the largest text size Resume still lands on the first screen
+        // without a scroll; the hero's picture gives way, not the action.
+        assertOnFirstScreen(app.buttons["resume-session"])
+        let program = app.buttons["preview-program-day"]
+        for _ in 0..<4 where !program.isHittable { app.swipeUp() }
+        XCTAssertTrue(program.isHittable)
+        capture("after-01d-home-accessibility-program-iphone")
     }
 
     func test02CurrentSessionAndExactPlateStack() {
@@ -164,6 +205,15 @@ final class VisualProofUITests: XCTestCase {
         for _ in 0..<6 { app.swipeUp() }
         capture("after-11-session-end-clears-plate-button-iphone")
         XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
+    }
+
+    /// Exists, hittable and wholly above the tab bar, without any scrolling.
+    private func assertOnFirstScreen(_ control: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(control.waitForExistence(timeout: 5), "\(control) never materialised", file: file, line: line)
+        XCTAssertTrue(control.isHittable, "\(control) is not hittable", file: file, line: line)
+        let tabBar = app.tabBars.firstMatch.frame
+        XCTAssertLessThanOrEqual(control.frame.maxY, tabBar.minY,
+                                 "\(control.frame) ends under the tab bar at \(tabBar.minY)", file: file, line: line)
     }
 
     private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
