@@ -1,6 +1,9 @@
 import CadenceCore
 import Foundation
 import WatchKit
+#if DEBUG
+import notify
+#endif
 
 /// The watch's side of a session (design #339, sections 3–7): the phone's last
 /// plan, this device's sync endpoint and the rest clock. Every tap becomes a
@@ -73,8 +76,10 @@ final class WatchSessionModel: ObservableObject {
 
     /// Debug builds only: `--watch-fixture` runs against a synthetic plan in a
     /// scratch directory with HealthKit off, for the watch UI smoke test;
-    /// `--watch-confirm-detected` adds tap-to-confirm, and
-    /// `--watch-fixture-phone-logs-proposal` has the phone log a proposed set.
+    /// `--watch-fixture-motion` plays a synthetic bench set after Start, and
+    /// `--watch-fixture-motion-on-signal` holds it until the test posts
+    /// `fixtureMotionSignal`; `--watch-confirm-detected` adds tap-to-confirm,
+    /// and `--watch-fixture-phone-logs-proposal` has the phone log a proposed set.
     let isFixture: Bool
 
     init(directory: URL? = nil) {
@@ -149,10 +154,29 @@ final class WatchSessionModel: ObservableObject {
         return samples
     }
 
+    /// The Darwin notification a UI test posts to play the fixture's set under
+    /// `--watch-fixture-motion-on-signal`. The test runner is another process,
+    /// so it has no other way in; CadenceWatchUITests posts the same name.
+    static let fixtureMotionSignal = "com.madhakish.Cadence.watch-fixture.play-motion"
+
+    /// Play the fixture's set ten seconds after Start, or, under
+    /// `--watch-fixture-motion-on-signal`, the moment the test posts
+    /// `fixtureMotionSignal`: a test that works on the set before it is
+    /// detected must finish first, however slow the simulator (#368).
+    private func startFixtureMotion() {
+        guard ProcessInfo.processInfo.arguments.contains("--watch-fixture-motion-on-signal") else {
+            return playFixtureMotion(after: 10)
+        }
+        var token: Int32 = 0
+        notify_register_dispatch(Self.fixtureMotionSignal, &token, .main) { [weak self] token in
+            notify_cancel(token)  // one set per signal, one signal per run
+            MainActor.assumeIsolated { self?.playFixtureMotion(after: 0) }
+        }
+    }
+
     /// Feed one synthetic set (plus a quiet tail) through `feed`, ten times
-    /// faster than real time, after a lead-in long enough for a UI test to
-    /// adjust the load first.
-    private func playFixtureMotion() {
+    /// faster than real time, after a lead-in of `seconds`.
+    private func playFixtureMotion(after seconds: UInt64) {
         var stream = Self.fixtureMotion(reps: 5, start: 0)
         let tail = (1...400).map { i in
             MotionSample(t: (stream.last?.t ?? 0) + Float(i) / 50, userAcceleration: .zero, rotationRate: .zero,
@@ -160,7 +184,7 @@ final class WatchSessionModel: ObservableObject {
         }
         stream += tail
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             var index = 0
             while index < stream.count {
                 try? await Task.sleep(nanoseconds: 100_000_000)
@@ -279,7 +303,7 @@ final class WatchSessionModel: ObservableObject {
         send(.operations([op]))
         save()
         #if DEBUG
-        if isFixture, ProcessInfo.processInfo.arguments.contains("--watch-fixture-motion") { playFixtureMotion() }
+        if isFixture, ProcessInfo.processInfo.arguments.contains("--watch-fixture-motion") { startFixtureMotion() }
         #endif
         guard !isFixture else { return }
         let modality = plan?.nextModality
