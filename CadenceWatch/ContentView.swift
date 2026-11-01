@@ -92,12 +92,13 @@ struct SetView: View {
     @State private var editingLoad = false
 
     var body: some View {
-        if let exercise = model.currentExercise, let set = model.currentSet, WatchSessionModel.isTimed(set) {
+        if let proposed = model.proposedSet {
+            ProposalCard(exercise: proposed.exercise, set: proposed.set)
+        } else if let exercise = model.currentExercise, let set = model.currentSet, WatchSessionModel.isTimed(set) {
             TimedSetView(exercise: exercise, set: set)
         } else if let exercise = model.currentExercise, let set = model.currentSet {
             let index = (exercise.sets.firstIndex { $0.id == set.id } ?? 0) + 1
             VStack(spacing: 6) {
-                ProposalBanner()
                 HStack {
                     Text(set.isWarmup ? "Warmup" : "Set \(index) of \(exercise.sets.count)")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -361,8 +362,8 @@ struct TimedSetView: View {
     }
 }
 
-/// Tap-to-confirm (design section 10): a detected set waits here until the
-/// owner confirms it; rest has already started.
+/// Tap-to-confirm (design section 10) on the rest screen: rest started at
+/// detection, and the detected set waits here until the owner confirms it.
 struct ProposalBanner: View {
     @EnvironmentObject private var model: WatchSessionModel
 
@@ -370,15 +371,72 @@ struct ProposalBanner: View {
         if let proposal = model.proposal {
             VStack(spacing: 4) {
                 Text("Detected \(proposal.reps) reps").font(.headline)
-                HStack {
-                    Button("Confirm") { model.confirmProposal() }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("confirmDetected")
-                    Button("Not a set") { model.dismissProposal() }
-                        .font(.footnote)
-                }
+                ProposalActions(reps: proposal.reps)
             }
             .padding(.vertical, 4)
         }
+    }
+}
+
+/// Tap-to-confirm on the set screen (#359): once a set is detected, its own
+/// Done is redundant, so the proposal takes the set's controls. The card has
+/// the set screen's rows, so it fits wherever that screen does (40 mm too)
+/// without scrolling, which keeps the crown on the reps.
+struct ProposalCard: View {
+    let exercise: SyncSessionView.Exercise
+    let set: SyncSessionView.Set
+    @EnvironmentObject private var model: WatchSessionModel
+    @State private var editingLoad = false
+
+    var body: some View {
+        let index = (exercise.sets.firstIndex { $0.id == set.id } ?? 0) + 1
+        let reps = model.proposal?.reps ?? set.reps
+        VStack(spacing: 6) {
+            HStack {
+                Text(set.isWarmup ? "Detected warmup" : "Detected set \(index) of \(exercise.sets.count)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                HeartRateBadge()
+            }
+            Text(exercise.catalog.name).font(.headline).lineLimit(2).multilineTextAlignment(.center)
+            Button { editingLoad = true } label: {
+                Text("\(model.display(model.load(for: set))) × \(reps)")
+                    .font(.title3.monospacedDigit().weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("load")
+            .accessibilityHint("Adjust the load. Turn the Digital Crown to correct the detected reps.")
+            ProposalActions(reps: reps)
+            Button("Skip", role: .destructive) { model.skip(set) }
+                .accessibilityIdentifier("skipSet")
+                .font(.footnote).buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        .focusable()
+        .digitalCrownRotation(Binding(get: { Double(reps) }, set: { model.adjustProposal(reps: Int($0)) }),
+                              from: 0, through: 50, by: 1, sensitivity: .low,
+                              isContinuous: false, isHapticFeedbackEnabled: true)
+        .sheet(isPresented: $editingLoad) {
+            LoadAdjuster(weightLb: Binding(get: { model.load(for: set) }, set: { model.adjustLoad(set.id, to: $0) }))
+        }
+    }
+}
+
+/// Confirm and Not a set, the same on the rest screen and the set screen.
+struct ProposalActions: View {
+    let reps: Int
+    @EnvironmentObject private var model: WatchSessionModel
+
+    var body: some View {
+        HStack {
+            Button("Confirm") { model.confirmProposal() }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("confirmDetected")
+                .accessibilityHint("Logs the set with \(reps) reps.")
+            Button("Not a set") { model.dismissProposal() }
+                .font(.footnote)
+                .accessibilityIdentifier("dismissDetected")
+                .accessibilityHint("Nothing is logged; the set stays planned.")
+        }
+        .minimumScaleFactor(0.7)  // large text shrinks a label rather than cutting it off
     }
 }

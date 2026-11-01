@@ -204,6 +204,16 @@ final class WatchSessionModel: ObservableObject {
         currentExercise?.sets.first { $0.status == .planned }
     }
 
+    /// The set a pending proposal is for, with its exercise: what the set screen
+    /// shows while the proposal waits, wherever the focus has moved since.
+    var proposedSet: (exercise: SyncSessionView.Exercise, set: SyncSessionView.Set)? {
+        guard let proposal, let view else { return nil }
+        for exercise in view.exercises {
+            if let set = exercise.sets.first(where: { $0.id == proposal.setID }) { return (exercise, set) }
+        }
+        return nil
+    }
+
     /// The set just finished, for the rest screen's tags and edit.
     @Published private(set) var lastLoggedSetID: String?
 
@@ -325,7 +335,8 @@ final class WatchSessionModel: ObservableObject {
     /// configured fixed drop lives in the phone's planning context, so the
     /// watch uses the engine's standard drop.
     func dropLoad(reason: AutoregReason) {
-        guard let exercise = currentExercise else { return }
+        // The exercise the set screen shows: a proposed set's, while one waits.
+        guard let exercise = proposedSet?.exercise ?? currentExercise else { return }
         let plan = ProgramEngine.dropLoadPlan(
             sets: exercise.sets.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) },
             barLb: exercise.catalog.loadBasis == .totalBar ? 45 : 0)
@@ -386,13 +397,21 @@ final class WatchSessionModel: ObservableObject {
         self.proposal = nil
     }
 
+    /// The owner's correction of the detected reps (the crown), logged on Confirm.
+    func adjustProposal(reps: Int) {
+        proposal?.reps = reps
+    }
+
     func dismissProposal() {
         proposal = nil
     }
 
     func skip(_ set: SyncSessionView.Set) {
+        // The set's own exercise, as in `complete`: a proposed set can be
+        // skipped after the owner moved the focus to another exercise.
+        let exercise = view?.exercises.first { $0.sets.contains { $0.id == set.id } } ?? currentExercise
         issue(.setPerformed(setID: set.id, patch: SyncSetPatch(status: .skipped)))
-        motion.note(.setSkipped, setID: set.id, exerciseID: currentExercise?.catalog.exerciseID)
+        motion.note(.setSkipped, setID: set.id, exerciseID: exercise?.catalog.exerciseID)
     }
 
     /// Undo a logged set back to planned (the rest screen's Edit).
