@@ -79,6 +79,8 @@ assert_job_contains changes "bash .github/scripts/cancel-stale-pr-runs.sh"
 assert_job_contains changes "run: bash .github/scripts/preflight.sh"
 assert_file_contains .github/scripts/preflight.sh "node --test .github/scripts/test-repository-hygiene.mjs"
 assert_file_contains .github/scripts/preflight.sh "git diff --check"
+assert_file_contains .github/scripts/preflight.sh 'git diff --check "$(git merge-base "$BASE_SHA" "$HEAD_SHA"'
+assert_file_contains .github/scripts/changed-paths.sh "git diff --no-renames --name-only"
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-cancel-stale-pr-runs.sh"
 # PR paths come from the merge base, not main's tip (#362), through one
 # tested script.

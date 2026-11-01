@@ -29,4 +29,6 @@ if [[ "${EVENT_NAME:-}" == "pull_request" ]]; then
   fi
 fi
 
-git diff --name-only "$base" "$HEAD_SHA"
+# --no-renames lists both sides of a move: a model moved out of a
+# migration-bearing path must still run the migration suite.
+git diff --no-renames --name-only "$base" "$HEAD_SHA"
