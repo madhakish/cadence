@@ -956,6 +956,71 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(populated.exists, "the seeded program keeps its row")
     }
 
+    /// The gorilla Today tab "drops back to the main screen and what you're
+    /// doing". With nothing timed it lands on Today, never in a session that
+    /// was only opened. Once the workout clock runs, it reopens the live
+    /// session from another tab and from Today itself (a second tap on the
+    /// selected tab must still reach the app).
+    func test22TodayTabReturnsToLiveWorkout() {
+        let today = app.tabBars.buttons["Today"]
+        XCTAssertTrue(today.waitForExistence(timeout: 5))
+        capture("after-22-tab-bar-today-iphone")
+
+        app.tabBars.buttons["Program"].tap()
+        today.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        XCTAssertFalse(element("active-session-screen").exists, "an open but unstarted session is not in progress")
+
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let start = app.buttons["Start workout"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        capture("after-22-live-session-iphone")
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["History"].tap()
+        today.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8),
+                      "Today reopens the timed workout from another tab")
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        today.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8),
+                      "a second tap on Today reopens the timed workout too")
+
+        // Leave no running clock or Live Activity behind on a shared simulator.
+        app.buttons["Workout and session controls"].firstMatch.tap()
+        let reset = app.buttons["Reset to not started"].firstMatch
+        XCTAssertTrue(reset.waitForExistence(timeout: 5))
+        reset.tap()
+        app.buttons["Back"].firstMatch.tap()
+        app.tabBars.buttons["Program"].tap()
+        today.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        XCTAssertFalse(element("active-session-screen").waitForExistence(timeout: 2),
+                       "with the clock reset the session is no longer in progress")
+    }
+
+    /// The tab bar keeps its size at accessibility text sizes (the system
+    /// shows the large content viewer on a long press instead), so the mark
+    /// and the plate button must still sit clear of each other there.
+    func test23TabBarAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        let today = app.tabBars.buttons["Today"]
+        XCTAssertTrue(today.waitForExistence(timeout: 5))
+        capture("after-23-tab-bar-accessibility-iphone")
+        XCTAssertGreaterThanOrEqual(today.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(today.frame.width, 44)
+        XCTAssertFalse(today.frame.intersects(app.buttons["Plate calculator"].frame),
+                       "the Today mark and the plate button never overlap")
+    }
+
     /// App palettes are distinct from the ten equipment themes. Retain both
     /// the primary task index and load-entry canvas under every saved palette.
     func test19AppThemeCanvases() {
