@@ -86,11 +86,14 @@ assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-sig
 # macOS minute is spent, and the signed build and the aggregate wait on it.
 assert_job_contains signing-preflight "needs: changes"
 assert_job_contains signing-preflight "runs-on: ubuntu-latest"
-assert_job_contains signing-preflight "if: needs.changes.outputs.native == 'true' || github.event_name != 'pull_request'"
+# Signing secrets never reach pull-request code (environment-ready).
+assert_job_contains signing-preflight "if: github.event_name != 'pull_request'"
+assert_job_contains signing-preflight "SIGNING_PREFLIGHT: required"
+assert_job_contains signing-preflight 'ruby-version: "3.3"'
+assert_job_contains changes 'ruby-version: "3.3"'
 assert_job_contains signing-preflight "run: ruby .github/scripts/check-signing-material.rb"
 assert_job_contains signing-preflight "MATCH_READONLY: \${{ vars.MATCH_READONLY }}"
-assert_job_contains signing-preflight "|| github.actor == 'dependabot[bot]') && 'optional' || 'required' }}"
-assert_job_contains app-build "SIGNING_REQUIRED: \${{ needs.changes.outputs.native == 'true' || github.event_name != 'pull_request' }}"
+assert_job_contains app-build "SIGNING_REQUIRED: \${{ github.event_name != 'pull_request' }}"
 assert_job_contains app-build 'SIGNING_RESULT: ${{ needs.signing-preflight.result }}'
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-fastlane-phases.sh"
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-verify-native-jobs.sh"

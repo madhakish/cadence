@@ -69,6 +69,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.3"
       # The same script backs `make check` and the pre-commit hook.
       - name: Fast repository checks
         env:
@@ -109,23 +112,27 @@ jobs:
   # Signing material is proven in about a minute on Ubuntu instead of being
   # discovered 25 minutes into the macOS release build. Each check is a
   # failure that reached main: a wrong certs token, an App ID with no
-  # profile under read-only match, and an unaccepted Apple agreement. It runs
-  # for every main/dispatch run and for native PRs, so a PR that adds an App
-  # ID cannot merge until its profile exists (docs/TESTFLIGHT.md).
+  # profile under read-only match, and an unaccepted Apple agreement. Signing
+  # secrets never reach pull-request code, so this runs on main and manual
+  # runs only; PRs run the offline signing contract in preflight, and
+  # `make signing` runs it locally before a push (docs/TESTFLIGHT.md).
   signing-preflight:
     name: Signing preflight
     needs: changes
-    if: needs.changes.outputs.native == 'true' || github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The same Ruby `make check` requires, not the image's.
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.3"
       - name: Check signing material
         env:
-          # Fork and Dependabot PRs get no secrets; everything else must prove them.
-          SIGNING_PREFLIGHT: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') && 'optional' || 'required' }}
+          SIGNING_PREFLIGHT: required
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           MATCH_READONLY: ${{ vars.MATCH_READONLY }}
@@ -595,7 +602,7 @@ jobs:
           MIGRATION_RESULT: ${{ needs.migration-tests.result }}
           NATIVE_SMOKE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
           NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}
-          SIGNING_REQUIRED: ${{ needs.changes.outputs.native == 'true' || github.event_name != 'pull_request' }}
+          SIGNING_REQUIRED: ${{ github.event_name != 'pull_request' }}
           SIGNING_RESULT: ${{ needs.signing-preflight.result }}
         run: bash .github/scripts/verify-native-jobs.sh
 

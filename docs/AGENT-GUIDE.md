@@ -407,7 +407,8 @@ Native validation is change-aware behind that aggregate:
   as `make check`) must pass before either portable suite starts;
 - the Signing preflight proves the certs token, every App ID's profile and
   registration, and the App Store Connect key before any release build, on
-  main and on native PRs; the signed build and the aggregate wait on it;
+  main and manual runs (signing secrets never reach PR code; PRs run the
+  offline signing contract); the signed build and the aggregate wait on it;
 - the app builds start only after core and web suites pass; the core job uses
   the runner's selected Xcode Swift toolchain and reports its version;
 - the unsigned-device build (Darwin unit tests + production-SDK Release

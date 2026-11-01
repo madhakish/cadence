@@ -14,7 +14,7 @@ class CertsRepo
 
   attr_reader :owner, :repo
 
-  def initialize(url:, authorization:, http: nil)
+  def initialize(url:, authorization:, http: nil, sleeper: nil)
     m = url.to_s.match(%r{github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?/?\z})
     raise ArgumentError, "MATCH_GIT_URL must be a GitHub repository URL" unless m
     raise ArgumentError, "MATCH_GIT_BASIC_AUTHORIZATION is empty" if authorization.to_s.strip.empty?
@@ -23,6 +23,7 @@ class CertsRepo
     @repo = m[2]
     @authorization = "Basic #{authorization.strip}"
     @http = http || method(:request)
+    @sleep = sleeper || ->(seconds) { sleep(seconds) }
   end
 
   # A new branch at the base's head. match checks it out rather than creating
@@ -37,11 +38,20 @@ class CertsRepo
     call(:get, "compare/#{base}...#{branch}").fetch("ahead_by").to_i.positive?
   end
 
-  # Open a PR and merge it. Rebase keeps the protected branch's linear history.
-  def merge_by_pull_request(branch, base:, title:, body:)
+  # Open a PR and merge exactly the commit match pushed. Rebase keeps the
+  # protected branch's linear history. GitHub computes mergeability after the
+  # PR opens, so an early 405/409 is retried briefly.
+  def merge_by_pull_request(branch, base:, title:, body:, attempts: 5)
+    head = call(:get, "git/ref/heads/#{branch}").fetch("object").fetch("sha")
     pr = call(:post, "pulls", { "title" => title, "head" => branch, "base" => base, "body" => body })
-    call(:put, "pulls/#{pr.fetch('number')}/merge", { "merge_method" => "rebase" })
-    pr.fetch("html_url")
+    path = "pulls/#{pr.fetch('number')}/merge"
+    attempts.times do |attempt|
+      status, reply = send_request(:put, path, { "merge_method" => "rebase", "sha" => head })
+      return pr.fetch("html_url") if (200..299).cover?(status)
+      raise failure(:put, path, status, reply) unless [405, 409].include?(status) && attempt < attempts - 1
+
+      @sleep.call(2 * (attempt + 1))
+    end
   end
 
   # Tolerates a branch GitHub already deleted on merge.
@@ -56,11 +66,19 @@ class CertsRepo
   private
 
   def call(verb, path, payload = nil, ok: [])
-    status, body = @http.call(verb, "https://api.github.com/repos/#{@owner}/#{@repo}/#{path}", payload, @authorization)
+    status, body = send_request(verb, path, payload)
     return body if (200..299).cover?(status) || ok.include?(status)
 
+    raise failure(verb, path, status, body)
+  end
+
+  def send_request(verb, path, payload)
+    @http.call(verb, "https://api.github.com/repos/#{@owner}/#{@repo}/#{path}", payload, @authorization)
+  end
+
+  def failure(verb, path, status, body)
     message = body.is_a?(Hash) ? body["message"] : nil
-    raise Error, "#{verb.to_s.upcase} #{path} returned HTTP #{status}#{message ? ": #{message}" : ''}"
+    Error.new("#{verb.to_s.upcase} #{path} returned HTTP #{status}#{message ? ": #{message}" : ''}")
   end
 
   def request(verb, url, payload, authorization)

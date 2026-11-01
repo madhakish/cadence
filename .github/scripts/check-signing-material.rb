@@ -107,21 +107,11 @@ class SigningPreflight
                         "Re-create MATCH_GIT_BASIC_AUTHORIZATION as base64(\"<user>:<fine-grained PAT>\") " \
                         "with Contents access to that repo only (docs/TESTFLIGHT.md)"
     end
+    branch = certs_branch
     # A provisioning run pushes a new branch and lands it by pull request
     # (fastlane/certs_repo.rb), because the default branch is protected.
-    unless @readonly
-      if body.dig("permissions", "push") != true
-        @errors << "MATCH_READONLY=false but the certs repo token cannot write to #{owner}/#{repo}; " \
-                   "match could not save new profiles. Use a Contents read-and-write PAT for the provisioning run"
-      end
-      status, = get("certs_pulls", "https://api.github.com/repos/#{owner}/#{repo}/pulls?per_page=1", { "Authorization" => auth })
-      unless status == 200
-        @errors << "MATCH_READONLY=false but the certs repo token cannot use pull requests on #{owner}/#{repo} " \
-                   "(HTTP #{status}); provisioning lands by pull request. Give it Pull requests: Read and write"
-      end
-    end
+    check_provisioning_access(owner, repo, branch, auth) unless @readonly
 
-    branch = certs_branch
     status, tree = get("certs_tree", "https://api.github.com/repos/#{owner}/#{repo}/git/trees/#{branch}?recursive=1",
                        { "Authorization" => auth })
     return @errors << "cannot list branch #{branch} of the certs repo (HTTP #{status})" unless status == 200
@@ -134,6 +124,32 @@ class SigningPreflight
       next if paths.include?("profiles/appstore/AppStore_#{id}.mobileprovision")
       need_provisioning("the certs repo has no App Store provisioning profile for #{id}")
     end
+  end
+
+  # `permissions.push` describes the account's role, not what a fine-grained
+  # token was granted, so prove Contents write with a scratch branch that is
+  # created and deleted. Pull request write is proven when the run lands its
+  # PR (the lane keeps the branch and says what to do if it cannot).
+  def check_provisioning_access(owner, repo, branch, auth)
+    base = "https://api.github.com/repos/#{owner}/#{repo}"
+    headers = { "Authorization" => auth }
+    status, ref = api("certs_branch_ref", :get, "#{base}/git/ref/heads/#{branch}", headers)
+    return @errors << "cannot read branch #{branch} of the certs repo (HTTP #{status})" unless status == 200
+
+    scratch = "preflight/#{@env['GITHUB_RUN_ID'] || Time.now.to_i}"
+    status, = api("certs_scratch_create", :post, "#{base}/git/refs", headers,
+                  { "ref" => "refs/heads/#{scratch}", "sha" => ref.dig("object", "sha") })
+    if status == 201
+      api("certs_scratch_delete", :delete, "#{base}/git/refs/heads/#{scratch}", headers)
+    else
+      @errors << "MATCH_READONLY=false but the certs repo token cannot push a branch to #{owner}/#{repo} " \
+                 "(HTTP #{status}); match could not save new profiles. Give it Contents: Read and write"
+    end
+    status, = api("certs_pulls", :get, "#{base}/pulls?per_page=1", headers)
+    return if status == 200
+
+    @errors << "MATCH_READONLY=false but the certs repo token cannot use pull requests on #{owner}/#{repo} " \
+               "(HTTP #{status}); provisioning lands by pull request. Give it Pull requests: Read and write"
   end
 
   # The branch match reads: MATCH_GIT_BRANCH, else the Matchfile's git_branch.
@@ -211,13 +227,22 @@ class SigningPreflight
   # -- HTTP ----------------------------------------------------------------
 
   def get(name, url, headers)
+    api(name, :get, url, headers)
+  end
+
+  def api(name, verb, url, headers, payload = nil)
     if @fixtures
       canned = @fixtures.fetch(name) { raise "fixture missing response #{name}" }
       return [canned.fetch("status"), canned.fetch("body", {})]
     end
     uri = URI(url)
-    request = Net::HTTP::Get.new(uri)
+    klass = { get: Net::HTTP::Get, post: Net::HTTP::Post, delete: Net::HTTP::Delete }.fetch(verb)
+    request = klass.new(uri)
     headers.merge("Accept" => "application/json", "User-Agent" => "cadence-signing-preflight").each { |k, v| request[k] = v }
+    if payload
+      request["Content-Type"] = "application/json"
+      request.body = JSON.generate(payload)
+    end
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 15, read_timeout: 30) { |h| h.request(request) }
     body = begin
       JSON.parse(response.body.to_s)

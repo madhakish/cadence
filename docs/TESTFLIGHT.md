@@ -79,26 +79,31 @@ automatically on the first CI run.)
 
 ## Signing preflight and new App IDs
 
-Every main run, manual dispatch and native PR runs the **Signing preflight**
-job (`.github/scripts/check-signing-material.rb`) on Ubuntu right after the
+Every main run and manual dispatch runs the **Signing preflight** job
+(`.github/scripts/check-signing-material.rb`) on Ubuntu right after the
 repository preflight. In about a minute it proves what the signed build needs:
-the certs token can read the certs repo (and write to it when
-`MATCH_READONLY=false`), every App ID that ships in the app has an App Store
-profile there, the App Store Connect key is accepted, Apple is not blocking the
-account on an unaccepted agreement, and every App ID is registered (match
-cannot register one). The signed
-build and the `App build (macOS)` aggregate wait on it, so a broken token, a
-missing profile or a pending Program License Agreement fails the PR, not a
-release run 25 minutes in. Fork and Dependabot PRs receive no secrets and
-report a notice instead. Run it locally with `make signing`: the certs checks
-use your `gh` login, and the Apple checks run when `ASC_KEY_ID`,
-`ASC_ISSUER_ID` and `ASC_KEY_CONTENT` are exported.
+the certs token can read the certs repo, every App ID that ships in the app has
+an App Store profile there, the App Store Connect key is accepted, Apple is not
+blocking the account on an unaccepted agreement, and every App ID is registered
+(match cannot register one). On a provisioning run (`MATCH_READONLY=false`) it
+also proves the token can push a branch, by creating and deleting a scratch
+branch, and can use pull requests. The signed build and the `App build (macOS)`
+aggregate wait on it, so a broken token, a missing profile or a pending Program
+License Agreement fails in a minute instead of 25 minutes into the release
+build.
+
+Signing secrets never reach pull-request code, so pull requests don't run the
+live check. Run it yourself before pushing a signing change: `make signing`
+(also the pre-push hook for `project.yml`, `fastlane/` and entitlements
+changes) uses your `gh` login for the certs checks and runs the Apple checks
+when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_CONTENT` are exported.
 
 The offline half (`check-signing-coverage.rb`, part of `make check` and the
-CI preflight) keeps `project.yml`, the Fastfile and the Matchfile in step:
-every embedded target is signed by `match`, `update_code_signing_settings` and
-the export `provisioningProfiles`, and `build_beta` reads `MATCH_READONLY`
-before `setup_ci` forces it to true.
+CI preflight on every PR) keeps `project.yml`, the Fastfile and the Matchfile
+in step: every embedded target is signed by `match`,
+`update_code_signing_settings` and the export `provisioningProfiles`;
+`build_beta` reads `MATCH_READONLY` before `setup_ci` forces it to true; the
+certs branch is `main`; and provisioning goes through a branch and a PR.
 
 To add a target with its own App ID (an extension, a watch app):
 
@@ -107,19 +112,18 @@ To add a target with its own App ID (an extension, a watch app):
    "Couldn't find bundle identifier". Then add the target to `project.yml` and
    its App ID to the Fastfile and Matchfile. `make check` fails until all three
    agree.
-2. Open the PR. **Signing preflight** fails with "no App Store provisioning
-   profile for …". Do not merge yet.
-3. Set the repository variable `MATCH_READONLY=false` and replace
-   `MATCH_GIT_BASIC_AUTHORIZATION` with a token for the certs repo with
-   **Contents: Read and write** and **Pull requests: Read and write**. Re-run
-   the PR checks: the preflight passes in provisioning mode and confirms the
-   token can push a branch and open pull requests.
-4. Merge. The main run starts a `match/provision-<run>` branch from the certs
-   repo's `main`, `match` writes the new profile there, and the lane lands it on `main` by pull request (rebase
-   merge), then fails the run if any profile is still missing. Nothing pushes
+2. Open the PR. `make signing` reports "no App Store provisioning profile for
+   …". Do not merge yet.
+3. Set the repository variable `MATCH_READONLY=false` and give the certs token
+   **Contents: Read and write** and **Pull requests: Read and write**.
+4. Merge. The main run's Signing preflight confirms the token can push a branch
+   and use pull requests, then the lane starts a `match/provision-<run>` branch
+   from the certs repo's `main`, `match` writes the new profile there, and the
+   lane lands it on `main` by pull request (rebase merge of exactly that
+   commit), then fails the run if any profile is still missing. Nothing pushes
    to the protected `main` directly.
-5. Once `make signing` passes, delete `MATCH_READONLY` and restore the
-   read-only token. The preflight then guards the steady state again.
+5. Once `make signing` passes, delete `MATCH_READONLY` and return the token to
+   **Contents: Read-only**. The preflight then guards the steady state again.
 
 ## Configure the repo
 

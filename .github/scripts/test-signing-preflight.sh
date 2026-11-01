@@ -79,8 +79,10 @@ all_ids='["com.madhakish.Cadence","com.madhakish.Cadence.Widgets","com.madhakish
 write_fixture() { # name repo_status push(true|false) tree_paths asc_status asc_body [pulls_status]
   local tree
   tree="$(ruby -rjson -e 'puts({ "tree" => JSON.parse(ARGV[0]).map { |p| { "path" => p } } }.to_json)' "$4")"
-  printf '{"certs_repo":{"status":%s,"body":{"permissions":{"pull":true,"push":%s}}},"certs_pulls":{"status":%s,"body":{}},"certs_tree":{"status":200,"body":%s},"asc_bundle_ids":{"status":%s,"body":%s}}\n' \
-    "$2" "$3" "${7:-200}" "$tree" "$5" "$6" > "$work/$1.json"
+  # push=true: the token can create (and delete) a scratch branch.
+  local scratch=403; [[ "$3" == true ]] && scratch=201
+  printf '{"certs_repo":{"status":%s,"body":{}},"certs_branch_ref":{"status":200,"body":{"object":{"sha":"abc"}}},"certs_scratch_create":{"status":%s,"body":{}},"certs_scratch_delete":{"status":204,"body":{}},"certs_pulls":{"status":%s,"body":{}},"certs_tree":{"status":200,"body":%s},"asc_bundle_ids":{"status":%s,"body":%s}}\n' \
+    "$2" "$scratch" "${7:-200}" "$tree" "$5" "$6" > "$work/$1.json"
 }
 
 bundle_ids() { ruby -rjson -e 'puts({ "data" => JSON.parse(ARGV[0]).map { |i| { "attributes" => { "identifier" => i } } } }.to_json)' "$1"; }
@@ -123,7 +125,7 @@ expect_pass "provisioning run creates the profile" provision false "this provisi
 
 # ...but not with a read-only token, where match cannot push what it creates.
 write_fixture provision-ro-token 200 false "$no_watch_paths" 200 "$(bundle_ids "$all_ids")"
-expect_fail "provisioning run without a write token" provision-ro-token false "cannot write to example/certs"
+expect_fail "provisioning run without a write token" provision-ro-token false "cannot push a branch to example/certs"
 
 # Provisioning lands by pull request; a token without PR access cannot land it.
 write_fixture provision-no-pulls 200 true "$no_watch_paths" 200 "$(bundle_ids "$all_ids")" 403
@@ -163,17 +165,22 @@ ruby -e '
     [:get, "git/ref/heads/main"] => [200, { "object" => { "sha" => "abc123" } }],
     [:post, "git/refs"] => [201, {}],
     [:get, "compare/main...match/provision-7"] => [200, { "ahead_by" => 1 }],
+    [:get, "git/ref/heads/match/provision-7"] => [200, { "object" => { "sha" => "def456" } }],
     [:post, "pulls"] => [201, { "number" => 9, "html_url" => "https://github.com/o/certs/pull/9" }],
-    [:put, "pulls/9/merge"] => [200, { "merged" => true }],
     [:delete, "git/refs/heads/match/provision-7"] => [422, { "message" => "Reference does not exist" }],
   }
+  # GitHub is still computing mergeability on the first merge attempt.
+  merges = [[405, { "message" => "Base branch was modified" }], [200, { "merged" => true }]]
   http = lambda do |verb, url, payload, auth|
     path = url.sub("https://api.github.com/repos/o/certs/", "")
     calls << [verb, path, payload]
     abort "auth #{auth}" unless auth == "Basic dTp0"
+    next merges.shift if [verb, path] == [:put, "pulls/9/merge"]
     responses.fetch([verb, path]) { abort "unexpected #{verb} #{path}" }
   end
-  certs = CertsRepo.new(url: "https://github.com/o/certs.git", authorization: "dTp0", http: http)
+  slept = []
+  certs = CertsRepo.new(url: "https://github.com/o/certs.git", authorization: "dTp0", http: http,
+                        sleeper: ->(s) { slept << s })
   certs.start_branch("match/provision-7", base: "main")
   abort "branch not started from main head: #{calls[1]}" unless calls[1] == [:post, "git/refs", { "ref" => "refs/heads/match/provision-7", "sha" => "abc123" }]
   abort "not ahead" unless certs.ahead?("match/provision-7", base: "main")
@@ -181,8 +188,9 @@ ruby -e '
   abort "pr url #{url}" unless url == "https://github.com/o/certs/pull/9"
   pr = calls.find { |c| c[0] == :post && c[1] == "pulls" }
   abort "pr must target main from the branch: #{pr}" unless pr[2]["base"] == "main" && pr[2]["head"] == "match/provision-7"
-  merge = calls.find { |c| c[1] == "pulls/9/merge" }
-  abort "merge must rebase (linear history): #{merge}" unless merge[2] == { "merge_method" => "rebase" }
+  merge = calls.select { |c| c[1] == "pulls/9/merge" }
+  abort "merge must rebase exactly the pushed commit: #{merge}" unless merge.all? { |c| c[2] == { "merge_method" => "rebase", "sha" => "def456" } }
+  abort "a 405 merge must be retried once after a pause: #{merge.size} #{slept}" unless merge.size == 2 && slept == [2]
   certs.delete_branch("match/provision-7") # already deleted on merge: tolerated
   abort "never writes the default branch directly" if calls.any? { |c| c[1].include?("heads/main") && c[0] != :get }
 
