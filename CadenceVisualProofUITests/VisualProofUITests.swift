@@ -95,8 +95,8 @@ final class VisualProofUITests: XCTestCase {
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
         let achieved = app.staticTexts["ACHIEVED WITH BAR"]
-        for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
-        XCTAssertTrue(achieved.isHittable)
+        XCTAssertTrue(achieved.isHittable,
+                      "The achieved load must be readable before scrolling past the equipment stage")
         capture("after-07-plate-calculator-iphone")
 
         let inspect = element("expand-loaded-bar")

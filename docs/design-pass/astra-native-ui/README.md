@@ -46,6 +46,11 @@ captures before choosing or installing an icon.
    accessibility sizes, with themes, safe areas, VoiceOver and Reduce Motion
    respected. Debug stills and scale boards do not establish runtime quality.
 
-This PR begins with reviewable brand exports. Native presentation, selected
-runtime assets and native visual proof are still pending; the draft is not
-merge-ready.
+The first calculator presentation change puts the existing achieved-load
+summary before the equipment in target and reverse modes. Requested-target
+entry is quieter, and pinned headers have an opaque canvas. Solver results,
+reverse-mode stack order and all readout content remain unchanged.
+
+This PR begins with reviewable brand exports and calculator hierarchy.
+Selected runtime assets, further screen presentation and native visual proof
+are still pending; the draft is not merge-ready.
