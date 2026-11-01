@@ -75,4 +75,123 @@ final class CadenceWatchSmokeTests: XCTestCase {
         let logged = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plank' AND label CONTAINS '1 of 1 sets'")).firstMatch
         XCTAssertTrue(page(app, upTo: logged), "the hold is logged")
     }
+
+    /// Phase 5: a detected set logs itself with its reps and offers Edit.
+    func testADetectedSetLogsItselfAndOffersEdit() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        let logged = app.buttons["autoLogged"]
+        XCTAssertTrue(logged.waitForExistence(timeout: 30), "the synthetic set is detected and logged")
+        XCTAssertEqual(logged.label, "5 reps · Edit")
+        // Edit reopens the set for a manual entry.
+        logged.tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+    }
+
+    /// Review on #356: a set detected after its load was changed on the watch
+    /// logs the load the watch showed, not the planned one.
+    func testADetectedSetLogsTheLoadAdjustedOnTheWatch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        // During the fixture's lead-in: 185 lb planned, 190 lb on the bar.
+        let load = app.buttons["load"]
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("185 lb"), load.label)
+        load.tap()
+        let up = app.buttons["+5"]
+        XCTAssertTrue(up.waitForExistence(timeout: 5))
+        up.tap()
+        app.buttons["loadDone"].tap()
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("190 lb"), load.label)
+        XCTAssertFalse(app.buttons["autoLogged"].exists, "the load is adjusted before the set is detected")
+
+        let logged = app.buttons["autoLogged"]
+        XCTAssertTrue(logged.waitForExistence(timeout: 30), "the synthetic set is detected and logged")
+        // Edit reopens the logged set, showing the load it was logged with.
+        logged.tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("190 lb"), "logged with the adjusted load, not the plan's: \(load.label)")
+    }
+
+    /// Review on #356: a proposal lapses once its set stops being planned. Here
+    /// the phone logs the set first (the fixture's phone, through the real sync
+    /// path), so a stale Confirm can't overwrite the phone's reps. The same
+    /// lapse covers a Skip on the watch, which a 40 mm screen can't reach while
+    /// the banner shows.
+    func testAProposalLapsesWhenThePhoneLogsItsSet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion", "--watch-confirm-detected",
+                               "--watch-fixture-phone-logs-proposal"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        let confirm = app.buttons["confirmDetected"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "the synthetic set is detected and proposed")
+        XCTAssertTrue(app.staticTexts["Detected 5 reps"].exists)
+
+        // The phone logs the set five seconds later: nothing is left to confirm.
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: confirm)
+        wait(for: [gone], timeout: 15)
+        XCTAssertFalse(app.staticTexts["Detected 5 reps"].exists)
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 2 of 2")
+        XCTAssertFalse(confirm.exists)
+
+        // The phone's 6 × 185 lb stands: one working set, 1110 lb of volume.
+        let end = app.buttons["endWorkout"]
+        XCTAssertTrue(page(app, upTo: end))
+        end.tap()
+        let endNow = app.buttons["End now"]
+        XCTAssertTrue(endNow.waitForExistence(timeout: 5))
+        endNow.tap()
+        let summary = app.staticTexts["summarySets"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.label, "1 working set")
+        XCTAssertTrue(app.staticTexts["1110 lb volume"].exists)
+    }
+
+    /// Tap-to-confirm: a manual Done on a detected set clears its proposal, so
+    /// Confirm can't log the same set a second time.
+    func testAManualDoneClearsAPendingDetectedSet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion", "--watch-confirm-detected"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        // Detection starts rest and proposes the set without logging it.
+        let confirm = app.buttons["confirmDetected"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "the synthetic set is detected and proposed")
+        XCTAssertTrue(app.staticTexts["Detected 5 reps"].exists)
+        XCTAssertFalse(app.buttons["autoLogged"].exists, "a proposal isn't logged before Confirm")
+
+        // Log that set by hand instead.
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+        app.buttons["done"].tap()
+
+        // The manual Done took the proposal with it: nothing is left to confirm.
+        XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Detected 5 reps"].exists)
+        XCTAssertFalse(confirm.exists)
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 2 of 2", "the set was logged once")
+        XCTAssertFalse(confirm.exists)
+    }
 }

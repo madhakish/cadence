@@ -58,6 +58,7 @@ enum MotionRecordingStore {
 
     static func deleteAll(root: URL = root) throws {
         for sidecar in list(root: root) { try delete(recordingID: sidecar.recordingID, root: root) }
+        try? FileManager.default.removeItem(at: root.appendingPathComponent("autocomplete.json"))
         removeExports()
     }
 
@@ -94,6 +95,53 @@ enum MotionRecordingStore {
         if let coordinationError { throw coordinationError }
         if let copyError { throw copyError }
         return archive ?? destination
+    }
+
+    // MARK: Autocomplete (design section 10)
+
+    /// One exercise's verdict from the latest evaluation, for Settings.
+    struct ExerciseVerdict: Codable, Equatable {
+        var name: String
+        var sets: Int
+        var verdict: String
+    }
+
+    struct AutocompleteState: Codable, Equatable {
+        var signatures: [RepSignature]
+        var verdicts: [ExerciseVerdict]
+        var evaluatedAt: Date
+    }
+
+    static func loadAll(root: URL = root) -> [MotionRecordingData] {
+        let folders = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        return folders.compactMap { folder in
+            guard let sidecar = try? JSONDecoder().decode(MotionSidecar.self,
+                                                          from: Data(contentsOf: folder.appendingPathComponent("sidecar.json"))),
+                  let data = try? Data(contentsOf: folder.appendingPathComponent("samples.cdmr")),
+                  let samples = try? MotionRecording.read(data).samples else { return nil }
+            return MotionRecordingData(sidecar: sidecar, samples: samples)
+        }
+    }
+
+    /// Re-run the phase-4 evaluation over every stored recording and keep the
+    /// signatures of exercises that pass the bar. Slow (reads every recording),
+    /// so callers run it off the main thread when a recording arrives.
+    @discardableResult
+    static func refreshAutocomplete(root: URL = root, now: Date = Date()) throws -> AutocompleteState {
+        let recordings = loadAll(root: root)
+        let results = DetectorEvaluation.evaluate(recordings)
+        let state = AutocompleteState(
+            signatures: DetectorEvaluation.enabledSignatures(recordings),
+            verdicts: results.map { ExerciseVerdict(name: $0.name, sets: $0.sets, verdict: $0.verdict) },
+            evaluatedAt: now)
+        try prepare(root)
+        try JSONEncoder().encode(state).write(to: root.appendingPathComponent("autocomplete.json"), options: .atomic)
+        return state
+    }
+
+    static func autocompleteState(root: URL = root) -> AutocompleteState? {
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("autocomplete.json")) else { return nil }
+        return try? JSONDecoder().decode(AutocompleteState.self, from: data)
     }
 
     /// Create the folder and keep it out of iCloud and Finder backups.
