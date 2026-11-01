@@ -9,6 +9,8 @@ engraving off its paper onto steel. The circle and square of the plate are
 traced and separated from the figure so they can be thickened, recoloured or
 dropped on their own.
 
+The parchment candidate uses the iron full plate for dark/tinted appearances.
+
   python3 docs/design-pass/app-icon/render_app_icon.py <proof-dir>
       # three 1024 candidates, appearance variants and a contact sheet
   python3 docs/design-pass/app-icon/render_app_icon.py --install
@@ -216,6 +218,10 @@ def candidates():
     out["B-iron-dark"] = paint(steel_ground(glow=0.55), [(square * 0.35, CHALK), (ring, OXIDE), (body, CHALK)])
     out["B-iron-tinted"] = paint(np.zeros((SIZE, SIZE, 3)), [(square * 0.35, white), (ring * 0.8, white),
                                                               (body, white)])
+    # Reuse the existing full-plate appearances for parchment in both proof
+    # and installation; its default remains the original sepia on paper.
+    out["A-parchment-dark"] = out["B-iron-dark"]
+    out["A-parchment-tinted"] = out["B-iron-tinted"]
     out["C-bust-dark"] = paint(steel_ground(glow=0.55), [(lift, PAPER * 0.78), (bust, SEPIA * 0.8)])
     out["C-bust-tinted"] = paint(np.zeros((SIZE, SIZE, 3)), [(lift * 0.85, white), (bust, (0, 0, 0))])
     return out
