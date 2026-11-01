@@ -13,7 +13,9 @@ struct CadenceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if let container = bootstrap.container {
+            if RenderLab.isRequested {
+                RenderLabView()
+            } else if let container = bootstrap.container {
                 ThemedRoot()
                     .modelContainer(container)
                     .task(id: ObjectIdentifier(container)) {
@@ -21,6 +23,7 @@ struct CadenceApp: App {
                         guard !bootstrap.isTemporary else { return }
                         PhoneWatchLink.shared.activate(container: container)
                     }
+                    .task { StudioRenderer.shared.prewarm() }
                     .onChange(of: scenePhase) { _, phase in
                         if phase == .active, !bootstrap.isTemporary { PhoneWatchLink.shared.pushPlan() }
                         guard phase == .background, !bootstrap.isTemporary else { return }

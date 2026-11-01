@@ -37,6 +37,12 @@ it stops being true. Keep this file short enough to read every time.
   `main` (`fastlane/certs_repo.rb`). Never point any tool at `master`.
 - A release fix is proven by the main run reaching TestFlight, not by PR CI.
 
+## Visuals
+
+- Sep 16 shipped a photographic bar the owner loved; #248 swapped it for
+  sprites four days later and it took #316 and a month to get back. Bar
+  renderer changes need the side-by-side and sign-off AGENTS.md asks for.
+
 ## Tests
 
 - UI-test fixtures should wait for a readiness signal, not a fixed delay. The
