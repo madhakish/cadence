@@ -138,6 +138,39 @@ final class VisualProofUITests: XCTestCase {
         toggle.tap()
         assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
+        verifyLargeTextInspectorFraming()
+    }
+
+    /// Kept in test04 so the existing visual-proof workflow executes both
+    /// the geometric regression and the real inspector at maximum text size.
+    private func verifyLargeTextInspectorFraming() {
+        app.terminate()
+        app.launchArguments = ["--visual-proof", "--render-lab", "--studio-framing-proof",
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let done = app.staticTexts["render-lab-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 90), "Production studio projection checks must finish")
+        XCTAssertEqual(done.label, "render-lab-done", "A plate left the viewport or caption reserve")
+        let toggle = app.buttons["barbell-explode-toggle"]
+        for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(toggle.isHittable)
+        let artwork = element("barbell-inspection-artwork")
+        let assembledHeight = artwork.frame.height
+        toggle.tap()
+        assertInspectorState("Exploded", button: toggle)
+        let grows = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            artwork.frame.height > assembledHeight * 1.5
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [grows], timeout: 5), .completed,
+                       "The canvas must grow vertically as well as horizontally with its captions")
+        for _ in 0..<5 where artwork.frame.minY < app.windows.firstMatch.frame.minY + 80 { app.swipeDown() }
+        capture("barbell-long-stack-accessibility-top-iphone")
+        app.swipeLeft()
+        capture("barbell-long-stack-accessibility-scrolled-iphone")
+        for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(toggle.isHittable, "The assembled/exploded control remains reachable at large text")
+        capture("barbell-long-stack-accessibility-captions-iphone")
     }
 
     /// #196: the floating plate button must never sit on top of a control.
