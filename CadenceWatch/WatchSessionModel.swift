@@ -73,7 +73,8 @@ final class WatchSessionModel: ObservableObject {
 
     /// Debug builds only: `--watch-fixture` runs against a synthetic plan in a
     /// scratch directory with HealthKit off, for the watch UI smoke test;
-    /// `--watch-confirm-detected` adds tap-to-confirm.
+    /// `--watch-confirm-detected` adds tap-to-confirm, and
+    /// `--watch-fixture-phone-logs-proposal` has the phone log a proposed set.
     let isFixture: Bool
 
     init(directory: URL? = nil) {
@@ -167,6 +168,20 @@ final class WatchSessionModel: ObservableObject {
                 index += 50
                 self?.feed(batch)
             }
+        }
+    }
+
+    /// Five seconds after detection, the phone logs the proposed set (6 reps)
+    /// through the sync path a real completion on the phone takes.
+    private func fixturePhoneLogs(_ setID: String) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard let self, let started = endpoint?.outbox.first(where: { $0.seq == 1 }) else { return }
+            var phone = SyncEndpoint(device: .phone)
+            phone.receive(started)
+            guard let op = phone.issue(.setPerformed(setID: setID, patch: SyncSetPatch(status: .completed, reps: 6, weightLb: 185)),
+                                       operationID: UUID().uuidString, now: Date()) else { return }
+            receive(.operations([op]))
         }
     }
     #endif
@@ -340,6 +355,11 @@ final class WatchSessionModel: ObservableObject {
         if confirmBeforeLogging {
             // The bar is racked: rest starts now; the set waits for Confirm.
             proposal = Proposal(setID: set.id, reps: found.reps)
+            #if DEBUG
+            if isFixture, ProcessInfo.processInfo.arguments.contains("--watch-fixture-phone-logs-proposal") {
+                fixturePhoneLogs(set.id)
+            }
+            #endif
             if settings?.autoStartRest ?? true, let exercise = currentExercise {
                 let seconds = Double(settings?.restSeconds(forRole: exercise.programRole) ?? 120)
                 issue(.restChanged(RestClock.start(total: seconds, now: Date().timeIntervalSince1970)))
@@ -353,7 +373,14 @@ final class WatchSessionModel: ObservableObject {
     }
 
     func confirmProposal() {
-        guard let proposal, let set = view?.exercises.flatMap(\.sets).first(where: { $0.id == proposal.setID }) else { return }
+        guard let proposal else { return }
+        // Only a set still waiting: Confirm must not undo a Skip or overwrite a
+        // completion that came from the phone.
+        guard let set = view?.exercises.flatMap(\.sets).first(where: { $0.id == proposal.setID }), set.status == .planned
+        else {
+            self.proposal = nil
+            return
+        }
         complete(set, reps: proposal.reps, weightLb: load(for: set), startRest: false, detected: true)
         motion.note(.autoLogged, setID: set.id, reps: proposal.reps)
         self.proposal = nil
@@ -433,6 +460,7 @@ final class WatchSessionModel: ObservableObject {
 
     private func dropStateOfUnplannedSets() {
         let planned = Set(view?.exercises.flatMap(\.sets).filter { $0.status == .planned }.map(\.id) ?? [])
+        if let proposal, !planned.contains(proposal.setID) { self.proposal = nil }
         if adjustedLoads.keys.contains(where: { !planned.contains($0) }) {
             adjustedLoads = adjustedLoads.filter { planned.contains($0.key) }
         }

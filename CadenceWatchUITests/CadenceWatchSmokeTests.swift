@@ -125,6 +125,45 @@ final class CadenceWatchSmokeTests: XCTestCase {
         XCTAssertTrue(load.label.hasPrefix("190 lb"), "logged with the adjusted load, not the plan's: \(load.label)")
     }
 
+    /// Review on #356: a proposal lapses once its set stops being planned. Here
+    /// the phone logs the set first (the fixture's phone, through the real sync
+    /// path), so a stale Confirm can't overwrite the phone's reps. The same
+    /// lapse covers a Skip on the watch, which a 40 mm screen can't reach while
+    /// the banner shows.
+    func testAProposalLapsesWhenThePhoneLogsItsSet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion", "--watch-confirm-detected",
+                               "--watch-fixture-phone-logs-proposal"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        let confirm = app.buttons["confirmDetected"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "the synthetic set is detected and proposed")
+        XCTAssertTrue(app.staticTexts["Detected 5 reps"].exists)
+
+        // The phone logs the set five seconds later: nothing is left to confirm.
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: confirm)
+        wait(for: [gone], timeout: 15)
+        XCTAssertFalse(app.staticTexts["Detected 5 reps"].exists)
+        app.buttons["skipRest"].tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 2 of 2")
+        XCTAssertFalse(confirm.exists)
+
+        // The phone's 6 × 185 lb stands: one working set, 1110 lb of volume.
+        let end = app.buttons["endWorkout"]
+        XCTAssertTrue(page(app, upTo: end))
+        end.tap()
+        let endNow = app.buttons["End now"]
+        XCTAssertTrue(endNow.waitForExistence(timeout: 5))
+        endNow.tap()
+        let summary = app.staticTexts["summarySets"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.label, "1 working set")
+        XCTAssertTrue(app.staticTexts["1110 lb volume"].exists)
+    }
+
     /// Tap-to-confirm: a manual Done on a detected set clears its proposal, so
     /// Confirm can't log the same set a second time.
     func testAManualDoneClearsAPendingDetectedSet() {
