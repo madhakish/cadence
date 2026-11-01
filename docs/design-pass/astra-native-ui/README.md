@@ -54,6 +54,11 @@ At accessibility text sizes, the shared load summary stacks its pound and
 kilogram totals, deviation and equipment details instead of squeezing them
 into horizontal rows. Plate-family cells use one column at those sizes.
 
+The [inspected calculator captures](proof/calculator-a6b1f09/README.md) record
+the exact source, original native screenshots and focused test results at
+standard and maximum accessibility text sizes. This is limited proof of the
+first hierarchy change; most of the stage remains below the initial viewport.
+
 This PR begins with reviewable brand exports and calculator hierarchy.
-Selected runtime assets, further screen presentation and native visual proof
-are still pending; the draft is not merge-ready.
+Selected runtime assets, further screen presentation and broader native visual
+proof are still pending; the draft is not merge-ready.
