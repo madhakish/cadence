@@ -2,6 +2,7 @@
 
 @AGENTS.md
 @AGENT-COORDINATION.md
+@.agents/notes.md
 
 **iOS first.** Madhakish is the only current user and uses the iOS app
 exclusively; web has zero users and is secondary. Prioritize a professional,

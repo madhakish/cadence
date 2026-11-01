@@ -6,11 +6,10 @@ read the [Torvalds doctrine](../.agents/torvalds-doctrine.md) and the task-speci
 guidance required by AGENTS.md. These paths are repository files, not URLs to
 external instructions. Do not assume Claude's import syntax is expanded here.
 
-Check current task/PR discussion and ownership before editing; reuse that
-thread, identify the run, and leave evidence and a resumable handoff.
-A review-only agent can use its PR review surface without an exclusive claim.
-If tools cannot fetch instructions or post updates, state the limitation;
-never claim a file was read or coordination occurred when it did not.
+Check open PRs before editing (`make who`); a branch and its PR are the claim,
+and the PR description is the handoff. Read [team notes](../.agents/notes.md).
+If tools cannot fetch instructions, say so; never claim a file was read when it
+was not.
 
 Prioritize data preservation, immutable shipped schemas, real-store migration
 tests, native/web parity, performed values and load semantics, privacy, and

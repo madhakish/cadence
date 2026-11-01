@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  issues: read
 
 concurrency:
   group: repository-hygiene-${{ github.event.pull_request.number || github.ref }}
@@ -24,7 +23,5 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Validate PR metadata and task issue
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Validate the PR title (the squash subject)
         run: node .github/scripts/pr-contract.mjs

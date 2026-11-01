@@ -3,61 +3,24 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { validatePullRequest, checkTask } from './pr-contract.mjs';
+import { validatePullRequest } from './pr-contract.mjs';
 import { validateInstructions, commonFiles } from './check-agent-instructions.mjs';
 
-const rootGuide = '# Guide\n[Coordination](AGENT-COORDINATION.md)\n[Doctrine](.agents/torvalds-doctrine.md)\n';
+const rootGuide = '# Guide\n[Coordination](AGENT-COORDINATION.md)\n[Doctrine](.agents/torvalds-doctrine.md)\n[Notes](.agents/notes.md)\n';
 
-const pr = { title: 'ci: validate instructions', body: 'Task: #12\nScope: Enforce instruction budgets.\nVerification: Node regression cases passed.', user: { login: 'maintainer', type: 'User' } };
-const validate = (change) => validatePullRequest({ ...pr, ...change }, 'owner/repo');
+const validate = (pr) => validatePullRequest(pr).errors;
 
-test('canonical task references and a reasoned maintenance exemption', () => {
-  for (const value of ['#12', 'owner/repo#12', 'https://github.com/owner/repo/issues/12']) {
-    assert.deepEqual(validate({ body: pr.body.replace('#12', value) }), { errors: [], task: { repository: 'owner/repo', number: 12 } });
-  }
-  assert.deepEqual(validate({ body: pr.body.replace('#12', 'none — weekly dependency maintenance') }), { errors: [], task: null });
-});
-
-test('missing, duplicate, placeholder and example-only fields fail', () => {
-  for (const body of ['', pr.body + '\nTask: #13', pr.body.replace('#12', '<issue>'), pr.body.replace('#12', 'none — <reason>'), `<!-- ${pr.body} -->`, '```text\n' + pr.body + '\n```', pr.body.replace('Node regression cases passed.', 'pending')]) {
-    assert.ok(validate({ body }).errors.length, body);
+test('a Conventional Commit title passes with any body, or none', () => {
+  for (const title of ['fix(core)!: migrate the store', 'feat(watch): log sets from wrist motion', 'ci: bump ruby/setup-ruby from 1.334.0 to 1.335.0']) {
+    assert.deepEqual(validate({ title }), [], title);
+    assert.deepEqual(validate({ title, body: 'Free prose.' }), [], title);
   }
 });
 
-test('unterminated fences, longer closers and shorter non-closers hide metadata', () => {
-  for (const fence of ['```', '~~~~']) {
-    const longer = fence + fence[0];
-    const examples = [fence + 'text\n' + pr.body, fence + 'text\n' + pr.body + '\n' + longer,
-      longer + '\n' + fence + '\n' + pr.body + '\n' + longer];
-    for (const body of examples) assert.ok(validate({ body }).errors.length, body);
-    assert.deepEqual(validate({ body: fence + 'text\nTask: fake\n' + longer + '\n' + pr.body }).errors, []);
+test('titles semantic-release cannot read fail', () => {
+  for (const title of ['misc updates', 'Fix: capitalised type', 'feat:missing space', 'ci: ok\nextra', 'feature: not a type', '', undefined]) {
+    assert.equal(validate({ title }).length, 1, String(title));
   }
-  assert.ok(validate({ body: '<!--\n' + pr.body }).errors.length);
-});
-
-test('Conventional Commit titles and authenticated Dependabot identity', () => {
-  assert.equal(validate({ title: 'fix(core)!: migrate the store' }).errors.length, 0);
-  assert.ok(validate({ title: 'misc updates' }).errors.length);
-  assert.ok(validate({ title: 'ci: ok\nextra' }).errors.length);
-  assert.equal(validate({ body: 'Bumps a dependency.', user: { login: 'dependabot[bot]', type: 'Bot' } }).errors.length, 0);
-  assert.ok(validate({ body: '', user: { login: 'dependabot[bot]', type: 'User' } }).errors.length);
-});
-
-test('comment markers in fence info do not hide following metadata', () => {
-  for (const fence of ['```', '~~~']) {
-    const body = `${fence}html <!-- example\n<div>example</div>\n${fence}\n${pr.body}`;
-    assert.deepEqual(validate({ body }).errors, []);
-  }
-});
-
-test('issue validation rejects PR references and inaccessible tasks', async () => {
-  const task = { repository: 'owner/repo', number: 12 };
-  await checkTask(task, 'test-token', async (url) => {
-    assert.equal(url, 'https://api.github.com/repos/owner/repo/issues/12');
-    return { ok: true, json: async () => ({ number: 12 }) };
-  });
-  await assert.rejects(checkTask(task, 'test-token', async () => ({ ok: true, json: async () => ({ pull_request: {} }) })), /pull request/);
-  await assert.rejects(checkTask(task, 'test-token', async () => ({ ok: false, status: 404 })), /HTTP 404/);
 });
 
 function fixture(changes = {}) {
@@ -66,7 +29,7 @@ function fixture(changes = {}) {
   Object.assign(files, {
     'AGENTS.md': rootGuide,
     '.github/copilot-instructions.md': '[Guide](../AGENTS.md)\n[Coordination](../AGENT-COORDINATION.md)\n[Doctrine](../.agents/torvalds-doctrine.md)\n',
-    'CLAUDE.md': '@AGENTS.md\n@AGENT-COORDINATION.md\n',
+    'CLAUDE.md': '@AGENTS.md\n@AGENT-COORDINATION.md\n@.agents/notes.md\n',
     'docs/AGENT-INSTRUCTIONS.md': '# Maintenance\n', 'docs/REPOSITORY-HYGIENE.md': '# Hygiene\n',
   }, changes);
   for (const [path, text] of Object.entries(files)) {
@@ -107,8 +70,8 @@ test('missing files, missing anchors, traversal and cycles fail', () => {
   }
 });
 
-test('loaders must retain both imports and cannot follow outside symlinks', () => {
-  const root = fixture({ 'CLAUDE.md': '@AGENTS.md\n' });
+test('loaders must retain all three imports and cannot follow outside symlinks', () => {
+  const root = fixture({ 'CLAUDE.md': '@AGENTS.md\n@AGENT-COORDINATION.md\n' });
   const outside = mkdtempSync(join(tmpdir(), 'outside-instructions-'));
   try {
     assert.ok(validateInstructions(root).errors.some(e => e.includes('must import')));

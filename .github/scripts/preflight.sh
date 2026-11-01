@@ -23,7 +23,7 @@ node --test .github/scripts/test-repository-hygiene.mjs
 node .github/scripts/check-agent-instructions.mjs
 # The PR contract reads the pull request event; it exists only in CI.
 if [[ -n "${GITHUB_EVENT_PATH:-}" ]]; then
-  node .github/scripts/pr-contract.mjs --offline
+  node .github/scripts/pr-contract.mjs
 fi
 
 if [[ -n "${HEAD_SHA:-}" ]]; then
@@ -67,7 +67,7 @@ bash .github/scripts/test-changed-paths.sh
 bash .github/scripts/test-ci-topology.sh
 bash .github/scripts/test-signing-preflight.sh
 bash .github/scripts/test-signing-health-issue.sh
-node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs .github/scripts/test-main-health-gate.mjs
+node --test .github/scripts/test-who.mjs .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs .github/scripts/test-main-health-gate.mjs
 bash .github/scripts/test-fastlane-phases.sh
 bash .github/scripts/test-verify-native-jobs.sh
 

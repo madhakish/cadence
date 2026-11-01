@@ -5,8 +5,8 @@ add subtree guidance; user/runtime instructions retain their normal precedence.
 
 ## Before work
 
-- Read [AGENT-COORDINATION.md](AGENT-COORDINATION.md). Check the task issue,
-  current comments, and overlapping PRs before claiming scope or editing.
+- Run `make who` and read the short [coordination guide](AGENT-COORDINATION.md)
+  and the [team notes](.agents/notes.md). Your branch and PR are your claim.
 - Before implementation or code review, read and enforce the
   [Torvalds doctrine](.agents/torvalds-doctrine.md). Criticize code, not people;
   repository persistence, privacy, parity, and compatibility rules still apply.
@@ -98,8 +98,8 @@ hygiene, and definition of done in addition to the relevant domain sections.
 - Review `git diff --check`, privacy, generated files, scope, and commit meaning.
   Run checks appropriate to changed behavior; docs-only work needs link,
   instruction-size, and diff checks plus the existing required CI.
-- Leave branch/PR/SHA, observed results, remaining work, and claim release in
-  the task thread. Opening a PR is a handoff, not proof of green CI or a release.
+- The PR description is the handoff: keep what changed, what you checked and
+  what is left current there. An open PR is not proof of green CI or a release.
 
 ## Code Review Rules
 
