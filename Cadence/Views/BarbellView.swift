@@ -436,7 +436,7 @@ struct LoadoutSummaryView: View {
     var plateTheme: PlateThemeID = .custom
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// The achieved total keeps its display proportion and follows Dynamic Type.
-    @ScaledMetric(relativeTo: .largeTitle) private var totalSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .body) private var totalSize: CGFloat = 40
 
     private var differenceLb: Double? {
         requestedLb.map { loadout.totalLb - $0 }
@@ -491,15 +491,15 @@ struct LoadoutSummaryView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.65)
                             Text("lb")
-                                .font(.title3)
+                                .font(.system(size: totalSize * 0.5))
                                 .foregroundStyle(.secondary)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
-                                .font(.figure(.title2))
+                                .font(.figure(scaled: totalSize * 0.6))
                                 .foregroundStyle(.secondary)
                             Text("kg")
-                                .font(.title3)
+                                .font(.system(size: totalSize * 0.5))
                                 .foregroundStyle(.secondary)
                         }
                     }
