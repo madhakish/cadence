@@ -19,4 +19,21 @@ matter, not the pixels.
 | `settings.png` | Settings | Six task-oriented disclosures with current values |
 | `lock-screen.png` | Live Activity | "Complete set · rest" controls and the current set on the Lock Screen |
 
+## Barbell studio references
+
+The four `studio-*.jpg` files are the bar renderer's references since #316:
+SceneKit renders from #318's render lab (source commit `6fbb0e3`, iPhone
+simulator), built from the path-traced look-dev the owner approved on
+2026-10-11 ("Start building"). Unlike the mockups above they are app
+captures, downscaled to 660 px JPEG. A change to the bar's technique or look
+is judged side by side against these and the current renderer, and needs the
+owner's sign-off in the PR (see `AGENTS.md`).
+
+| File | Shot | What it fixes |
+| --- | --- | --- |
+| `studio-hero.jpg` | `hero`, colour bumpers | Three-quarter bar on the oak platform, printed faces, gym light |
+| `studio-hero-calibrated.jpg` | `hero`, IPF calibrated | Stacked thin calibrated plates, knurl and chalk, chrome sleeves |
+| `studio-blowup.jpg` | `blowup`, mixed lb bumpers | Inspector with the near sleeve's plates slid out |
+| `studio-row.jpg` | `row`, default theme | Straight-ahead set-row framing |
+
 Decisions taken while implementing them are recorded in `../DECISIONS.md`.
