@@ -271,7 +271,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertEqual(duration.value as? String, "5 minutes", "Cancel writes nothing")
 
         let sound = app.switches["Completion sound"]
-        _ = panIntoView(sound)
+        panIntoView(sound)
         XCTAssertTrue(sound.isHittable)
         XCTAssertTrue(visible.contains(sound.frame), "The complete audio switch must be clear of the tab bar")
         capture("after-settings-audio-iphone")
@@ -305,25 +305,37 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(activitySummary.waitForExistence(timeout: 3), "cancelling keeps the banked activity")
 
         // The duration editor at the largest text size: the figure scales
-        // down instead of clipping and every preset stays a full-width tap.
+        // down instead of clipping and the presets drop to two columns.
         app.terminate()
         app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
         app.launch()
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(element("settings-screen").waitForExistence(timeout: 5))
-        openDisclosure("Rest & training behavior")
+        // openDisclosure's full swipes overshoot 300-point group labels at
+        // this size; short pans walk the list down to each target instead.
+        let group = app.staticTexts["Rest & training behavior"]
+        panUntilHittable(group)
+        group.tap()
         let largeDuration = app.buttons["Squat & deadlift mains"]
-        XCTAssertTrue(largeDuration.waitForExistence(timeout: 3))
-        _ = panIntoView(largeDuration)
+        panUntilHittable(largeDuration)
+        panIntoView(largeDuration)
         largeDuration.tap()
         XCTAssertTrue(element("duration-readout").waitForExistence(timeout: 5))
         capture("duration-editor-accessibility-iphone")
         let zero = element("duration-zero")
         for _ in 0..<4 where !zero.isHittable { app.swipeUp() }
         XCTAssertTrue(zero.isHittable, "the Off choice is reachable at accessibility sizes")
-        capture("duration-editor-accessibility-lower-iphone")
         app.navigationBars.buttons["Cancel"].firstMatch.tap()
+    }
+
+    private func panUntilHittable(_ target: XCUIElement) {
+        for _ in 0..<24 where !(target.exists && target.isHittable) {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+        XCTAssertTrue(target.isHittable, "\(target) scrolled into reach")
     }
 
     /// Pans a short list row into the band between navigation chrome and the
