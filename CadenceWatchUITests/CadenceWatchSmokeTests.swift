@@ -85,12 +85,44 @@ final class CadenceWatchSmokeTests: XCTestCase {
         app.buttons["start"].tap()
 
         let logged = app.buttons["autoLogged"]
-        XCTAssertTrue(logged.waitForExistence(timeout: 20), "the synthetic set is detected and logged")
+        XCTAssertTrue(logged.waitForExistence(timeout: 30), "the synthetic set is detected and logged")
         XCTAssertEqual(logged.label, "5 reps · Edit")
         // Edit reopens the set for a manual entry.
         logged.tap()
         XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+    }
+
+    /// Review on #356: a set detected after its load was changed on the watch
+    /// logs the load the watch showed, not the planned one.
+    func testADetectedSetLogsTheLoadAdjustedOnTheWatch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--watch-fixture", "--watch-fixture-motion"]
+        app.launch()
+        XCTAssertTrue(app.buttons["start"].waitForExistence(timeout: 10))
+        app.buttons["start"].tap()
+
+        // During the fixture's lead-in: 185 lb planned, 190 lb on the bar.
+        let load = app.buttons["load"]
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("185 lb"), load.label)
+        load.tap()
+        let up = app.buttons["+5"]
+        XCTAssertTrue(up.waitForExistence(timeout: 5))
+        up.tap()
+        app.buttons["loadDone"].tap()
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("190 lb"), load.label)
+        XCTAssertFalse(app.buttons["autoLogged"].exists, "the load is adjusted before the set is detected")
+
+        let logged = app.buttons["autoLogged"]
+        XCTAssertTrue(logged.waitForExistence(timeout: 30), "the synthetic set is detected and logged")
+        // Edit reopens the logged set, showing the load it was logged with.
+        logged.tap()
+        XCTAssertTrue(app.staticTexts["setPosition"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["setPosition"].label, "Set 1 of 2")
+        XCTAssertTrue(load.waitForExistence(timeout: 5))
+        XCTAssertTrue(load.label.hasPrefix("190 lb"), "logged with the adjusted load, not the plan's: \(load.label)")
     }
 
     /// Tap-to-confirm: a manual Done on a detected set clears its proposal, so
@@ -104,7 +136,7 @@ final class CadenceWatchSmokeTests: XCTestCase {
 
         // Detection starts rest and proposes the set without logging it.
         let confirm = app.buttons["confirmDetected"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 20), "the synthetic set is detected and proposed")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30), "the synthetic set is detected and proposed")
         XCTAssertTrue(app.staticTexts["Detected 5 reps"].exists)
         XCTAssertFalse(app.buttons["autoLogged"].exists, "a proposal isn't logged before Confirm")
 

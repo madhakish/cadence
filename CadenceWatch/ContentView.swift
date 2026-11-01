@@ -89,7 +89,6 @@ struct HeartRateBadge: View {
 struct SetView: View {
     @EnvironmentObject private var model: WatchSessionModel
     @State private var reps = 0.0
-    @State private var weightLb = 0.0
     @State private var editingLoad = false
 
     var body: some View {
@@ -108,12 +107,13 @@ struct SetView: View {
                 }
                 Text(exercise.catalog.name).font(.headline).lineLimit(2).multilineTextAlignment(.center)
                 Button { editingLoad = true } label: {
-                    Text("\(model.display(weightLb)) × \(Int(reps))")
+                    Text("\(model.display(model.load(for: set))) × \(Int(reps))")
                         .font(.title3.monospacedDigit().weight(.semibold))
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("load")
                 .accessibilityHint("Adjust the load. Turn the Digital Crown to change reps.")
-                Button("Done") { model.complete(set, reps: Int(reps), weightLb: weightLb) }
+                Button("Done") { model.complete(set, reps: Int(reps), weightLb: model.load(for: set)) }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .accessibilityIdentifier("done")
                 Button("Skip", role: .destructive) { model.skip(set) }
@@ -125,7 +125,9 @@ struct SetView: View {
                                   isContinuous: false, isHapticFeedbackEnabled: true)
             .onAppear { load(set) }
             .onChange(of: set.id) { _, _ in load(set) }
-            .sheet(isPresented: $editingLoad) { LoadAdjuster(weightLb: $weightLb) }
+            .sheet(isPresented: $editingLoad) {
+                LoadAdjuster(weightLb: Binding(get: { model.load(for: set) }, set: { model.adjustLoad(set.id, to: $0) }))
+            }
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(.green)
@@ -137,7 +139,6 @@ struct SetView: View {
 
     private func load(_ set: SyncSessionView.Set) {
         reps = Double(set.reps)
-        weightLb = set.weightLb
     }
 }
 
@@ -155,6 +156,7 @@ struct LoadAdjuster: View {
                 Button("+5") { weightLb += 5 }
             }
             Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("loadDone")
             Button("Drop load…") { choosingReason = true }
                 .font(.footnote)
         }
@@ -210,7 +212,7 @@ struct RestView: View {
                         .font(.footnote)
                 }
                 if let next = model.currentSet, let exercise = model.currentExercise {
-                    Text("Next: \(exercise.catalog.name) · \(model.display(next.weightLb)) × \(next.reps)")
+                    Text("Next: \(exercise.catalog.name) · \(model.display(model.load(for: next))) × \(next.reps)")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
             }

@@ -17,7 +17,11 @@ final class WatchSessionModel: ObservableObject {
     }
 
     @Published private(set) var plan: WatchPlan?
-    @Published private(set) var endpoint: SyncEndpoint?
+    @Published private(set) var endpoint: SyncEndpoint? {
+        // What the watch holds about a planned set lapses once that set stops
+        // being planned, whoever changed it: a Done, a Skip or the phone.
+        didSet { dropStateOfUnplannedSets() }
+    }
     @Published private(set) var healthSetting: SyncHealthSetting?
     @Published private(set) var sessionStartedAt: Date?
     @Published var focusExerciseID: String? {
@@ -49,6 +53,9 @@ final class WatchSessionModel: ObservableObject {
     @Published private(set) var proposal: Proposal?
     /// Reps of the set just completed by detection, for "N reps · Edit".
     @Published private(set) var autoLoggedReps: Int?
+    /// Loads changed on the watch for sets not logged yet, by set ID: what the
+    /// set screen shows and what any completion of the set logs.
+    @Published private(set) var adjustedLoads: [String: Double] = [:]
     private var detector: StreamingSetDetector?
     private var detectorExerciseID: String?
     /// Set by `WatchLink`: hands a message to WatchConnectivity.
@@ -142,7 +149,8 @@ final class WatchSessionModel: ObservableObject {
     }
 
     /// Feed one synthetic set (plus a quiet tail) through `feed`, ten times
-    /// faster than real time.
+    /// faster than real time, after a lead-in long enough for a UI test to
+    /// adjust the load first.
     private func playFixtureMotion() {
         var stream = Self.fixtureMotion(reps: 5, start: 0)
         let tail = (1...400).map { i in
@@ -151,6 +159,7 @@ final class WatchSessionModel: ObservableObject {
         }
         stream += tail
         Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
             var index = 0
             while index < stream.count {
                 try? await Task.sleep(nanoseconds: 100_000_000)
@@ -182,6 +191,15 @@ final class WatchSessionModel: ObservableObject {
 
     /// The set just finished, for the rest screen's tags and edit.
     @Published private(set) var lastLoggedSetID: String?
+
+    /// The load the watch shows for a set: the owner's adjustment, else the plan's.
+    func load(for set: SyncSessionView.Set) -> Double {
+        adjustedLoads[set.id] ?? set.weightLb
+    }
+
+    func adjustLoad(_ setID: String, to weightLb: Double) {
+        adjustedLoads[setID] = weightLb
+    }
 
     func display(_ weightLb: Double) -> String {
         if settings?.unit == "kg" { return Weight.trim(Weight.kg(fromLb: weightLb)) + " kg" }
@@ -297,6 +315,7 @@ final class WatchSessionModel: ObservableObject {
             sets: exercise.sets.map { (weightLb: $0.weightLb, isWarmup: $0.isWarmup, isFlagged: $0.status != .planned) },
             barLb: exercise.catalog.loadBasis == .totalBar ? 45 : 0)
         for step in plan {
+            adjustedLoads[exercise.sets[step.index].id] = nil  // the drop is the newer decision
             issue(.setPerformed(setID: exercise.sets[step.index].id, patch: SyncSetPatch(
                 weightLb: step.weightLb, autoregReason: SyncValue(reason))))
         }
@@ -327,7 +346,7 @@ final class WatchSessionModel: ObservableObject {
                 motion.note(.restStarted)
             }
         } else {
-            complete(set, reps: found.reps, weightLb: set.weightLb, detected: true)
+            complete(set, reps: found.reps, weightLb: load(for: set), detected: true)
             motion.note(.autoLogged, setID: set.id, exerciseID: currentExercise?.catalog.exerciseID, reps: found.reps)
             autoLoggedReps = found.reps
         }
@@ -335,7 +354,7 @@ final class WatchSessionModel: ObservableObject {
 
     func confirmProposal() {
         guard let proposal, let set = view?.exercises.flatMap(\.sets).first(where: { $0.id == proposal.setID }) else { return }
-        complete(set, reps: proposal.reps, weightLb: set.weightLb, startRest: false, detected: true)
+        complete(set, reps: proposal.reps, weightLb: load(for: set), startRest: false, detected: true)
         motion.note(.autoLogged, setID: set.id, reps: proposal.reps)
         self.proposal = nil
     }
@@ -410,6 +429,13 @@ final class WatchSessionModel: ObservableObject {
         self.endpoint = nil
         sessionStartedAt = nil
         lastLoggedSetID = nil
+    }
+
+    private func dropStateOfUnplannedSets() {
+        let planned = Set(view?.exercises.flatMap(\.sets).filter { $0.status == .planned }.map(\.id) ?? [])
+        if adjustedLoads.keys.contains(where: { !planned.contains($0) }) {
+            adjustedLoads = adjustedLoads.filter { planned.contains($0.key) }
+        }
     }
 
     private func save() {
