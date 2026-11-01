@@ -49,9 +49,6 @@ struct HomeView: View {
     private var defaultGym: Gym? { gyms.first { $0.isDefault } ?? gyms.first }
     private var activeProgram: Program? { programs.first { $0.isActive } ?? programs.first }
     private var todayStamp: Double { Calendar.current.startOfDay(for: .now).timeIntervalSince1970 }
-    private var prominentGymTag: Bool {
-        defaultGym?.barcodeImageData == nil || gymTagLastShownDay != todayStamp
-    }
     private var intervalSnapshots: [TrainingIntervalSnapshot] {
         trainingIntervals.map(\.snapshot)
     }
@@ -161,10 +158,6 @@ struct HomeView: View {
         )
     }
 
-    private func rawProgramPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
-        previewPlans(program, lift).raw
-    }
-
     private func programPlan(_ program: Program, _ day: ProgramDay, _ lift: ProgramLift) -> SessionPlan {
         previewPlans(program, lift).snapped
     }
@@ -190,6 +183,263 @@ struct HomeView: View {
             .suffix(8))
     }
 
+    // MARK: - Today hero
+    //
+    // One band at the top that answers "what now": the open session to
+    // resume, or the program's next day to start. Rows, not a card — a
+    // full-bleed steel band between hairlines, so List keeps each control's
+    // tap target to itself.
+
+    /// The day an open program session was built from, else a plain name.
+    private func sessionTitle(_ session: WorkoutSession) -> String {
+        if let index = session.programDayIndex,
+           let day = programs.first(where: { $0.id == session.programID })?.days.first(where: { $0.order == index }) {
+            return ProgramProgression.workoutDayLabel(name: day.name, rotation: session.programWeek ?? 1)
+        }
+        return session.orderedExercises.isEmpty ? "Blank session" : "Workout"
+    }
+
+    private func startedLabel(_ session: WorkoutSession) -> String {
+        let when = Calendar.current.isDateInToday(session.date)
+            ? session.date.formatted(date: .omitted, time: .shortened)
+            : session.date.formatted(date: .abbreviated, time: .shortened)
+        return ["Started \(when)", session.programName].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Heaviest prescribed set as it stands now (edits included) and how many
+    /// of those sets are banked — read straight off the session's own sets.
+    private func sessionLine(_ entry: SessionExercise) -> (load: String?, scheme: String?) {
+        let prescribed = entry.prescribedSets
+        let top = prescribed.map(\.weightLb).max() ?? 0
+        let load = top > 0 ? unitDisplay.format(lb: top) + (entry.exercise?.loadBasis.shortSuffix ?? "") : nil
+        let scheme = prescribed.isEmpty ? nil : "\(entry.prescribedWork.count)/\(prescribed.count) sets"
+        return (load, scheme)
+    }
+
+    @ViewBuilder
+    private func resumeHero(_ open: WorkoutSession) -> some View {
+        let tracking = workoutClock.isTracking(sessionID: open.id)
+        let title = sessionTitle(open)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                HeroKicker(text: tracking ? (workoutClock.isPaused ? "Paused" : "In progress") : "Open session",
+                           live: tracking && !workoutClock.isPaused)
+                Spacer()
+                if tracking, let start = workoutClock.startDate {
+                    TimelineView(.periodic(from: start, by: 1)) { timeline in
+                        Text(workoutElapsedLabel(from: start, to: workoutClock.pausedAt ?? timeline.date))
+                            .font(.title3.weight(.heavy).monospacedDigit())
+                            .fontWidth(.condensed)
+                            .foregroundStyle(Theme.accent)
+                            .accessibilityLabel("Elapsed")
+                            .accessibilityValue(workoutElapsedLabel(from: start, to: workoutClock.pausedAt ?? timeline.date))
+                    }
+                }
+            }
+            Text(title)
+                .font(.largeTitle.weight(.black))
+                .fontWidth(.condensed)
+                .accessibilityAddTraits(.isHeader)
+            Text(startedLabel(open))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 18).padding(.bottom, 10)
+        .heroBand(.edge)
+        ForEach(open.orderedExercises) { entry in
+            let name = entry.exercise?.name ?? "Exercise"
+            let line = sessionLine(entry)
+            NavigationLink {
+                ExerciseDetailByNameView(name: name)
+            } label: {
+                HeroLiftLine(name: name, load: line.load, scheme: line.scheme) { EmptyView() }
+            }
+            .accessibilityHint("Shows exercise history, program cycle, and settings")
+            .heroBand(.rule)
+        }
+        HStack(spacing: 8) {
+            Button { activeSession = open } label: {
+                Label("Resume workout", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+            }
+            .primaryActionStyle()
+            .accessibilityValue(title)
+            .accessibilityIdentifier("resume-session")
+            // Discard used to sit directly under Resume at the same size: one
+            // slip from deleting the morning. It is still one menu and a
+            // confirmation away, just no longer in the thumb's landing zone.
+            Menu {
+                Button(role: .destructive) { discardSession = open } label: {
+                    Label("Discard session", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: Theme.bigTap)
+                    .frame(maxHeight: .infinity)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                    .overlay { RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.hairline, lineWidth: 1) }
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Session actions")
+            .accessibilityHint("Discard this unfinished session")
+            .accessibilityIdentifier("session-actions")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 12).padding(.bottom, 20)
+        .heroBand(.none, bottomEdge: true)
+    }
+
+    @ViewBuilder
+    private func startHero(_ program: Program, _ day: ProgramDay) -> some View {
+        let name = workoutName(program, day)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center) {
+                HeroKicker(text: program.currentWeek == ProgramProgression.deloadWeek ? "Deload · light work" : "Next workout",
+                           live: false)
+                Spacer()
+                RotationGlyph(week: program.currentWeek)
+            }
+            // Tapping the day's name previews the whole workout without
+            // starting it (docs/how-to/run-a-training-day.md).
+            Button { previewProgramDay(program, fallback: day) } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(name)
+                        .font(.largeTitle.weight(.black))
+                        .fontWidth(.condensed)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                    Image(systemName: "chevron.right")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Preview \(name)")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("today-hero-preview")
+            Text("\(program.name) · Cycle \(program.cycleNumber)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 18).padding(.bottom, 10)
+        .heroBand(.edge)
+        if program.tfhPolicyData != nil {
+            ForEach(day.orderedLifts) { lift in
+                TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
+                    .padding(.vertical, 6)
+                    .heroBand(.rule)
+            }
+            ForEach(day.orderedAccessories) { accessory in
+                TFHSlotPlanView(program: program, slotID: accessory.id, name: accessory.exerciseName)
+                    .padding(.vertical, 6)
+                    .heroBand(.rule)
+            }
+        } else {
+            ForEach(day.orderedLifts) { lift in
+                let exercise = exercises.first { $0.name == lift.exerciseName }
+                let plan = programPlan(program, day, lift)
+                NavigationLink {
+                    ExerciseDetailByNameView(name: lift.exerciseName)
+                } label: {
+                    HeroLiftLine(name: lift.exerciseName,
+                                 load: unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""),
+                                 scheme: "\(plan.sets)×\(plan.reps)") {
+                        SlotPrescriptionBadge(
+                            lift: lift, rotation: program.currentWeek,
+                            movementGroup: exercise?.movementGroup,
+                            focus: program.focus
+                        )
+                    }
+                }
+                .accessibilityHint("Shows exercise history, program cycle, and settings")
+                .heroBand(.rule)
+            }
+            if !day.accessories.isEmpty {
+                Text("+ " + day.accessories.map(\.exerciseName).joined(separator: ", "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+                    .heroBand(.rule)
+            }
+        }
+        if let note = spacingNote(program) {
+            Text(note)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+                .heroBand(.rule)
+        }
+        Button { startProgramDay(program, day) } label: {
+            Label("Start \(name)", systemImage: "play.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+        }
+        .primaryActionStyle()
+        .accessibilityIdentifier("start-today")
+        .padding(.top, 12).padding(.bottom, 20)
+        .heroBand(.none, bottomEdge: true)
+    }
+
+    /// One day of the current rotation. Only the next day is a control (its
+    /// preview); the rest are the map of where the rotation goes.
+    @ViewBuilder
+    private func rotationRow(_ program: Program, _ day: ProgramDay) -> some View {
+        let isNext = day.order == program.nextDayIndex
+        let isDone = !isNext && program.currentWeek != ProgramProgression.deloadWeek && day.order < program.nextDayIndex
+        let lifts = day.orderedLifts.map(\.exerciseName).joined(separator: " · ")
+        let row = HStack(spacing: 12) {
+            ZStack {
+                if isNext {
+                    Rectangle().fill(Theme.accent).frame(width: 3, height: 28)
+                } else if isDone {
+                    Image(systemName: "checkmark").font(.footnote.weight(.bold)).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(day.name)
+                    .font(.headline.weight(.heavy))
+                    .fontWidth(.condensed)
+                    .foregroundStyle(isDone ? .secondary : .primary)
+                if !lifts.isEmpty {
+                    Text(lifts).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            if isNext {
+                Text("Next").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(.tertiary)
+            }
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        if isNext {
+            Button { previewProgramDay(program, fallback: day) } label: { row }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(day.name), next. \(lifts)")
+                .accessibilityHint("Previews the whole workout without starting it")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("preview-program-day")
+        } else {
+            row
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(day.name), \(isDone ? "done" : "upcoming"). \(lifts)")
+        }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote.weight(.semibold))
+            .tracking(1.2)
+            .textCase(.uppercase)
+            .foregroundStyle(.secondary)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -213,31 +463,9 @@ struct HomeView: View {
                         }
                     }
                 }
-                // The first card is always the next action: resume beats plan.
+                // The hero is always the next action: resume beats plan.
                 if let open = openSessions.max(by: { $0.date < $1.date }) {
-                    Section {
-                        Button { activeSession = open } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Label("Resume workout", systemImage: "play.fill").font(.title3.bold())
-                                // Everything on the accent fill reads in the
-                                // on-accent ink: system secondary and the
-                                // accent itself both vanish against it (#61).
-                                Text(openSessionLabel(open)).font(.caption).foregroundStyle(Theme.onAccent.opacity(0.85))
-                                if workoutClock.isTracking(sessionID: open.id), let start = workoutClock.startDate {
-                                    TimelineView(.periodic(from: start, by: 1)) { timeline in
-                                        Text(workoutElapsedLabel(from: start, to: workoutClock.pausedAt ?? timeline.date))
-                                            .font(.title2.bold().monospacedDigit()).foregroundStyle(Theme.onAccent)
-                                    }
-                                }
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        }
-                        .primaryActionStyle()
-                        .accessibilityIdentifier("resume-session")
-                        Button(role: .destructive) { discardSession = open } label: {
-                            Label("Discard session", systemImage: "trash").font(.caption)
-                        }
-                    }
+                    Section { resumeHero(open) }
                     // The hero shows the newest open session, but this screen
                     // can create more — and an older one (including the one
                     // the workout clock is timing) must never lose its resume
@@ -274,99 +502,7 @@ struct HomeView: View {
                         }
                     }
                 } else if let program = activeProgram, let day = nextDay(program) {
-                    Section {
-                        Button { previewProgramDay(program, fallback: day) } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(program.currentWeek == ProgramProgression.deloadWeek ? "Deload · light work" : "Next workout")
-                                        .font(.caption.bold()).foregroundStyle(.secondary)
-                                    Text(workoutName(program, day)).font(.title2.bold())
-                                    Text("\(program.name) · Cycle \(program.cycleNumber)")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                RotationGlyph(week: program.currentWeek)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        }
-                        Button("Start \(workoutName(program, day))") { startProgramDay(program, day) }
-                            .primaryActionStyle()
-                    }
-                }
-
-                if let program = activeProgram, !program.orderedDays.isEmpty {
-                    let days = scheduledDays(program)
-                    Section {
-                        if program.currentWeek == ProgramProgression.deloadWeek {
-                            Text("Recovery · \(days.count) light sessions in this rotation")
-                                .font(.subheadline.bold())
-                        }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(days) { day in
-                                    Text("\(day.order == program.nextDayIndex ? "NOW " : program.currentWeek != ProgramProgression.deloadWeek && day.order < program.nextDayIndex ? "✓ " : "")\(day.name)")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(day.order == program.nextDayIndex ? Theme.accent : .secondary)
-                                    if day.id != days.last?.id { Text("→").foregroundStyle(.tertiary) }
-                                }
-                            }
-                        }
-                        .accessibilityLabel("Program sequence, \(nextDay(program)?.name ?? "next day") is now")
-                    }
-                }
-
-                // Keychain replacement stays prominent until today's scan, then
-                // collapses to one compact 44-point action.
-                Section {
-                    Button {
-                        gymTagLastShownDay = todayStamp
-                        showGymCard = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "barcode.viewfinder")
-                            Text(prominentGymTag ? "Gym Tag" : "Scan gym tag").font(.headline)
-                            Spacer()
-                            if prominentGymTag {
-                                Text(defaultGym?.barcodeImageData == nil ? "Add barcode" : "Ready to scan")
-                                    .font(.caption)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
-                    .foregroundStyle(prominentGymTag ? Theme.onAccent : Color.primary)
-                    .tint(prominentGymTag ? Theme.accent : Color(.tertiarySystemFill))
-                    .accessibilityHint("Shows the default membership barcode at full brightness")
-                }
-
-                // Ad-hoc work (#166): real physical work banked on the same
-                // timeline as training, never into a program.
-                Section {
-                    Button { showActivityLog = true } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text("Wood Splitting")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: "plus")
-                                    .font(.headline)
-                                    .foregroundStyle(Theme.accent)
-                            }
-                            Text("Log duration, effort, maul and wood counts")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("activity-quick-log")
-                    .accessibilityHint("Banks off-program physical work without starting a training session")
-                } header: {
-                    Text("Ad-hoc work")
-                } footer: {
-                    Text("Hard work outside the program. It appears in History but never advances your training cycle or lifting volume.")
+                    Section { startHero(program, day) }
                 }
 
                 if let recoveryMessage {
@@ -384,6 +520,25 @@ struct HomeView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .accessibilityLabel(Text(note))
+                    }
+                }
+
+                if let program = activeProgram, !program.orderedDays.isEmpty {
+                    let days = scheduledDays(program)
+                    Section {
+                        if program.currentWeek == ProgramProgression.deloadWeek {
+                            Text("Recovery · \(days.count) light sessions in this rotation")
+                                .font(.subheadline.bold())
+                        }
+                        ForEach(days) { day in rotationRow(program, day) }
+                        // The switcher lives where training starts (epic #155
+                        // Stage 4): resuming another block or trying a
+                        // different methodology is one tap from Today instead
+                        // of buried in Settings.
+                        Button("Switch program") { showProgramSwitcher = true }
+                            .accessibilityLabel("Switch training program")
+                    } header: {
+                        sectionLabel("\(program.name) · Cycle \(program.cycleNumber)")
                     }
                 }
 
@@ -410,108 +565,39 @@ struct HomeView: View {
                             .frame(minHeight: Theme.bigTap)
                         }
                     }
-
                 }
 
-                if let program = activeProgram, let day = nextDay(program) {
-                    Section {
-                        // The switcher lives where training starts (epic #155
-                        // Stage 4): resuming another block or trying a
-                        // different methodology is one tap from Today instead
-                        // of buried in Settings.
-                        Button("Switch program") { showProgramSwitcher = true }
-                            .accessibilityLabel("Switch training program")
-                    } header: {
-                        Text("\(program.name) · Cycle \(program.cycleNumber)")
-                    }
-                    Section {
-                        // Tapping the day opens the full preview — browse the
-                        // whole workout without starting it.
-                        Button {
-                            previewProgramDay(program, fallback: day)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text(workoutName(program, day)).font(.headline)
-                                Spacer()
-                                // Position only. The phase NAME moved onto the
-                                // slots it actually describes — this counter is
-                                // shared by slots whose prescriptions have
-                                // nothing to do with each other.
-                                RotationGlyph(week: program.currentWeek)
-                                Text("R\(min(max(program.currentWeek, 1), ProgramProgression.deloadWeek))")
-                                    .font(.caption.bold().monospacedDigit())
-                                    .foregroundStyle(Theme.accent)
-                                    .accessibilityHidden(true)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.tertiary)
+                // Ad-hoc work (#166): real physical work banked on the same
+                // timeline as training, never into a program. One line of
+                // explanation; the paragraph that used to sit under it was
+                // taller than the button it explained.
+                Section {
+                    Button { showActivityLog = true } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Wood Splitting")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("Banks to History. Never moves the program.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("preview-program-day")
-                        if let note = spacingNote(program) {
-                            Text(note)
-                                .font(.caption)
+                            Spacer()
+                            Image(systemName: "plus")
+                                .font(.headline)
                                 .foregroundStyle(.secondary)
                         }
-                        if program.tfhPolicyData != nil {
-                            ForEach(day.orderedLifts) { lift in
-                                TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
-                            }
-                            ForEach(day.orderedAccessories) { accessory in
-                                TFHSlotPlanView(program: program, slotID: accessory.id, name: accessory.exerciseName)
-                            }
-                        } else {
-                        ForEach(day.orderedLifts) { lift in
-                            let exercise = exercises.first { $0.name == lift.exerciseName }
-                            let target = rawProgramPlan(program, day, lift)
-                            let plan = programPlan(program, day, lift)
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        NavigationLink {
-                                            ExerciseDetailByNameView(name: lift.exerciseName)
-                                        } label: {
-                                            Text(lift.exerciseName).font(.subheadline.bold())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityHint("Shows exercise history, program cycle, and settings")
-                                        SlotPrescriptionBadge(
-                                            lift: lift, rotation: program.currentWeek,
-                                            movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
-                                            focus: program.focus
-                                        )
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
-                                            .font(.body.bold().monospacedDigit())
-                                        Text("\(plan.sets)×\(plan.reps)")
-                                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                    }
-                                }
-                                // The load is stated as a number here. The
-                                // loaded bar itself belongs to the preview and
-                                // the logger — equipment imagery stays with
-                                // loading, never decorates Today.
-                            }
-                        }
-                        if !day.accessories.isEmpty {
-                            Text("+ " + day.accessories.map(\.exerciseName).joined(separator: ", "))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        }
-                        Button {
-                            startProgramDay(program, day)
-                        } label: {
-                            Text("Start \(workoutName(program, day))").frame(maxWidth: .infinity).font(.headline)
-                        }
-                        .primaryActionStyle()
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("activity-quick-log")
+                    .accessibilityHint("Banks off-program physical work without starting a training session")
+                } header: {
+                    sectionLabel("Ad-hoc work")
                 }
 
-                Section(activeProgram == nil ? "Next up" : "Other tracked lifts") {
+                Section {
                     ForEach(tracks.filter { !ownedLiftNames.contains($0.exerciseName) }.sorted { $0.exerciseName < $1.exerciseName }) { track in
                         let plan = trackPlan(track)
                         Button {
@@ -523,8 +609,9 @@ struct HomeView: View {
                                         .font(.headline)
                                         .foregroundStyle(.primary)
                                     Text("\(unitDisplay.format(lb: plan.weightLb)) · \(plan.sets)×\(plan.reps)")
-                                        .font(.title3.bold())
-                                        .foregroundStyle(Theme.accent)
+                                        .font(.title3.weight(.heavy).monospacedDigit())
+                                        .fontWidth(.condensed)
+                                        .foregroundStyle(.primary)
                                     if track.mode == .cycle {
                                         Text("Cycle \(track.cycleNumber) · advances when you bank it")
                                             .font(.caption)
@@ -545,13 +632,34 @@ struct HomeView: View {
                     } label: {
                         Label("Blank session", systemImage: "plus")
                     }
+                } header: {
+                    sectionLabel(activeProgram == nil ? "Next up" : "Other tracked lifts")
                 }
 
             }
             .listStyle(.plain)
             .themeListBackground()
             .accessibilityIdentifier("home-screen")
-            .navigationTitle("Cadence")
+            .navigationTitle("Today")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // The keychain replacement stays one tap from launch, in the
+                // same corner every time, instead of a full-width accent slab
+                // shouting over the workout. The shortcut, control and
+                // first-launch surfaces live in RootView and are untouched.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        gymTagLastShownDay = todayStamp
+                        showGymCard = true
+                    } label: {
+                        Label(defaultGym?.barcodeImageData == nil ? "Add gym tag" : "Gym tag",
+                              systemImage: "barcode.viewfinder")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .accessibilityIdentifier("gym-tag")
+                    .accessibilityHint("Shows the default membership barcode at full brightness")
+                }
+            }
             .plateCalculatorClearance()
             .sheet(isPresented: $showProgramSwitcher, onDismiss: reconcileActiveRecovery) {
                 NavigationStack {
@@ -931,5 +1039,93 @@ private struct ProgramSwitcherView: View {
             dismiss()
             onError(error.localizedDescription)
         }
+    }
+}
+
+/// The hero's top line: what state Today is in. A small accent tick marks a
+/// running clock — the one thing on the band that is literally "now".
+private struct HeroKicker: View {
+    let text: String
+    let live: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if live {
+                Rectangle().fill(Theme.accent).frame(width: 8, height: 8).accessibilityHidden(true)
+            }
+            Text(text)
+                .font(.footnote.weight(.bold))
+                .tracking(1.4)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// One lift in the hero: name left, load right in condensed heavy figures.
+/// At accessibility sizes the two stack so neither gets truncated to "Ba…".
+private struct HeroLiftLine<Detail: View>: View {
+    let name: String
+    let load: String?
+    let scheme: String?
+    @ViewBuilder let detail: Detail
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let stacked = typeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+        layout {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.title3.weight(.heavy))
+                    .fontWidth(.condensed)
+                    .foregroundStyle(.primary)
+                detail
+            }
+            if !stacked { Spacer(minLength: 8) }
+            VStack(alignment: stacked ? .leading : .trailing, spacing: 1) {
+                if let load {
+                    Text(load)
+                        .font(.title2.weight(.black).monospacedDigit())
+                        .fontWidth(.condensed)
+                        .foregroundStyle(.primary)
+                }
+                if let scheme {
+                    Text(scheme)
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Where a hero row draws its hairline: the band's full-bleed top edge, the
+/// inset rule between lifts, or nothing (the action row).
+private enum HeroRule { case edge, rule, none }
+
+private extension View {
+    /// A row of the Today band: steel fill edge to edge, hairlines instead
+    /// of a card outline, system separators off so the rules are ours.
+    func heroBand(_ top: HeroRule, bottomEdge: Bool = false) -> some View {
+        listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(
+                Theme.card
+                    .overlay(alignment: .top) {
+                        if top != .none {
+                            Theme.hairline
+                                .frame(height: top == .edge ? 1 : 0.5)
+                                .padding(.leading, top == .edge ? 0 : 20)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if bottomEdge { Theme.hairline.frame(height: 1) }
+                    }
+            )
     }
 }

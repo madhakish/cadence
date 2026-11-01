@@ -76,7 +76,8 @@ lifts appear under "Next up" with their own suggestions.
   says so instead of logging a different set. Ending the activity never
   banks the workout — **Bank it** stays in the app.
 - **Done with a session you never wanted?** **Discard session** removes
-  it outright, from inside the session or from the Today card. The
+  it outright, from inside the session or from the **⋯** menu beside
+  **Resume workout** on Today. The
   confirmation says exactly how many logged sets would be lost; your
   banked history and the program schedule are unchanged.
 - **Grade honest quality.** Clean, grindy, and wobble are one optional,
@@ -112,7 +113,7 @@ lifts appear under "Next up" with their own suggestions.
 Editing your program takes effect the next time you **Start** that day:
 Start always reflects the current plan, so a lift you swapped in the
 program editor shows up immediately (a session you already had open from
-before the edit stays as it was — resume it from the Today card only if
+before the edit stays as it was — resume it from Today only if
 you want the old snapshot).
 
 ## Bank it

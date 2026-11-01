@@ -18,6 +18,11 @@ final class VisualProofUITests: XCTestCase {
 
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
+        // The membership tag stays one tap from launch (product rule), as a
+        // labelled header control rather than a full-width accent block.
+        XCTAssertTrue(app.buttons["gym-tag"].isHittable)
+        // The program's day list sits on the first screen, not under the tab bar.
+        XCTAssertTrue(app.buttons["preview-program-day"].isHittable)
 
         let activity = app.buttons["activity-quick-log"]
         for _ in 0..<4 where !activity.isHittable { app.swipeUp() }
@@ -25,6 +30,32 @@ final class VisualProofUITests: XCTestCase {
         activity.tap()
         XCTAssertTrue(element("activity-log-screen").waitForExistence(timeout: 5))
         capture("after-02-ad-hoc-work-iphone")
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        // Discard is off the main flow (behind the hero's menu) but still
+        // reachable, and still confirmed before anything is deleted.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertFalse(app.buttons["Discard session"].exists, "discard must not sit beside Resume")
+        app.buttons["session-actions"].tap()
+        let discard = app.buttons["Discard session"].firstMatch
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        let confirm = app.sheets.buttons["Discard session"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(resume.exists, "the menu alone deletes nothing")
+        confirm.tap()
+        XCTAssertTrue(resume.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["start-today"].isHittable)
+        capture("after-01b-home-ready-iphone")
+
+        app.terminate()
+        let category = app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName")!
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryAccessibilityL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        capture("after-01c-home-accessibility-iphone")
     }
 
     func test02CurrentSessionAndExactPlateStack() {

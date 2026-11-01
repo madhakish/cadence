@@ -4,7 +4,7 @@ import SwiftData
 struct RootView: View {
     /// Shared with HomeView's @AppStorage — two independent spellings of
     /// this key would silently fork the shown-today marker between the
-    /// auto-present path and the prominent/compact styling.
+    /// auto-present path and Today's gym-tag button.
     static let gymTagLastAutoDayKey = "gymTagLastAutoDay"
 
     @Binding var selection: Int
