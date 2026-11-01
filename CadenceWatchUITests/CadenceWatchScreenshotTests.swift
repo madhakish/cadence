@@ -40,6 +40,9 @@ final class CadenceWatchScreenshotTests: XCTestCase {
         shoot("03-load-adjuster")
         app.buttons["loadDone"].tap()
 
+        // A tap while the sheet is still sliding away lands on the sheet.
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.buttons["loadDone"])
+        wait(for: [gone], timeout: 5)
         XCTAssertTrue(app.buttons["done"].waitForExistence(timeout: 5))
         app.buttons["done"].tap()
         XCTAssertTrue(app.staticTexts["restTitle"].waitForExistence(timeout: 5))
