@@ -259,9 +259,7 @@ struct HomeView: View {
         }
         HStack(spacing: 8) {
             Button { activeSession = open } label: {
-                Label("Resume workout", systemImage: "play.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+                HeroActionLabel(title: "Resume workout")
             }
             .primaryActionStyle()
             .accessibilityValue(title)
@@ -283,6 +281,7 @@ struct HomeView: View {
                     .overlay { RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.hairline, lineWidth: 1) }
                     .contentShape(Rectangle())
             }
+            .tint(.primary)
             .accessibilityLabel("Session actions")
             .accessibilityHint("Discard this unfinished session")
             .accessibilityIdentifier("session-actions")
@@ -374,9 +373,7 @@ struct HomeView: View {
                 .heroBand(.rule)
         }
         Button { startProgramDay(program, day) } label: {
-            Label("Start \(name)", systemImage: "play.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+            HeroActionLabel(title: "Start \(name)")
         }
         .primaryActionStyle()
         .accessibilityIdentifier("start-today")
@@ -652,10 +649,17 @@ struct HomeView: View {
                         gymTagLastShownDay = todayStamp
                         showGymCard = true
                     } label: {
-                        Label(defaultGym?.barcodeImageData == nil ? "Add gym tag" : "Gym tag",
-                              systemImage: "barcode.viewfinder")
-                            .labelStyle(.titleAndIcon)
+                        // Spelled out: a toolbar Label collapses to its icon,
+                        // and a bare barcode glyph is not "clearly labelled".
+                        HStack(spacing: 6) {
+                            Image(systemName: "barcode.viewfinder")
+                            Text(defaultGym?.barcodeImageData == nil ? "Add gym tag" : "Gym tag")
+                        }
+                        .font(.subheadline.weight(.semibold))
                     }
+                    // Chalk, not accent: red is for "now", and the tag is a
+                    // utility. The toolbar ignores foregroundStyle; tint wins.
+                    .tint(.primary)
                     .accessibilityIdentifier("gym-tag")
                     .accessibilityHint("Shows the default membership barcode at full brightness")
                 }
@@ -1058,6 +1062,32 @@ private struct HeroKicker: View {
                 .tracking(1.4)
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The hero's one accent action. At accessibility sizes the glyph goes and
+/// the words wrap, instead of clipping "Resume workout" to "Resume".
+private struct HeroActionLabel: View {
+    let title: String
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        Label(title, systemImage: "play.fill")
+            .labelStyle(HeroActionLabelStyle(showsIcon: !typeSize.isAccessibilitySize))
+            .font(.headline)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+    }
+}
+
+private struct HeroActionLabelStyle: LabelStyle {
+    let showsIcon: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            if showsIcon { configuration.icon }
+            configuration.title
         }
     }
 }

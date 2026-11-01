@@ -56,6 +56,10 @@ final class VisualProofUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
         capture("after-01c-home-accessibility-iphone")
+        let program = app.buttons["preview-program-day"]
+        for _ in 0..<4 where !program.isHittable { app.swipeUp() }
+        XCTAssertTrue(program.isHittable)
+        capture("after-01d-home-accessibility-program-iphone")
     }
 
     func test02CurrentSessionAndExactPlateStack() {
