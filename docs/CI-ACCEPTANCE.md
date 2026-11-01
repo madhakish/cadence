@@ -11,6 +11,7 @@ The broader requirements audit is tracked in [#254](https://github.com/madhakish
 | Core and web | Every CI run | Full existing suites on GitHub-hosted macOS |
 | Browser feature acceptance | Every CI run and manual Pages recovery, inside the web gate | Five named journeys on Chromium and WebKit; all ten executions must pass without skips or retries |
 | Production device compile | Native-affecting PR | Release build of the iOS device target |
+| Watch simulator smoke | Native-affecting PR, in its own job beside the device compile | Release watchOS Simulator build of the watch scheme, then the watch UI smoke tests on a booted watch simulator; xcresult kept 14 days |
 | iPhone interactions | Native-affecting CI run | Four XCTest interactions; xcresult summary must show exactly four passed and zero failed/skipped |
 | Native integration/migrations | Persistence-bearing production sources and shared CadenceCore | Hostless SwiftData suite, with required actual shipped-store fixtures |
 | Release promotion | Successful full aggregate | Verified signed IPA, no rebuild during promotion |

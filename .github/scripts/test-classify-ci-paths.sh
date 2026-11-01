@@ -86,6 +86,13 @@ assert_classification \
   $'native=true\nmigrations=false\nweb=false' \
   '.github/scripts/classify-ci-paths.sh'
 
+for script in .github/scripts/changed-paths.sh .github/scripts/test-changed-paths.sh; do
+  assert_classification \
+    "changed-path changes cannot bypass native validation" \
+    $'native=true\nmigrations=false\nweb=false' \
+    "$script"
+done
+
 assert_classification \
   "native aggregate changes cannot bypass device validation" \
   $'native=true\nmigrations=false\nweb=false' \
