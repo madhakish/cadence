@@ -210,8 +210,10 @@ struct HomeView: View {
     /// of those sets are banked — read straight off the session's own sets.
     private func sessionLine(_ entry: SessionExercise) -> (load: String?, scheme: String?) {
         let prescribed = entry.prescribedSets
-        let top = prescribed.map(\.weightLb).max() ?? 0
-        let load = top > 0 ? unitDisplay.format(lb: top) + (entry.exercise?.loadBasis.shortSuffix ?? "") : nil
+        let top = prescribed.max { $0.weightLb < $1.weightLb }
+        let load = top.flatMap { set in
+            set.weightLb > 0 ? unitDisplay.format(lb: set.weightLb) + set.loadBasis.shortSuffix : nil
+        }
         let scheme = prescribed.isEmpty ? nil : "\(entry.prescribedWork.count)/\(prescribed.count) sets"
         return (load, scheme)
     }
@@ -254,6 +256,7 @@ struct HomeView: View {
             } label: {
                 HeroLiftLine(name: name, load: line.load, scheme: line.scheme) { EmptyView() }
             }
+            .accessibilityIdentifier("today-session-lift-\(name)")
             .accessibilityHint("Shows exercise history, program cycle, and settings")
             .heroBand(.rule)
         }
