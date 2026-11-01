@@ -45,6 +45,11 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
     }
 
     /// Accent + semantic colours, mirroring web styles.css token blocks 1:1.
+    /// Foundry, Slate and dark System share oxide red #F04A3E, and it means
+    /// "now / act" only: the current set, the primary action, focus. Logged
+    /// data reads in primary (chalk) and structure in steel greys. Oxide clears
+    /// 4.5:1 on each dark canvas and on `Theme.card` (#1C1C1E, 4.66:1); it is
+    /// not a text colour on `Theme.raised` (#2C2C2E, 3.82:1).
     /// `onAccent` is the label colour on an accent-filled
     /// control — chosen per theme to clear WCAG AA on that fill, never assumed
     /// white. Physical plate colours and anatomy role colours are not here:
@@ -52,7 +57,7 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
     var palette: Palette {
         switch self {
         case .carbon:
-            return Palette(accent: Color(hex: 0xFF5A5F), onAccent: Color(hex: 0x0C0D0E),
+            return Palette(accent: Color(hex: 0xF04A3E), onAccent: Color(hex: 0x0C0D0E),
                            warn: Color(hex: 0xEAB308), hardStop: Color(hex: 0xFF7A73),
                            good: Color(hex: 0x4ADE80))
         case .memento:
@@ -64,11 +69,11 @@ enum ThemeName: String, CaseIterable, Identifiable, Codable {
                            warn: Color(hex: 0x7A4F00), hardStop: Color(hex: 0xA51111),
                            good: Color(hex: 0x146633))
         case .slate:
-            return Palette(accent: Color(hex: 0xFF5A5F), onAccent: Color(hex: 0x0D1117),
+            return Palette(accent: Color(hex: 0xF04A3E), onAccent: Color(hex: 0x0D1117),
                            warn: Color(hex: 0xD29922), hardStop: Color(hex: 0xFF7A73),
                            good: Color(hex: 0x3FB950))
         case .system:
-            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xFF5A5F),
+            return Palette(accent: Color(lightHex: 0xC81E1E, darkHex: 0xF04A3E),
                            onAccent: Color(lightHex: 0xFFFFFF, darkHex: 0x0C0D0E),
                            warn: Color(lightHex: 0x7A4F00, darkHex: 0xEAB308),
                            hardStop: Color(lightHex: 0xA51111, darkHex: 0xFF7A73),
@@ -143,6 +148,31 @@ extension Color {
                            green: CGFloat((hex >> 8) & 0xFF) / 255,
                            blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
         })
+    }
+}
+
+/// The type vocabulary: two styles, both SF condensed at a heavy weight and
+/// both scaled by Dynamic Type through a text style. Everything else stays on
+/// the stock text styles. Web twin of `figure`: `.load-numeral`.
+extension Font {
+    /// Loads, reps, totals, durations: the numbers a lifter reads from across
+    /// the rack. Condensed black with fixed-width digits so a changing value
+    /// never shifts its row.
+    static func figure(_ style: Font.TextStyle = .largeTitle) -> Font {
+        .system(style, weight: .black).width(.condensed).monospacedDigit()
+    }
+
+    /// The same figure at a hero size larger than `.largeTitle`. Pass a
+    /// `@ScaledMetric(relativeTo:)` value, never a bare literal, or the figure
+    /// stops following Dynamic Type.
+    static func figure(scaled size: CGFloat) -> Font {
+        .system(size: size, weight: .black).width(.condensed).monospacedDigit()
+    }
+
+    /// Exercise, day and session names: condensed heavy, so a long lift name
+    /// keeps one line and still reads as a heading.
+    static func display(_ style: Font.TextStyle = .title2) -> Font {
+        .system(style, weight: .heavy).width(.condensed)
     }
 }
 

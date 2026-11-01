@@ -8,7 +8,6 @@ struct PlateCalculatorView: View {
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 34
     @ScaledMetric(relativeTo: .largeTitle) private var targetSize: CGFloat = 40
 
     @State private var mode: Mode = .target
@@ -86,11 +85,10 @@ struct PlateCalculatorView: View {
                     Text("\(gym?.name.uppercased() ?? "YOUR GYM") · PLATE LOADING")
                         .font(.caption.bold())
                         .tracking(0.8)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(.secondary)
                     Text("Know your load.")
-                        .font(.system(size: heroSize, weight: .bold))
+                        .font(.display(.largeTitle))
                         .minimumScaleFactor(0.7)
-                        .tracking(-0.5)
                 }
                 .accessibilityElement(children: .combine)
                 .listRowBackground(Color.clear)
@@ -145,7 +143,7 @@ struct PlateCalculatorView: View {
             layout {
                 TextField("0", text: $targetText)
                     .keyboardType(.decimalPad)
-                    .font(.system(size: targetSize, weight: .bold, design: .rounded))
+                    .font(.figure(scaled: targetSize))
                     .focused($targetFieldFocused)
                     .accessibilityLabel("Requested target")
                     .accessibilityIdentifier("plate-target")
