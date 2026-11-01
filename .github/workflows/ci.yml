@@ -69,42 +69,15 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Validate repository hygiene
-        run: |
-          node --test .github/scripts/test-repository-hygiene.mjs
-          node .github/scripts/check-agent-instructions.mjs
-          node .github/scripts/pr-contract.mjs --offline
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.3"
+      # The same script backs `make check` and the pre-commit hook.
       - name: Fast repository checks
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
-            git diff-tree --root --check "$HEAD_SHA"
-          else
-            git diff --check "$BASE_SHA" "$HEAD_SHA"
-          fi
-
-          while IFS= read -r -d '' script; do
-            bash -n "$script"
-          done < <(find .github/scripts -type f -name '*.sh' -print0)
-
-          while IFS= read -r -d '' script; do
-            node --check "$script" >/dev/null
-          done < <(find .github/scripts web \
-            -path web/node_modules -prune -o \
-            -type f \( -name '*.js' -o -name '*.mjs' \) -print0)
-
-          ruby -c fastlane/Fastfile >/dev/null
-          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }' .github/workflows/*.yml
-
-          test ! -e Cadence.xcodeproj
-          bash .github/scripts/test-cancel-stale-pr-runs.sh
-          bash .github/scripts/test-classify-ci-paths.sh
-          bash .github/scripts/test-ci-topology.sh
-          node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs
-          bash .github/scripts/test-fastlane-phases.sh
-          bash .github/scripts/test-verify-native-jobs.sh
+        run: bash .github/scripts/preflight.sh
       - name: Classify changed paths
         id: paths
         env:
@@ -135,6 +108,38 @@ jobs:
             git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$paths"
           fi
           bash .github/scripts/classify-ci-paths.sh < "$paths" | tee -a "$GITHUB_OUTPUT"
+
+  # Signing material is proven in about a minute on Ubuntu instead of being
+  # discovered 25 minutes into the macOS release build. Each check is a
+  # failure that reached main: a wrong certs token, an App ID with no
+  # profile under read-only match, and an unaccepted Apple agreement. Signing
+  # secrets never reach pull-request code, so this runs on main and manual
+  # runs only; PRs run the offline signing contract in preflight, and
+  # `make signing` runs it locally before a push (docs/TESTFLIGHT.md).
+  signing-preflight:
+    name: Signing preflight
+    needs: changes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The same Ruby `make check` requires, not the image's.
+      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+        with:
+          ruby-version: "3.3"
+      - name: Check signing material
+        env:
+          SIGNING_PREFLIGHT: required
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_READONLY: ${{ vars.MATCH_READONLY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: ruby .github/scripts/check-signing-material.rb
 
   core-tests:
     # Preserve the required-check context; execution uses macOS below.
@@ -344,7 +349,7 @@ jobs:
   # widget and watch app, and code signatures are checked both here and before upload.
   store-build:
     name: Signed release artifact
-    needs: [changes, core-tests, web-tests]
+    needs: [changes, core-tests, web-tests, signing-preflight]
     if: needs.web-tests.outputs.store-build-required == 'true'
     runs-on: macos-latest
     timeout-minutes: 45
@@ -574,7 +579,7 @@ jobs:
   # macOS jobs to be split, parallel, and conditionally skipped.
   app-build:
     name: App build (macOS)
-    needs: [changes, core-tests, web-tests, simulator-build, device-build, store-build, migration-tests, native-smoke]
+    needs: [changes, core-tests, web-tests, signing-preflight, simulator-build, device-build, store-build, migration-tests, native-smoke]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -597,6 +602,8 @@ jobs:
           MIGRATION_RESULT: ${{ needs.migration-tests.result }}
           NATIVE_SMOKE_REQUIRED: ${{ needs.changes.outputs.native == 'true' }}
           NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}
+          SIGNING_REQUIRED: ${{ github.event_name != 'pull_request' }}
+          SIGNING_RESULT: ${{ needs.signing-preflight.result }}
         run: bash .github/scripts/verify-native-jobs.sh
 
   release:

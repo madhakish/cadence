@@ -3,15 +3,16 @@ name: Deploy site and web app (Pages)
 on:
   workflow_dispatch:
 
+# Read-only by default. Each job names exactly what it needs: only deploy may
+# publish to Pages or mint an OIDC token, so npm ci and the test suites never
+# run with either.
 permissions:
   contents: read
-  actions: read
-  pages: write
-  id-token: write
 
+# A newer dispatch waits instead of cancelling a Pages deployment mid-flight.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 # Actions pinned to full commit SHAs (version in comment) — see ci.yml.
 jobs:
@@ -24,6 +25,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # verify-pages-recovery.mjs reads this commit's CI run
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,6 +68,10 @@ jobs:
     needs: test
     runs-on: macos-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

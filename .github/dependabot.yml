@@ -1,6 +1,11 @@
 # Keeps the security pins current: actions are SHA-pinned in the workflows and
 # the release toolchain / web test deps are lockfile-pinned, so updates only
 # ever arrive as reviewable PRs — never silently at run time.
+#
+# Every merge to main queues a macOS release run, so minor and patch version
+# updates arrive as one grouped PR per entry instead of one PR per package.
+# Majors stay individual. Security updates are never grouped or delayed:
+# `applies-to: version-updates` and `cooldown` only touch version updates.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -9,21 +14,47 @@ updates:
       interval: weekly
     commit-message:
       prefix: ci
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
     commit-message:
       prefix: ci
+    cooldown:
+      default-days: 7
+    groups:
+      web-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /.github/release
     schedule:
       interval: weekly
     commit-message:
       prefix: ci
+    cooldown:
+      default-days: 7
+    groups:
+      release-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: bundler
     directory: /
     schedule:
       interval: weekly
     commit-message:
       prefix: ci
+    cooldown:
+      default-days: 7
+    groups:
+      bundler-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
