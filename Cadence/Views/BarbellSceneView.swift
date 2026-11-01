@@ -105,7 +105,7 @@ final class StudioInspector {
         view.onLayout = { [weak self] size in
             guard let self, size != self.viewSize, size.width > 0, size.height > 0 else { return }
             self.viewSize = size
-            self.studio?.frame(self.explodedNow == true ? .blowup : .hero, aspect: Double(size.width / size.height))
+            self.frameStudio()
             self.updateCaptions()
         }
         if studio != nil { show(in: view) }
@@ -142,9 +142,20 @@ final class StudioInspector {
             }
         }
         studio.explode(exploded ? 1 : 0)
-        studio.frame(exploded ? .blowup : .hero, aspect: Double(viewSize.width / max(1, viewSize.height)))
+        frameStudio()
         SCNTransaction.commit()
         if duration == 0 { updateCaptions() }
+    }
+
+    private var captionFont: UIFont {
+        UIFontMetrics(forTextStyle: .subheadline)
+            .scaledFont(for: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
+    }
+
+    private func frameStudio() {
+        let height = max(1, viewSize.height)
+        studio?.frame(explodedNow == true ? .blowup : .hero, aspect: Double(viewSize.width / height),
+                      captionFraction: Double((captionFont.lineHeight + 12) / height))
     }
 
     /// Screen-space text never shrinks with the model. Each physical disc,
@@ -154,8 +165,7 @@ final class StudioInspector {
         for (caption, entry) in zip(captions, studio.nearDiscs) {
             caption.isHidden = explodedNow != true || transitioning
             guard !caption.isHidden else { continue }
-            caption.font = UIFontMetrics(forTextStyle: .subheadline)
-                .scaledFont(for: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
+            caption.font = captionFont
             caption.sizeToFit()
             let below = SCNVector3(entry.node.position.x, Float(-entry.disc.radius - 30), 0)
             let point = view.projectPoint(below)

@@ -22,6 +22,11 @@ enum RenderLab {
         let request: StudioRenderer.Request
     }
 
+    static var framingOnly: Bool { ProcessInfo.processInfo.arguments.contains("--studio-framing-proof") }
+    static var framingLoadout: Loadout {
+        Loadout(bar: .bar45lb, perSide: [PlateCount(plate: Plate(value: 45, unit: .lb), count: 5)], collarLb: 0)
+    }
+
     static var matrix: [Item] {
         func lb(_ v: Double) -> Plate { Plate(value: v, unit: .lb) }
         func kg(_ v: Double) -> Plate { Plate(value: v, unit: .kg) }
@@ -68,6 +73,39 @@ enum RenderLab {
 }
 
 extension RenderLab {
+    /// Check the production camera through SceneKit's projection, not a copy
+    /// of the fit formula. The wide, short case reproduced #374's clipping;
+    /// the taller case is the inspector's scaled Dynamic Type canvas.
+    @MainActor
+    static func checkFraming() async -> [String] {
+        guard let studio = await StudioRenderer.shared.studio(loadout: framingLoadout, style: .bumper, theme: .lbColourBumpers)
+        else { return ["studio build failed"] }
+        studio.explode(1)
+        var failures: [String] = []
+        let cases: [(CGFloat, CGFloat, CGFloat)] = [(592, 300, 1), (1184, 300, 2), (1184, 600, 2)]
+        for (width, height, scale) in cases {
+            let captionHeight = UIFont.monospacedDigitSystemFont(ofSize: 14 * scale, weight: .semibold).lineHeight + 12
+            studio.frame(.blowup, aspect: Double(width / height), captionFraction: Double(captionHeight / height))
+            let view = SCNView(frame: CGRect(x: 0, y: 0, width: width, height: height))
+            view.scene = studio.scene
+            view.pointOfView = studio.cameraNode
+            _ = view.snapshot() // establish SceneKit's actual viewport before projecting
+            let viewport = CGRect(x: 0, y: 0, width: width, height: height - captionHeight)
+            for entry in studio.nearDiscs {
+                let (low, high) = entry.node.boundingBox
+                let fits = (0..<8).allSatisfy { corner in
+                    let local = SCNVector3(corner & 1 == 0 ? low.x : high.x,
+                                          corner & 2 == 0 ? low.y : high.y,
+                                          corner & 4 == 0 ? low.z : high.z)
+                    let p = view.projectPoint(entry.node.convertPosition(local, to: nil))
+                    return p.z > 0 && p.z < 1 && viewport.contains(CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)))
+                }
+                if !fits { failures.append("\(Int(width))x\(Int(height)): plate \(entry.disc.index + 1) clips") }
+            }
+        }
+        return failures
+    }
+
     /// The gym environment alone around a mirror ball and a grey ball:
     /// proves the backdrop draws and the lighting environment reflects.
     static func environmentProbe() async -> UIImage? {
@@ -113,6 +151,12 @@ struct RenderLabView: View {
 #if DEBUG
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                if RenderLab.framingOnly {
+                    BarbellInspectionView(solution: PlateSolution(loadout: RenderLab.framingLoadout,
+                                                                  targetLb: RenderLab.framingLoadout.totalLb),
+                                          plateStyle: .bumper, plateTheme: .lbColourBumpers)
+                        .preferredColorScheme(.dark)
+                }
                 ForEach(rendered, id: \.name) { entry in
                     Text(entry.name).font(.caption.monospaced())
                     Image(uiImage: entry.image).resizable().scaledToFit()
@@ -133,6 +177,11 @@ struct RenderLabView: View {
     }
 
     private func run() async {
+        if RenderLab.framingOnly {
+            failed = await RenderLab.checkFraming()
+            done = true
+            return
+        }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("render-lab", isDirectory: true)
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
