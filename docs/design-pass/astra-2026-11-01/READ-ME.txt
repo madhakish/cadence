@@ -1,0 +1,61 @@
+CADENCE — VISUAL CONCEPT SET
+Prepared November 1, 2026
+Run: codex-cadence-visual-20261101-6d8b1743
+Scope: design exploration from the owner's three references and current GitHub work. No application code, branch, or pull request was created or modified.
+
+RECOMMENDED DIRECTION
+Blue bumpers, honey oak, original Vitruvian gorilla burned into the center, charcoal/chalk UI, restrained oxide-red actions. Focus (the face crop) is the strongest small app-icon candidate for both iPhone and Watch. Keep the complete figure on the platform.
+
+CONTENTS
+01–02: plate-loading and active-session screen concepts.
+03–08: six platform/equipment studies: blue bumpers/oak; calibrated plates/walnut; black bumpers/white oak; iron/oak; yellow bumpers/maple; overhead composition.
+09–11: three opaque square RGB icon concept masters, 1254 × 1254 pixels.
+12: illustrative iPhone rounded-square and Watch circular icon comparison.
+reference/original-gorilla.png: owner's unchanged supplied source.
+prompts.json: final built-in image-generation prompts, including correction prompts.
+
+ASSET STATUS
+These are generated design concepts, not screenshots of the running app, compiled assets, a 3D model, or a validated Xcode asset catalog. The requested 1024-pixel icon size was not honored by the generator: the delivered masters are 1254 pixels square and need export through the existing icon pipeline. Corners are intentionally unmasked in the masters. The comparison board is an illustrative visual mockup, not a pixel-exact small-size test.
+
+Generation adapts the supplied gorilla and can change individual strokes, anatomy, lettering and hardware details. For production use the unchanged original source artwork with a real material/decal transform; do not replace the canonical anatomy image or masks with generated redraws. Far-side collar/plate orientation and exact plate thickness must come from the deterministic scene, not these raster references. No performance, accessibility, native-renderer or App Store acceptance claim is made by this pack.
+
+UI AND MATERIAL DIRECTION
+- Achieved load and next action lead; secondary labels stay quiet.
+- Session mockup synthetic data: 225 lb = 45 lb bar + four 45 lb discs, 102.1 kg displayed.
+- Loading mockup synthetic data: 135 lb = 45 lb bar + two 45 lb discs, 61.2 kg displayed. Training collars are visually represented without an added competition-collar mass.
+- Corrected reference row in 01 reads 55 / 45 / 35 / 25 / 10 LB; this is a visual training-bumper scheme, not an IWF kilogram guide.
+- Material distinctions: tight bright chrome reflections; fine zoned shaft knurl; smooth sleeve surfaces; matte rubber with molded edges; thinner calibrated steel; rough raised cast iron.
+- Both stacks land on rubber, wood grain continues through the burn, and the platform has soft contact shadows.
+- Logo is an integrated material treatment. Background stays quiet enough that the equipment and controls are readable.
+
+CURRENT REPOSITORY HANDOFF
+Repository: https://github.com/madhakish/cadence
+Main inspected: 583bad8c958183641f03f5091375a92a25bfa2cb
+Coordination guide and team notes read. The repository has active owners on the relevant branches; no duplicate implementation was opened.
+
+Renderer: PR #374 — feat/photoreal-barbell-revive
+https://github.com/madhakish/cadence/pull/374
+Initial head inspected: 004566425c0e5a7a98568cd28de7088d731c3e16
+Latest head at final check: 8a3301a173a19defa57d24f48aefe3deca39b609
+Parent requirement: https://github.com/madhakish/cadence/issues/316
+Keep one coherent scene for row, stage and inspector, with the actual PlateSolution driving geometry and labels.
+
+Icons: PR #377 — feat/gorilla-app-icon
+https://github.com/madhakish/cadence/pull/377
+Head: 78508ef0e5f9e44b9cbfdf5a579abb454eefc4ec
+Existing render_app_icon.py was read. It derives source-preserving candidates; build any selected production icon treatment through that existing work.
+
+Theme: PR #375 — design/oxide-tokens
+https://github.com/madhakish/cadence/pull/375
+Session controls: PR #376 — design/session-done-bar
+https://github.com/madhakish/cadence/pull/376
+Watch styling: PR #373 — design/watch-forge
+https://github.com/madhakish/cadence/pull/373
+Today hierarchy: PR #378 — design/today-hero
+https://github.com/madhakish/cadence/pull/378
+
+NEXT IMPLEMENTATION STEP
+Select a platform/material direction and icon composition. Feed those decisions into the existing PRs, preserving the original logo source, current solver/layout semantics, and source-preserving icon workflow. Validate actual iPhone/Watch output and small-size icon readability before treating implementation as complete.
+
+VERIFICATION PERFORMED
+All delivered images visually inspected. Plate-reference label errors and the background blue 20 KG label were corrected in the selected final versions. PNG files decoded and dimensions recorded; archive contents and CRC checked. No code changed and no build/test run was needed for this concept deliverable.

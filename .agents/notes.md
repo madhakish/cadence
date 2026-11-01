@@ -15,6 +15,7 @@ it stops being true. Keep this file short enough to read every time.
   message. Template clutter ends up in git history; keep the body to prose.
 - Never `git stash` in a shared checkout: the stash is shared by every
   worktree. Use a WIP commit on your own branch.
+- The owner's November Astra artwork is in [the visual handoff](../docs/design-pass/astra-2026-11-01/README.md). Codex assists imagery/design; Claude continues the active feature and watch PRs. Importing references does not select an icon or renderer.
 
 ## CI and local checks
 

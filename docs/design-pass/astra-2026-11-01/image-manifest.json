@@ -1,0 +1,86 @@
+[
+  {
+    "file": "01-screen-plate-loading.png",
+    "width": 853,
+    "height": 1844,
+    "mode": "RGB",
+    "sha256": "a2ae3010d44568e055f6b0e203846f51c96011bd593d7bf8db0a4df1f03c7069"
+  },
+  {
+    "file": "02-screen-active-session.png",
+    "width": 851,
+    "height": 1848,
+    "mode": "RGB",
+    "sha256": "eb43c0b910a6fc6247fe5dcc44e4f5f1e59481ba14fcda511ae495c545144065"
+  },
+  {
+    "file": "03-platform-oak-blue.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "sha256": "b6ddbc08d57ea388fbf2551f041fd1805b92d405d47e52011504d281a717389b"
+  },
+  {
+    "file": "04-platform-walnut-calibrated.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "sha256": "4d2264c0c9e00c404712297d429a296b9344a36aa6fe1612b8346f7dd24db8da"
+  },
+  {
+    "file": "05-platform-white-oak-black.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "sha256": "ee8f15c3e41dd923155349d19f6d6500cb229b473bfa88f57b9dc67373a3e6b2"
+  },
+  {
+    "file": "06-platform-oak-iron.png",
+    "width": 1672,
+    "height": 940,
+    "mode": "RGB",
+    "sha256": "426e0da9554259faa4a8b6d52b694dfe03c0537940ba1fdcdcd1802a5e3f8e96"
+  },
+  {
+    "file": "07-platform-maple-yellow.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "sha256": "7b9b5cc43e7057de5d469da3e62ec3d4dd1ce788054699fd2d2a3acef1c1de3b"
+  },
+  {
+    "file": "08-platform-overhead.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "sha256": "f3e4062ecf48cdae7b7e7dec92472f0b16d4e3afde69e639c2e0cbabecad1c0d"
+  },
+  {
+    "file": "09-icon-heritage-master.png",
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGB",
+    "sha256": "94fb87131079d4af40abcd2c62276035f70c507272d5764146ff977442f94dfd"
+  },
+  {
+    "file": "10-icon-foundry-master.png",
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGB",
+    "sha256": "6b5b3d60cf918cbb3a43cfc9fdcea460bd846050d150ae90bdd0084d7a07491e"
+  },
+  {
+    "file": "11-icon-focus-master.png",
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGB",
+    "sha256": "05cd5901ff65939deb490dd3c1f354877b70d916184cd954eb3d2cd52987f632"
+  },
+  {
+    "file": "12-icons-iphone-watch-comparison.png",
+    "width": 1536,
+    "height": 1024,
+    "mode": "RGB",
+    "sha256": "cf7211b5b248b0ffdd61ac633f24c9265697707f8717b195f36c962028de7227"
+  }
+]
