@@ -38,7 +38,6 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(done.frame.height, 56, "Done is at least Theme.bigTap tall")
         capture("after-03-current-session-iphone")
         let inspect = app.buttons["expand-loaded-bar"].firstMatch
-        let tree = XCTAttachment(string: app.debugDescription); tree.name = "DEBUG-tree"; tree.lifetime = .keepAlways; add(tree)
         let window = app.windows.firstMatch.frame
         let visible = CGRect(x: window.minX, y: window.minY + 100,
                              width: window.width, height: window.height - 220)
@@ -231,6 +230,7 @@ final class VisualProofUITests: XCTestCase {
         app.buttons["resume-session"].tap()
         let start = app.buttons["start-hold-timer"].firstMatch
         for _ in 0..<6 where !start.isHittable { app.swipeUp() }
+        capture("plank-start-accessibility-iphone")
         XCTAssertTrue(start.isHittable)
         start.tap()
         allowHoldNotificationsIfPrompted()
@@ -266,9 +266,11 @@ final class VisualProofUITests: XCTestCase {
     }
 
     /// One box per prescription: the fixture's squat (two warmups, then a
-    /// 3-set working prescription with set 1 done) shows each warmup in its
+    /// 3-set working prescription with set 1 done) plans each warmup in its
     /// own box and the work as ONE box with three markers. A marker opens
     /// that one set's editor; "Edit sets" lists every set, one row each.
+    /// The plan sits below the cockpit; on main the same capture shows the
+    /// old "Show full set plan" rows.
     func test23GroupedSetPlanAndEditor() {
         for (size, suffix) in [("UICTContentSizeCategoryAccessibilityXXXL", "-accessibility"), ("UICTContentSizeCategoryL", "")] {
             app.terminate()
@@ -277,23 +279,19 @@ final class VisualProofUITests: XCTestCase {
             XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
             app.buttons["resume-session"].tap()
             XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-            let full = app.buttons["Show full set plan"].firstMatch
-            for _ in 0..<6 where !full.isHittable { app.swipeUp() }
-            XCTAssertTrue(full.isHittable)
-            full.tap()
-            for _ in 0..<6 { app.swipeDown() }
+            let working = element("active-set-group")
+            for _ in 0..<8 where !working.isHittable { app.swipeUp() }
             capture("after-23-set-plan-expanded\(suffix)-iphone")
             if !suffix.isEmpty { continue }
 
-            let working = element("current-exercise-Back Squat")
             XCTAssertTrue(working.waitForExistence(timeout: 3))
             XCTAssertEqual(working.label, "Working sets, 3 by 6 at 138.7 lb, 1 of 3 done")
             let markers = working.buttons.matching(identifier: "set-marker")
             XCTAssertEqual(markers.count, 3, "one marker per working set, in one box")
             XCTAssertEqual(markers.element(boundBy: 1).label, "Set 2 of 3, current")
             // Two ramping warmups keep a box each (different loads).
-            XCTAssertTrue(app.buttons["Warmup 1 of 2, done"].exists)
-            XCTAssertTrue(app.buttons["Warmup 2 of 2, done"].exists)
+            XCTAssertTrue(app.buttons["Warmup 1 of 2, done"].firstMatch.exists)
+            XCTAssertTrue(app.buttons["Warmup 2 of 2, done"].firstMatch.exists)
 
             markers.element(boundBy: 2).tap()
             let editor = app.navigationBars["Set"]
@@ -471,7 +469,19 @@ final class VisualProofUITests: XCTestCase {
         //   while the captures show them intact;
         // - Dynamic Type findings remain raw advisories, except plate-target;
         //   neither a passing audit nor screenshots establish full AA.
-        let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        var chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        // The logger's bottom bar is the same kind of translucent chrome:
+        // rows scrolled under it measure the bar's material, not the page.
+        // Its own controls (Done, Skip, rest) are still audited in full.
+        let sessionBar = app.descendants(matching: .any)["session-bottom-bar"]
+        var barOwn: [CGRect] = []
+        if sessionBar.exists {
+            chrome.append(sessionBar.frame)
+            barOwn = sessionBar.descendants(matching: .any).allElementsBoundByIndex.map(\.frame)
+        }
+        let underChrome = { (frame: CGRect) in
+            !barOwn.contains(frame) && chrome.contains(where: { $0.intersects(frame) })
+        }
         let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
         let types: XCUIAccessibilityAuditType = [
             .sufficientElementDescription, .hitRegion, .contrast, .dynamicType,
@@ -481,10 +491,15 @@ final class VisualProofUITests: XCTestCase {
             let element = issue.element
             let identifier = element?.identifier ?? ""
             if issue.auditType == .contrast, let frame = element?.frame,
-               chrome.contains(where: { $0.intersects(frame) }) || identifier.hasPrefix("barbell-plate-") {
+               underChrome(frame) || identifier.hasPrefix("barbell-plate-") {
                 return true
             }
             if issue.auditType == .hitRegion, let element, nonInteractive.contains(element.elementType) {
+                return true
+            }
+            // A control half-scrolled under chrome is small only until the
+            // list moves; the audit measures the visible sliver.
+            if issue.auditType == .hitRegion, let frame = element?.frame, underChrome(frame) {
                 return true
             }
             let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
@@ -517,12 +532,12 @@ final class VisualProofUITests: XCTestCase {
     func test13SetCompletionKeepsDominantBlockStill() {
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        // The working box with its set markers replaced the separate track.
+        // The set markers (circles above the hero) replaced the separate track.
         let track = element("current-exercise-Back Squat")
         let hero = element("current-set-hero")
         XCTAssertTrue(track.waitForExistence(timeout: 3))
         XCTAssertTrue(hero.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["WORKING SET 2 OF 3"].exists)
+        XCTAssertTrue(app.staticTexts["SET 2 OF 3"].exists)
         let trackBefore = track.frame
         let heroBefore = hero.frame
         capture("after-13-session-before-set-iphone")
@@ -534,7 +549,7 @@ final class VisualProofUITests: XCTestCase {
         // The receipt takes Done's slot briefly; the screenshot shows it.
         XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
         capture("after-13-session-after-set-iphone")
-        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["SET 3 OF 3"].waitForExistence(timeout: 3))
         XCTAssertTrue(element("set-logged-stamp").waitForNonExistence(timeout: 5), "the receipt lapses on its own")
         XCTAssertEqual(done.label, "Done, working set 3 of 3")
         XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")

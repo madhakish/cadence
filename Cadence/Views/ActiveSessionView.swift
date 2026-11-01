@@ -34,6 +34,8 @@ struct ActiveSessionView: View {
     /// The brief "logged" receipt that takes the Done slot after a completion.
     /// Presentation only: the verdict is already saved when it appears.
     @State private var stamp: LoggedStamp?
+    /// The hold whose timer is open from the bottom bar's Start hold.
+    @State private var holdSet: SetEntry?
 
     private var currentOrFirst: SessionExercise? {
         currentEntry
@@ -123,25 +125,36 @@ struct ActiveSessionView: View {
         let (set, entry) = target
         let words = SetWords(set: set, in: entry)
         return SessionDoneAction(
-            work: words.work,
             position: words.position,
             spoken: words.spoken,
-            perform: { complete(set, in: entry) }
+            perform: { resolve(set, in: entry, as: .completed) },
+            skip: { resolve(set, in: entry, as: .skipped) }
         )
     }
 
-    /// Done goes through the one status writer, exactly like the row's
-    /// control and the Lock Screen; only what follows is decided here.
-    private func complete(_ set: SetEntry, in entry: SessionExercise) {
+    /// A timed set's thumb-zone action is starting its hold timer; the timer
+    /// logs the attempt through the same writer when it ends.
+    private var holdAction: SessionHoldAction? {
+        guard let entry = currentOrFirst, entry.exercise?.type == .timed else { return nil }
+        let sets = entry.orderedSets
+        let states = sets.map { SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status) }
+        guard let index = SetLifecycle.currentPresentationIndex(states) else { return nil }
+        let set = sets[index]
+        return SessionHoldAction(name: entry.exercise?.name ?? "hold", perform: { holdSet = set })
+    }
+
+    /// Done and Skip go through the one status writer, exactly like a
+    /// marker's menu and the Lock Screen; only what follows is decided here.
+    private func resolve(_ set: SetEntry, in entry: SessionExercise, as status: SetStatus) {
         let previous = set.status
         guard previous == .planned else { return }
         do {
-            try WorkoutCommandService.setStatus(.completed, of: set, context: context)
+            try WorkoutCommandService.setStatus(status, of: set, context: context)
         } catch {
-            PersistenceErrorCenter.shared.report(error, operation: "Completing the set", context: context)
+            PersistenceErrorCenter.shared.report(error, operation: status == .completed ? "Completing the set" : "Skipping the set", context: context)
             return
         }
-        followVerdict(on: set, in: entry, previous: previous, status: .completed)
+        followVerdict(on: set, in: entry, previous: previous, status: status)
     }
 
     /// What follows any verdict on this screen — Done, the row's status
@@ -229,14 +242,22 @@ struct ActiveSessionView: View {
                 restLabel: nextRestExerciseName(after: currentOrFirst),
                 restSeconds: currentRestSeconds,
                 done: doneAction,
+                hold: holdAction,
                 stamp: stamp?.text,
                 onStart: startWorkout
             )
         }
+        .sheet(item: $holdSet) { set in
+            HoldTimerSheet(set: set, exerciseName: set.sessionExercise?.exercise?.name ?? "Hold") { previous, status in
+                if let entry = set.sessionExercise {
+                    followVerdict(on: set, in: entry, previous: previous, status: status)
+                }
+            }
+        }
         // The receipt is short and owns nothing: it lapses on its own, and a
         // newer verdict replaces it (cancelling this wait).
         .task(id: stamp?.id) {
-            guard stamp != nil, (try? await Task.sleep(for: .seconds(1.8))) != nil else { return }
+            guard stamp != nil, (try? await Task.sleep(for: .seconds(2.4))) != nil else { return }
             stamp = nil
         }
         .sensoryFeedback(.success, trigger: stamp?.id) { _, new in
@@ -796,12 +817,16 @@ private func agoLabel(_ date: Date) -> String {
     ProgramProgression.historyAgeLabel(exposureDate: date, asOf: .now, calendar: .current)
 }
 
-/// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
 /// What the bottom bar's Done needs: the words for the set and the act.
 private struct SessionDoneAction {
-    let work: String        // "6 × 138.7 lb"
     let position: String    // "working set 2 of 3"
     let spoken: String      // "6 reps at 138.7 lb"
+    let perform: () -> Void
+    let skip: () -> Void
+}
+
+private struct SessionHoldAction {
+    let name: String
     let perform: () -> Void
 }
 
@@ -842,6 +867,7 @@ private struct SetWords {
     }
 }
 
+/// Identifiable wrapper so the summary sheet can drive off .sheet(item:).
 private struct SummaryBox: Identifiable {
     let id = UUID()
     let summary: SessionSummary
@@ -864,9 +890,7 @@ private struct ExerciseSection: View {
     @Environment(RestTimer.self) private var restTimer
 
     @Bindable var entry: SessionExercise
-    @State private var showAllSets = false
     @State private var expandedLoadout: ExpandedLoadout?
-
     /// Only the actively worked exercise gets the full between-sets cockpit.
     /// Remaining exercises stay in authored order underneath it.
     let emphasized: Bool
@@ -1080,35 +1104,16 @@ private struct ExerciseSection: View {
         )
     }
 
-    /// Default between-set presentation: highlight the next authored set and
-    /// collapse the already-resolved ramp into one readable progress line.
-    /// "Show full set plan" restores every authored row without changing it.
+    /// The set you're on: the first unresolved authored set, warmups
+    /// included — the rule the Lock Screen and the Done bar share.
     private var currentSet: SetEntry? {
         let ordered = entry.orderedSets
         let states = ordered.map { SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status) }
         return SetLifecycle.currentPresentationIndex(states).map { ordered[$0] }
     }
 
-    private var displayedSets: [SetEntry] {
-        let ordered = entry.orderedSets
-        guard emphasized, !showAllSets, currentSet != nil else { return ordered }
-        let states = ordered.map {
-            SetLifecycle.PresentationState(isWarmup: $0.isWarmup, status: $0.status)
-        }
-        return SetLifecycle.focusedPresentationIndices(states).map { ordered[$0] }
-    }
-
     private var groups: [SetGroup] {
         SetGroup.grouping(entry.orderedSets, separately: entry.exercise?.type == .conditioning)
-    }
-
-    /// The focused lift shows the boxes holding its focused sets (planned
-    /// warmups and the current work); "Show full set plan" shows them all.
-    private var displayedGroups: [SetGroup] {
-        let all = groups
-        guard emphasized, !showAllSets, currentSet != nil else { return all }
-        let shown = Set(displayedSets.map(\.persistentModelID))
-        return all.filter { $0.sets.contains { shown.contains($0.persistentModelID) } }
     }
 
     /// The set a box's loadout draws: the current set when it's in the box,
@@ -1119,11 +1124,11 @@ private struct ExerciseSection: View {
             ?? group.sets[0]
     }
 
-    /// Role and phase in one readable line under the name. The movement
-    /// group is dropped: "Back Squat" already says squat.
+    /// Role and phase as the name's eyebrow: "MAIN LIFT · R2 LOAD". The
+    /// movement group is dropped; "Back Squat" already says squat.
     private var slotLine: String? {
-        let parts = [entry.programRole?.capitalized, entry.truthfulPhaseLabel].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        let parts = [entry.programRole.map { "\($0) lift" }, entry.truthfulPhaseLabel].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ").uppercased()
     }
     private var restBinding: Binding<Int> {
         Binding(get: { entry.exercise?.defaultRestSeconds ?? 0 },
@@ -1191,10 +1196,50 @@ private struct ExerciseSection: View {
 
     var body: some View {
         Section {
-            if emphasized, let slotLine {
-                Text(slotLine)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            // The cockpit for the set you're on: where you are in the sets,
+            // the numbers to lift, and the loaded bar. The full plan, one box
+            // per prescription, sits below it.
+            if emphasized, let current = currentSet {
+                SetCockpit(
+                    entry: entry,
+                    current: current,
+                    gym: gym,
+                    bar: effectiveBar,
+                    onStatusChange: onVerdict,
+                    onRemove: { removeSet($0) }
+                )
+                .accessibilityIdentifier("current-exercise-\(entry.exercise?.name ?? "Exercise")")
+                // Loadout visualization — plates for barbell lifts, the rack
+                // number for dumbbell lifts. The loadout is the set's own
+                // value, never a re-solve. Mirrors web.
+                if entry.exercise?.type == .barbell && current.weightLb > 0 {
+                    let set = current
+                    let exactSolution = solvedPlateSolution(for: set)
+                    let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
+                    let theme = gym?.plateTheme ?? .custom
+                    BarbellStageView(
+                        solution: exactSolution,
+                        unit: set.enteredUnit,
+                        plateStyle: style,
+                        plateTheme: theme,
+                        onExpand: {
+                            expandedLoadout = ExpandedLoadout(
+                                solution: exactSolution,
+                                requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                                style: style,
+                                theme: theme
+                            )
+                        }
+                    )
+                    LoadoutSummaryView(
+                        requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
+                        loadout: exactSolution.loadout,
+                        plateStyle: style,
+                        plateTheme: theme
+                    )
+                } else if entry.exercise?.type == .dumbbell && current.weightLb > 0 {
+                    DumbbellView(weightLb: current.weightLb, unit: current.enteredUnit)
+                }
             }
             if let complementaryEffortCue {
                 Text(complementaryEffortCue)
@@ -1205,20 +1250,18 @@ private struct ExerciseSection: View {
                     .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
                     .accessibilityLabel("Effort target: \(complementaryEffortCue)")
             }
-            // One box per prescription: a 3×5 is one box with three markers,
-            // a ramp of different warmups stays a box each. The box holding
-            // the set you're on carries the hero numbers; the plates follow
-            // it. The loadout is the set's own value, never a re-solve.
-            ForEach(displayedGroups) { group in
+            // The plan, one box per prescription: a 3×5 is one box with
+            // three markers; a ramp of different warmups stays a box each.
+            ForEach(groups) { group in
                 let isActive = group.sets.contains { $0.persistentModelID == currentSet?.persistentModelID }
                 let set = representative(of: group)
-                let showLoadout = showAllSets || isActive || loadChanges(at: set)
+                let showLoadout = !(emphasized && isActive) && loadChanges(at: set)
                 VStack(alignment: .leading, spacing: 8) {
                     SetGroupBox(
                         group: group,
                         entry: entry,
                         currentID: emphasized ? currentSet?.persistentModelID : nil,
-                        prominent: emphasized && isActive,
+                        showsHoldStart: !emphasized,
                         restSeconds: restSeconds,
                         display: settings?.unitDisplay ?? .lbPrimary,
                         gym: gym,
@@ -1226,8 +1269,7 @@ private struct ExerciseSection: View {
                         onStatusChange: onVerdict,
                         onRemove: { removeSet($0) }
                     )
-                    .accessibilityIdentifier(emphasized && isActive
-                        ? "current-exercise-\(entry.exercise?.name ?? "Exercise")" : "set-group")
+                    .accessibilityIdentifier(emphasized && isActive ? "active-set-group" : "set-group")
                     // Discloses where the first working set's ad-hoc history
                     // suggestion came from — only for that set, and only when
                     // a suggestion actually shaped it (never the silent
@@ -1239,44 +1281,17 @@ private struct ExerciseSection: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    // Loadout visualization — plates for barbell lifts, the
-                    // rack number for dumbbell lifts. Mirrors web.
                     if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
                         let exactSolution = solvedPlateSolution(for: set)
                         let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
                         let theme = gym?.plateTheme ?? .custom
-                        if emphasized && isActive {
-                            BarbellStageView(
-                                solution: exactSolution,
-                                unit: set.enteredUnit,
-                                plateStyle: style,
-                                plateTheme: theme,
-                                onExpand: {
-                                    expandedLoadout = ExpandedLoadout(
-                                        solution: exactSolution,
-                                        requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                        style: style,
-                                        theme: theme
-                                    )
-                                }
-                            )
-                        } else {
-                            BarbellView(
-                                solution: exactSolution,
-                                plateStyle: style,
-                                plateTheme: theme,
-                                presentation: .compactSide,
-                                emphasis: isActive ? .current : .muted
-                            )
-                        }
-                        if emphasized && isActive {
-                            LoadoutSummaryView(
-                                requestedLb: set.targetWeightLb ?? entry.targetWeightLb,
-                                loadout: exactSolution.loadout,
-                                plateStyle: style,
-                                plateTheme: theme
-                            )
-                        }
+                        BarbellView(
+                            solution: exactSolution,
+                            plateStyle: style,
+                            plateTheme: theme,
+                            presentation: .compactSide,
+                            emphasis: isActive ? .current : .muted
+                        )
                     } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
@@ -1288,13 +1303,6 @@ private struct ExerciseSection: View {
                 Text("Previous · \(lastTime)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            if emphasized, showAllSets || displayedGroups.count < groups.count {
-                Button(showAllSets ? "Focus current set" : "Show full set plan") {
-                    showAllSets.toggle()
-                }
-                .font(.caption.bold())
             }
 
             // The row must never solve a tight fit by wrapping label text
@@ -1347,11 +1355,23 @@ private struct ExerciseSection: View {
                         // Color.primary, not the hierarchical `.primary`: in a
                         // section header the latter resolves to the header's
                         // own gray, which made the lift you're on look disabled.
-                        Text(exercise.name)
-                            .font(emphasized ? .title.weight(.heavy) : .headline)
-                            .fontWidth(emphasized ? .condensed : .standard)
-                            .foregroundStyle(Color.primary)
-                            .multilineTextAlignment(.leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if emphasized, let slotLine {
+                                Text(slotLine)
+                                    .font(.footnote.weight(.heavy))
+                                    .tracking(0.8)
+                                    .foregroundStyle(Theme.forgedSteel)
+                            }
+                            Text(exercise.name)
+                                .font(emphasized ? .largeTitle.weight(.heavy) : .headline)
+                                .fontWidth(emphasized ? .condensed : .standard)
+                                .foregroundStyle(Color.primary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        // The header stays pinned while the list scrolls; at
+                        // the largest sizes an uncapped large title would
+                        // cover the very set it names.
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("exercise-info-\(exercise.name)")
@@ -2667,6 +2687,8 @@ private struct SessionBottomBar: View {
     let restSeconds: Int
     /// The set the thumb logs next; nil for holds, conditioning, or nothing left.
     let done: SessionDoneAction?
+    /// A timed set's Start hold, in the same slot.
+    let hold: SessionHoldAction?
     /// The short "logged" receipt, while it lasts.
     let stamp: String?
     let onStart: () -> Void
@@ -2709,13 +2731,32 @@ private struct SessionBottomBar: View {
                 } else if restTimer.isRunning {
                     restSlot
                 } else if let done {
-                    doneButton(done)
+                    HStack(spacing: 10) {
+                        doneButton(done)
+                        skipButton(done)
+                    }
+                } else if let hold {
+                    Button(action: hold.perform) {
+                        Label("Start hold", systemImage: "play.fill")
+                            .font(.title2.weight(.black))
+                            .fontWidth(.condensed)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+                    }
+                    .primaryActionStyle()
+                    .accessibilityLabel("Start \(hold.name) timer")
+                    .accessibilityIdentifier("start-hold-timer")
                 }
             }
             .padding(.horizontal)
             .padding(.bottom, primarySlotIsEmpty ? 0 : 10)
         }
-        .background(.bar)
+        // Opaque, not bar material: whatever scrolls under the thumb zone
+        // (an orange "-0.3 lb", a blue plate) must not tint Done or Rest.
+        .background(Theme.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("session-bottom-bar")
         .sheet(isPresented: $editingRest) {
             DurationEditor(title: "Remaining rest", seconds: restAtOpen, zeroLabel: "End rest") {
                 restTimer.setRemaining(seconds: $0)
@@ -2723,7 +2764,7 @@ private struct SessionBottomBar: View {
         }
     }
 
-    private var primarySlotIsEmpty: Bool { stamp == nil && !restTimer.isRunning && done == nil }
+    private var primarySlotIsEmpty: Bool { stamp == nil && !restTimer.isRunning && done == nil && hold == nil }
 
     @ViewBuilder
     private var clock: some View {
@@ -2755,7 +2796,7 @@ private struct SessionBottomBar: View {
                     .frame(minHeight: 32)
             }
             .accessibilityLabel("Start workout")
-            .modifier(SecondaryUnlessAlone(alone: done == nil))
+            .modifier(SecondaryUnlessAlone(alone: done == nil && hold == nil))
             .accessibilityHint("Begins the workout clock for this session")
         }
     }
@@ -2771,51 +2812,53 @@ private struct SessionBottomBar: View {
                 .frame(minHeight: 32)
         }
         .accessibilityLabel("Rest \(mmss(restSeconds))")
-        .modifier(SecondaryUnlessAlone(alone: done == nil))
+        .modifier(SecondaryUnlessAlone(alone: done == nil && hold == nil))
     }
 
     private func doneButton(_ done: SessionDoneAction) -> some View {
         Button(action: done.perform) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    doneWord
-                    Spacer(minLength: 8)
-                    doneWork(done)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    doneWord
-                    doneWork(done)
-                }
-            }
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, minHeight: Theme.bigTap, alignment: .leading)
-            .contentShape(Rectangle())
+            Label("Done", systemImage: "checkmark")
+                .font(.title2.weight(.black))
+                .fontWidth(.condensed)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity, minHeight: Theme.bigTap - 14)
+                .contentShape(Rectangle())
         }
         .primaryActionStyle()
+        .layoutPriority(1)
         .accessibilityIdentifier("done-set")
         .accessibilityLabel("Done, \(done.position)")
         .accessibilityValue(done.spoken)
-        .accessibilityHint("Logs the set as performed. Adjust reps or load on the set above first if they changed.")
+        .accessibilityHint("Logs the set as shown. Tap the numbers above first if reps or load changed.")
     }
 
-    private var doneWord: some View {
-        Label("Done", systemImage: "checkmark")
-            .font(.title3.weight(.black))
-            .fontWidth(.condensed)
-            .lineLimit(1)
-    }
-
-    private func doneWork(_ done: SessionDoneAction) -> some View {
-        Text(done.work)
-            .font(.title2.weight(.heavy).monospacedDigit())
-            .fontWidth(.condensed)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
+    private func skipButton(_ done: SessionDoneAction) -> some View {
+        Button(action: done.skip) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "forward.end.fill")
+                } else {
+                    Text("Skip")
+                }
+            }
+                .font(.headline.weight(.heavy))
+                .fontWidth(.condensed)
+                .lineLimit(1)
+                .frame(minWidth: 64, minHeight: Theme.bigTap - 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
+        .tint(Color.primary)
+        .accessibilityIdentifier("skip-set")
+        .accessibilityLabel("Skip \(done.position)")
+        .accessibilityHint("Marks the set skipped. It stays in the log as skipped, not completed.")
     }
 
     /// The set just logged, stamped in steel where Done was. It holds no
     /// action, so a double tap on Done can't log the next set by accident;
-    /// undo stays on the set row's status control, as before.
+    /// undo is the set's marker (touch and hold), as for any verdict.
     private func stampView(_ text: String) -> some View {
         Label(text, systemImage: "checkmark.seal.fill")
             .font(.title3.weight(.heavy).monospacedDigit())
@@ -3071,8 +3114,9 @@ private func loadWords(lb: Double, set: SetEntry, display: UnitDisplay, withUnit
     return (primary, secondary)
 }
 
-/// One set's square on its box: current in accent, done filled chalk,
-/// skipped hollow and struck, planned a steel outline. Tap opens the set's
+/// One set's circle: current filled accent with its number, done filled
+/// steel with a chalk check, skipped dashed and struck, planned a steel
+/// outline with its number. Tap opens the set's
 /// editor; touch and hold for status, quality and reps in reserve.
 private struct SetMarker: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -3133,15 +3177,15 @@ private struct SetMarker: View {
     }
 
     private var face: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius)
+        let shape = Circle()
         return ZStack {
             switch (isCurrent, set.status) {
             case (true, _):
                 shape.fill(Theme.accent)
                 Text("\(number)").foregroundStyle(Theme.onAccent)
             case (false, .completed):
-                shape.fill(Color.primary)
-                Image(systemName: "checkmark").foregroundStyle(Theme.background)
+                shape.fill(Color.primary.opacity(0.22))
+                Image(systemName: "checkmark").foregroundStyle(Color.primary)
             case (false, .skipped):
                 shape.stroke(Color.primary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 Path { path in
@@ -3162,15 +3206,136 @@ private struct SetMarker: View {
     }
 }
 
+/// A set's own numbers when they differ from `key` — a manual edit is never
+/// hidden behind the planned figures. Nil when they match.
+private func deviationWords(_ set: SetEntry, from key: SetGroup.Key, type: ExerciseType?) -> String? {
+    if type == .conditioning { return nil }
+    if type == .timed {
+        guard let seconds = set.durationSeconds, seconds != key.seconds else { return nil }
+        return CardioFormat.durationLabel(seconds: seconds)
+    }
+    let repsDiffer = set.carryYards == nil && set.reps != key.reps
+    let loadDiffers = abs(set.weightLb - key.loadLb) > 0.001
+    guard repsDiffer || loadDiffers else { return nil }
+    let load = loadWords(lb: set.weightLb, set: set, display: .lbPrimary, withUnit: false).primary
+    return "\(set.reps) × \(load)"
+}
+
+/// One set in words for VoiceOver: "6 reps at 138.7 lb".
+private func spokenWords(_ set: SetEntry, type: ExerciseType?) -> String {
+    if type == .conditioning {
+        return CardioFormat.setLabel(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds,
+                                     inclinePercent: set.inclinePercent, loadLb: set.weightLb, flights: set.flights)
+    }
+    if type == .timed { return "\(CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)) hold" }
+    let load = set.weightLb == 0 ? "bodyweight" : loadWords(lb: set.weightLb, set: set, display: .lbPrimary).primary
+    if let yards = set.carryYards { return "\(Weight.trim(yards)) yards at \(load)" }
+    return "\(set.reps) reps at \(load)"
+}
+
+/// The set you're on: a circle per set in its phase, "SET 2 OF 3" under
+/// them, then the numbers to lift. Tap the numbers or a circle to edit that
+/// one set; touch and hold a circle for status, quality and reps in reserve.
+private struct SetCockpit: View {
+    let entry: SessionExercise
+    let current: SetEntry
+    let gym: Gym?
+    let bar: Bar
+    let onStatusChange: (_ set: SetEntry, _ previous: SetStatus, _ current: SetStatus) -> Void
+    let onRemove: (SetEntry) -> Void
+    @ScaledMetric(relativeTo: .body) private var scaledMarker: CGFloat = 40
+    @ScaledMetric(relativeTo: .largeTitle) private var figureSize: CGFloat = 64
+    @State private var editingSet: SetEntry?
+
+    private var type: ExerciseType? { entry.exercise?.type }
+    private var phase: [SetEntry] { entry.orderedSets.filter { $0.isWarmup == current.isWarmup } }
+    private var ordinal: Int { (phase.firstIndex { $0.persistentModelID == current.persistentModelID } ?? 0) + 1 }
+    private var markerSize: CGFloat { min(max(scaledMarker, 40), 60) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: markerSize, maximum: markerSize + 24), spacing: 10, alignment: .leading)],
+                      alignment: .leading, spacing: 8) {
+                ForEach(Array(phase.enumerated()), id: \.element.persistentModelID) { index, set in
+                    SetMarker(
+                        set: set,
+                        number: index + 1,
+                        total: phase.count,
+                        isCurrent: set.persistentModelID == current.persistentModelID,
+                        allowsQuality: type != .timed && type != .conditioning,
+                        deviation: deviationWords(set, from: SetGroup.key(set), type: type),
+                        spoken: spokenWords(set, type: type),
+                        size: markerSize,
+                        onEdit: { editingSet = set },
+                        onStatusChange: { onStatusChange(set, $0, $1) }
+                    )
+                }
+            }
+            Text("\(current.isWarmup ? "WARMUP" : "SET") \(ordinal) OF \(phase.count)")
+                .font(.footnote.weight(.heavy).monospacedDigit())
+                .tracking(0.8)
+                .foregroundStyle(.secondary)
+            figure
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .sheet(item: $editingSet) { set in
+            SetEditor(set: set, entry: entry, exercise: entry.exercise, gym: gym, bar: bar,
+                      targetLb: set.plannedWeightLb ?? entry.plannedWeightLb, onDelete: { onRemove(set) })
+        }
+    }
+
+    @ViewBuilder
+    private var figure: some View {
+        if type == .timed {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(CardioFormat.durationLabel(seconds: current.durationSeconds ?? 0))
+                    .font(.system(size: min(figureSize, 120), weight: .black).width(.condensed).monospacedDigit())
+                Text("hold")
+                    .font(.title.weight(.heavy))
+                    .fontWidth(.condensed)
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .contentShape(Rectangle())
+            .onTapGesture { editingSet = current }
+            .accessibilityElement(children: .combine)
+            .accessibilityAction(named: "Adjust hold time") { editingSet = current }
+        } else if type == .conditioning {
+            Button { editingSet = current } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(spokenWords(current, type: type))
+                        .font(.title.weight(.heavy).monospacedDigit())
+                        .fontWidth(.condensed)
+                        .foregroundStyle(Color.primary)
+                    Text("Tap to log distance and time")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+        } else {
+            // The numbers you're about to lift — the set's own values, which
+            // is the prescription unless you changed this set.
+            CurrentSetHero(set: current)
+                .contentShape(Rectangle())
+                .onTapGesture { editingSet = current }
+                .accessibilityAction(named: "Adjust reps or load") { editingSet = current }
+        }
+    }
+}
+
 /// One prescription, stated once, with a marker per set across the top.
-/// The box holding the focused lift's current set carries the hero numbers;
-/// per-set rows live in the editor, not here.
+/// Per-set rows live in the editor ("Edit sets"), not here.
 private struct SetGroupBox: View {
     let group: SetGroup
     let entry: SessionExercise
     /// The focused lift's current set; nil for a lift you're not on.
     let currentID: PersistentIdentifier?
-    let prominent: Bool
+    /// The focused lift starts its hold from the cockpit; other lifts' boxes
+    /// keep the button.
+    let showsHoldStart: Bool
     let restSeconds: Int
     let display: UnitDisplay
     let gym: Gym?
@@ -3178,6 +3343,7 @@ private struct SetGroupBox: View {
     let onStatusChange: (_ set: SetEntry, _ previous: SetStatus, _ current: SetStatus) -> Void
     let onRemove: (SetEntry) -> Void
     @ScaledMetric(relativeTo: .body) private var scaledMarker: CGFloat = 44
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // Each box presents its own sheets. Modifiers on a List Section land on
     // every row, and a dozen rows sharing one binding present nothing.
     @State private var editingSet: SetEntry?
@@ -3196,23 +3362,13 @@ private struct SetGroupBox: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: markerSize, maximum: markerSize + 28), spacing: 10, alignment: .leading)],
-                          alignment: .leading, spacing: 8) {
-                    ForEach(group.sets) { set in
-                        SetMarker(
-                            set: set,
-                            number: ordinal(set),
-                            total: phase.count,
-                            isCurrent: set.persistentModelID == currentID,
-                            allowsQuality: !isCardio && !isTimed,
-                            deviation: deviation(set),
-                            spoken: spoken(set),
-                            size: markerSize,
-                            onEdit: { onEdit(set) },
-                            onStatusChange: { onStatusChange(set, $0, $1) }
-                        )
-                    }
+                // A row of markers; a long plan (10×10) wraps instead.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 10) { markers }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: markerSize, maximum: markerSize + 28), spacing: 10, alignment: .leading)],
+                              alignment: .leading, spacing: 8) { markers }
                 }
+                Spacer(minLength: 8)
                 Button("Edit sets") { editingPlan = true }
                     .font(.subheadline.weight(.semibold))
                     .buttonStyle(.borderless)
@@ -3221,16 +3377,8 @@ private struct SetGroupBox: View {
                     .fixedSize()
                     .accessibilityHint("Lists every set of this exercise to change load, reps, or status one set at a time")
             }
-            if prominent, let current, !isTimed, !isCardio {
-                // The numbers you're about to lift — the set's own values,
-                // which is the prescription unless you changed this set.
-                CurrentSetHero(set: current, ordinal: ordinal(current), total: phase.count, display: display)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onEdit(current) }
-                    .accessibilityAction(named: "Adjust reps or load") { onEdit(current) }
-            }
             prescription
-            if isTimed, let current, current.status == .planned {
+            if showsHoldStart, isTimed, let current, current.status == .planned {
                 Button { holdSet = current } label: {
                     Label("Start hold", systemImage: "play.fill")
                         .font(.body.weight(.bold))
@@ -3242,9 +3390,9 @@ private struct SetGroupBox: View {
             }
         }
         .padding(12)
-        .background(prominent ? Theme.raised : Color.clear, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius)
-            .stroke(Color.primary.opacity(prominent ? 0.28 : 0.16), lineWidth: 1))
+            .stroke(Color.primary.opacity(0.16), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(summary)
         .sheet(item: $editingSet) { set in
@@ -3265,20 +3413,37 @@ private struct SetGroupBox: View {
         (phase.firstIndex { $0.persistentModelID == set.persistentModelID } ?? 0) + 1
     }
 
-    /// The prescription once, on one line: kind, sets × reps (or hold),
-    /// load, rest. In the hero box the hero already states kind and load.
+    private var markers: some View {
+        ForEach(group.sets) { set in
+            SetMarker(
+                set: set,
+                number: ordinal(set),
+                total: phase.count,
+                isCurrent: set.persistentModelID == currentID,
+                allowsQuality: !isCardio && !isTimed,
+                deviation: deviation(set),
+                spoken: spoken(set),
+                size: markerSize,
+                onEdit: { onEdit(set) },
+                onStatusChange: { onStatusChange(set, $0, $1) }
+            )
+        }
+    }
+
+    /// The prescription once — kind, sets × reps (or hold), load, rest — on
+    /// one line, stacked at accessibility sizes rather than truncated.
     private var prescription: some View {
         let first = group.sets[0]
         let key = group.key
-        let heroStates = prominent && current != nil && !isTimed && !isCardio
         let load = loadWords(lb: key.loadLb, set: first, display: display)
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if !heroStates {
-                Text(group.kind.uppercased())
-                    .font(.footnote.weight(.heavy))
-                    .tracking(0.6)
-                    .foregroundStyle(.secondary)
-            }
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+        return layout {
+            Text(group.kind.uppercased())
+                .font(.footnote.weight(.heavy))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
             if isCardio {
                 Text(CardioFormat.setLabel(distanceMiles: first.distanceMiles, durationSeconds: first.durationSeconds,
                                            inclinePercent: first.inclinePercent, loadLb: first.weightLb, flights: first.flights))
@@ -3288,7 +3453,7 @@ private struct SetGroupBox: View {
                 Text(workWords(key))
                     .font(.headline.weight(.heavy).monospacedDigit())
                     .fontWidth(.condensed)
-                if !heroStates, !isTimed || key.loadLb > 0 {
+                if !isTimed || key.loadLb > 0 {
                     Text(load.primary + first.loadBasis.shortSuffix)
                         .font(.headline.weight(.heavy).monospacedDigit())
                         .fontWidth(.condensed)
@@ -3305,7 +3470,7 @@ private struct SetGroupBox: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .lineLimit(1)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
         .minimumScaleFactor(0.7)
         .accessibilityElement(children: .combine)
     }
@@ -3321,32 +3486,8 @@ private struct SetGroupBox: View {
         return key.yards == nil ? "\(each) reps" : each
     }
 
-    /// The set's own numbers when they differ from the box's prescription —
-    /// a manual edit is never hidden behind the planned figures.
-    private func deviation(_ set: SetEntry) -> String? {
-        guard !isCardio else { return nil }
-        let key = group.key
-        if isTimed {
-            guard let seconds = set.durationSeconds, seconds != key.seconds else { return nil }
-            return CardioFormat.durationLabel(seconds: seconds)
-        }
-        let repsDiffer = set.carryYards == nil && set.reps != key.reps
-        let loadDiffers = abs(set.weightLb - key.loadLb) > 0.001
-        guard repsDiffer || loadDiffers else { return nil }
-        let load = loadWords(lb: set.weightLb, set: set, display: .lbPrimary, withUnit: false).primary
-        return "\(set.reps) × \(load)"
-    }
-
-    private func spoken(_ set: SetEntry) -> String {
-        if isCardio {
-            return CardioFormat.setLabel(distanceMiles: set.distanceMiles, durationSeconds: set.durationSeconds,
-                                         inclinePercent: set.inclinePercent, loadLb: set.weightLb, flights: set.flights)
-        }
-        if isTimed { return "\(CardioFormat.durationLabel(seconds: set.durationSeconds ?? 0)) hold" }
-        let load = set.weightLb == 0 ? "bodyweight" : loadWords(lb: set.weightLb, set: set, display: .lbPrimary).primary
-        if let yards = set.carryYards { return "\(Weight.trim(yards)) yards at \(load)" }
-        return "\(set.reps) reps at \(load)"
-    }
+    private func deviation(_ set: SetEntry) -> String? { deviationWords(set, from: group.key, type: type) }
+    private func spoken(_ set: SetEntry) -> String { spokenWords(set, type: type) }
 
     private var summary: String {
         let done = group.sets.filter { $0.status == .completed }.count
@@ -3360,86 +3501,84 @@ private struct SetGroupBox: View {
     }
 }
 
-/// The working set the lifter is on: position, reps, and the set load —
-/// pounds first, kilograms after. Web twin: `.current-set-hero`.
+/// The numbers to lift: the load giant, its unit, then "× reps" in steel,
+/// the other unit small beneath. The set's own values in the unit it was
+/// entered in. Web twin: `.current-set-hero`.
 private struct CurrentSetHero: View {
     let set: SetEntry
-    let ordinal: Int
-    let total: Int
-    let display: UnitDisplay
     /// The dominant numeral keeps its proportion and still follows Dynamic
-    /// Type. Condensed width buys the extra size without widening "138.7".
-    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 60
-    @ScaledMetric(relativeTo: .title) private var repsSize: CGFloat = 34
+    /// Type. Condensed width buys the size without widening "138.7".
+    @ScaledMetric(relativeTo: .largeTitle) private var numeralSize: CGFloat = 76
+    @ScaledMetric(relativeTo: .largeTitle) private var unitSize: CGFloat = 40
+
+    private var loadNumber: String {
+        guard set.weightLb > 0 else { return "BW" }
+        return Weight.trim(set.enteredUnit == .kg ? Weight.kg(fromLb: set.weightLb) : set.weightLb)
+    }
+    private var unit: String { self.set.weightLb > 0 ? (set.enteredUnit == .kg ? "kg" : "lb") : "" }
+    private var otherUnit: String? {
+        guard set.weightLb > 0 else { return nil }
+        return set.enteredUnit == .kg ? "\(Weight.trim(set.weightLb)) lb" : "\(Weight.trim(Weight.kg(fromLb: set.weightLb))) kg"
+    }
+    /// [INV-CARRY-LOGS-DISTANCE] A distance carry states its yards.
+    private var work: String {
+        let side = set.isPerSide ? "/side" : ""
+        if let yards = set.carryYards { return "× \(Weight.trim(yards)) yd\(side)" }
+        return "× \(set.reps)\(side)"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Kept even though the track above marks the set: warmups aren't
-            // on the track, and the line must not come and go between a
-            // warmup and the first work set or the hero would jump (#185).
-            Text("\(set.isWarmup ? "WARMUP" : "WORKING SET") \(ordinal) OF \(total)")
-                .font(.footnote.weight(.heavy))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                // [INV-CARRY-LOGS-DISTANCE] A distance carry states its yards.
-                if let yards = set.carryYards {
-                    Text(Weight.trim(yards))
-                        .font(.system(size: repsSize, weight: .heavy).width(.condensed).monospacedDigit())
-                    Text(set.isPerSide ? "yd / side" : "yd")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("\(set.reps)")
-                        .font(.system(size: repsSize, weight: .heavy).width(.condensed).monospacedDigit())
-                    Text(set.isPerSide ? "reps / side" : "reps")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) { load; reps }
+                VStack(alignment: .leading, spacing: 0) { load; reps }
+            }
+            HStack(spacing: 8) {
+                if let otherUnit { Text(otherUnit) }
+                // The basis on the number itself: "50 lb each". Without it a
+                // per-hand load reads as the total.
+                if set.loadBasis != .totalBar, set.weightLb > 0 { Text("Set load · \(set.loadBasis.label)") }
                 if set.prescriptionBlock == .amrap {
-                    Text("AMRAP")
-                        .font(.caption.bold())
-                        .foregroundStyle(Theme.accent)
+                    Text("AMRAP — \(set.plannedReps ?? set.reps)+ reps").foregroundStyle(Theme.accent)
                 }
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if set.weightLb > 0 {
-                    // The unit the set was entered in leads; the other rides
-                    // along only when Settings asks for both.
-                    let load = loadWords(lb: set.weightLb, set: set, display: display, withUnit: false)
-                    Text(load.primary)
-                        .font(.system(size: numeralSize, weight: .black).width(.condensed).monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                    Text(set.enteredUnit == .kg ? "kg" : "lb")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    if let secondary = loadWords(lb: set.weightLb, set: set, display: display).secondary {
-                        Text(secondary)
-                            .font(.body.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 8)
-                    }
-                    // The basis on the number itself: "50 lb · 22.7 kg each".
-                    // Without it a per-hand load reads as the total.
-                    if !set.loadBasis.shortSuffix.isEmpty {
-                        Text(set.loadBasis.shortSuffix.trimmingCharacters(in: .whitespaces))
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text("BW")
-                        .font(.system(size: numeralSize, weight: .black).width(.condensed))
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(set.weightLb > 0 ? "Set load \(LoadSemantics.heroLoadLabel(weightLb: set.weightLb, basis: set.loadBasis))" : "Bodyweight")
-            Text(set.loadBasis == .totalBar ? "Set load · bar included" : "Set load · \(set.loadBasis.label)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            .font(.subheadline.weight(.semibold).monospacedDigit())
+            .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(set.weightLb > 0
+            ? "Set load \(LoadSemantics.heroLoadLabel(weightLb: set.weightLb, basis: set.loadBasis)), \(spokenWork)"
+            : "Bodyweight, \(spokenWork)")
+        .accessibilityHint("Opens this set's editor")
         .accessibilityIdentifier("current-set-hero")
+    }
+
+    private var spokenWork: String {
+        if let yards = set.carryYards { return "\(Weight.trim(yards)) yards" }
+        return "\(set.reps) reps\(set.isPerSide ? " per side" : "")"
+    }
+
+    private var load: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            // Scales with Dynamic Type up to a ceiling: past ~130 pt the
+            // numeral only pushes the bar and Done off the screen.
+            Text(loadNumber)
+                .font(.system(size: min(numeralSize, 130), weight: .black).width(.condensed).monospacedDigit())
+            if !unit.isEmpty {
+                Text(unit + set.loadBasis.shortSuffix)
+                    .font(.system(size: unitSize, weight: .heavy).width(.condensed))
+            }
+        }
+        .foregroundStyle(Color.primary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+
+    private var reps: some View {
+        Text(work)
+            .font(.system(size: unitSize * 1.1, weight: .heavy).width(.condensed).monospacedDigit())
+            .foregroundStyle(Theme.forgedSteel)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
