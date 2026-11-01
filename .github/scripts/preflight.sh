@@ -61,6 +61,7 @@ fi
 
 bash .github/scripts/test-cancel-stale-pr-runs.sh
 bash .github/scripts/test-classify-ci-paths.sh
+bash .github/scripts/test-changed-paths.sh
 bash .github/scripts/test-ci-topology.sh
 bash .github/scripts/test-signing-preflight.sh
 node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs

@@ -22,6 +22,8 @@ run_gate() {
     NATIVE_SMOKE_RESULT="${13:-skipped}" \
     SIGNING_REQUIRED="${14:-false}" \
     SIGNING_RESULT="${15:-skipped}" \
+    WATCH_SMOKE_REQUIRED="${16:-false}" \
+    WATCH_SMOKE_RESULT="${17:-skipped}" \
     bash "$gate"
 }
 
@@ -100,5 +102,19 @@ expect_fail "release main push with signing preflight skipped" \
   success success success false skipped true success true success false skipped false skipped true skipped
 expect_fail "release main push with signing preflight failed" \
   success success success false skipped true success true skipped false skipped false skipped true failure
+
+# The watch simulator smoke tests run in their own job beside the device build
+# (#362), required on the same native PRs. Its failure, cancellation at the
+# timeout, or a skip must fail the aggregate.
+expect_pass "native PR with watch smoke tests passed" \
+  success success success true success false skipped false skipped false skipped true success false skipped true success
+expect_fail "native PR with watch smoke tests failed" \
+  success success success true success false skipped false skipped false skipped true success false skipped true failure
+expect_fail "native PR with watch smoke tests cancelled at the timeout" \
+  success success success true success false skipped false skipped false skipped true success false skipped true cancelled
+expect_fail "native PR with watch smoke tests skipped" \
+  success success success true success false skipped false skipped false skipped true success false skipped true skipped
+expect_fail "watch smoke tests ran when not required" \
+  success success success false skipped false skipped false skipped false skipped false skipped false skipped false success
 
 echo "CI job aggregate contract tests passed ($scenarios scenarios)"

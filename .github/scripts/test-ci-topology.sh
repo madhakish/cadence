@@ -67,7 +67,7 @@ assert_job_not_contains core-tests "container:"
 assert_job_contains core-tests "xcrun swiftc -parse"
 assert_job_contains core-tests "run: xcrun swift test"
 assert_job_contains web-tests "needs: changes"
-for job in core-tests web-tests simulator-build device-build store-build migration-tests native-smoke testflight deploy-web; do
+for job in core-tests web-tests simulator-build device-build watch-smoke store-build migration-tests native-smoke testflight deploy-web; do
   assert_job_contains "$job" "runs-on: macos-latest"
   assert_job_not_contains "$job" "container:"
 done
@@ -80,6 +80,14 @@ assert_job_contains changes "run: bash .github/scripts/preflight.sh"
 assert_file_contains .github/scripts/preflight.sh "node --test .github/scripts/test-repository-hygiene.mjs"
 assert_file_contains .github/scripts/preflight.sh "git diff --check"
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-cancel-stale-pr-runs.sh"
+# PR paths come from the merge base, not main's tip (#362), through one
+# tested script.
+assert_job_contains changes "fetch-depth: 0"
+assert_job_contains changes "bash .github/scripts/changed-paths.sh > \"\$paths\""
+assert_job_contains changes "bash .github/scripts/classify-ci-paths.sh < \"\$paths\""
+assert_job_not_contains changes "git diff --name-only"
+assert_file_contains .github/scripts/changed-paths.sh 'git merge-base "$base" "$HEAD_SHA"'
+assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-changed-paths.sh"
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-ci-topology.sh"
 assert_file_contains .github/scripts/preflight.sh "bash .github/scripts/test-signing-preflight.sh"
 # Signing material is proven on Ubuntu right after preflight, before any
@@ -139,6 +147,23 @@ assert_job_not_contains migration-tests "concurrency:"
 assert_job_contains device-build "needs: [changes, core-tests, web-tests]"
 assert_job_contains simulator-build "timeout-minutes: 20"
 assert_job_contains device-build "timeout-minutes: 20"
+# The watch build and UI smoke tests run in their own job beside the device
+# build, on the same trigger; together they outgrew the device build's limit.
+assert_job_contains watch-smoke "name: Watch simulator smoke tests"
+assert_job_contains watch-smoke "needs: [changes, core-tests, web-tests]"
+assert_job_contains watch-smoke "if: github.event_name == 'pull_request' && needs.changes.outputs.native == 'true'"
+assert_job_contains watch-smoke "timeout-minutes: 30"
+assert_job_contains watch-smoke "-scheme CadenceWatch"
+assert_job_contains watch-smoke "-destination 'generic/platform=watchOS Simulator'"
+assert_job_contains watch-smoke "xcodebuild test"
+assert_job_contains watch-smoke "-resultBundlePath build/WatchSmoke.xcresult"
+assert_job_contains watch-smoke $'- name: Retain watch smoke results\n        if: always()'
+assert_job_contains watch-smoke "path: build/WatchSmoke.xcresult"
+assert_job_contains watch-smoke "retention-days: 14"
+assert_job_not_contains device-build "CadenceWatch"
+assert_job_not_contains device-build "watchOS"
+assert_job_not_contains device-build "xcodebuild test"
+assert_job_contains device-build "-destination 'generic/platform=iOS'"
 assert_job_contains store-build "timeout-minutes: 45"
 assert_job_contains migration-tests "timeout-minutes: 75"
 assert_job_contains migration-tests "ref: 20058600ec2947c1a4f13a855d3b922ae80e1709"
@@ -149,7 +174,7 @@ assert_job_contains migration-tests 'TEST_RUNNER_CADENCE_V15_STORE_DIR:'
 # Preserve the stable aggregate check and route its policy through the
 # scenario-tested executable gate. The portable suites are direct dependencies
 # so their failures cannot disappear when every conditional native job skips.
-assert_job_contains app-build "needs: [changes, core-tests, web-tests, signing-preflight, simulator-build, device-build, store-build, migration-tests, native-smoke]"
+assert_job_contains app-build "needs: [changes, core-tests, web-tests, signing-preflight, simulator-build, device-build, store-build, migration-tests, native-smoke, watch-smoke]"
 assert_job_contains app-build "if: always()"
 assert_job_contains native-smoke "needs: [changes, core-tests, web-tests]"
 assert_job_contains native-smoke "if: needs.changes.outputs.native == 'true'"
@@ -160,6 +185,9 @@ assert_job_contains native-smoke "test14CalculatorTargetAtAccessibilityTextSize"
 assert_job_contains native-smoke "node .github/scripts/verify-native-smoke.mjs"
 assert_job_contains native-smoke $'- name: Require all four interaction tests to execute\n        if: always()'
 assert_job_contains app-build 'NATIVE_SMOKE_RESULT: ${{ needs.native-smoke.result }}'
+assert_job_contains app-build "WATCH_SMOKE_REQUIRED: \${{ github.event_name == 'pull_request' && needs.changes.outputs.native == 'true' }}"
+assert_job_contains app-build 'WATCH_SMOKE_RESULT: ${{ needs.watch-smoke.result }}'
+assert_file_contains .github/scripts/verify-native-jobs.sh 'require_job_result "watch simulator smoke tests" "${WATCH_SMOKE_REQUIRED:-}" "${WATCH_SMOKE_RESULT:-}"'
 assert_job_contains deploy-web "needs: [changes, web-tests, app-build]"
 # Pages must evaluate its gate even when a PR-only app-build dependency was
 # skipped on main; without always() the job is skipped on every main push.

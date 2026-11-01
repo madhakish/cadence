@@ -411,8 +411,13 @@ Native validation is change-aware behind that aggregate:
   offline signing contract); the signed build and the aggregate wait on it;
 - the app builds start only after core and web suites pass; the core job uses
   the runner's selected Xcode Swift toolchain and reports its version;
+- a pull request's paths are diffed from its merge base with main, never
+  main's tip, so work main gained after the fork cannot select a tier
+  (`.github/scripts/changed-paths.sh`); a push is diffed from `before`;
 - the unsigned-device build (Darwin unit tests + production-SDK Release
   compile) runs for native, shared-core, project, or CI-workflow changes;
+  beside it, a separate job builds the watch scheme for watchOS Simulator and
+  runs the watch UI smoke tests, keeping their result bundle;
 - the same native paths require focused iPhone interaction tests for next-lift
   advancement, plank timing, set-layout stability, and accessible calculator
   input. All four must execute with zero skips; result bundles survive failures;
