@@ -535,12 +535,14 @@ final class VisualProofUITests: XCTestCase {
                                        height: window.maxY - top - 34)
             let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
             revealRootListRows([inputRow], viewport: inputViewport)
-            // The plain List pins the scrolled section's header over the top
-            // of this row at accessibility sizes, and the frame check above
-            // cannot see that. Nudge the row back below the header, then wait.
-            for _ in 0..<2 where !target.isHittable {
+            // A partly covered field can still be hittable. Measure the
+            // pinned header too, so the capture shows the whole input.
+            let requestedHeader = app.staticTexts["Requested target"].firstMatch
+            XCTAssertTrue(requestedHeader.exists)
+            for _ in 0..<6 where target.frame.minY < max(top, requestedHeader.frame.maxY + 8) {
                 scrollRootList(by: 80, viewport: inputViewport)
             }
+            XCTAssertGreaterThanOrEqual(target.frame.minY, requestedHeader.frame.maxY + 8)
             let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
             XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
                            "the target must be tappable once the keyboard has closed; field \(target.frame), row \(inputRow.frame), viewport \(inputViewport)")
