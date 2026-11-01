@@ -17,26 +17,15 @@ struct RootView: View {
     @State private var workoutClock = WorkoutClock()
     @State private var pendingSessionID: String?
     @State private var pendingSignals = false
+    @Query(filter: #Predicate<WorkoutSession> { !$0.isCompleted })
+    private var openSessions: [WorkoutSession]
+    /// Bumped to rebuild Today from its root: the stack pops and the list
+    /// starts at the top, without HomeView growing a path model for it.
+    @State private var todayRoot = 0
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            TabView(selection: $selection) {
-                HomeView(pendingSessionID: $pendingSessionID)
-                    .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
-                    .tag(0)
-                ProgramOverviewView()
-                    .tabItem { Label("Program", systemImage: "list.bullet.clipboard") }
-                    .tag(1)
-                HistoryView()
-                    .tabItem { Label("History", systemImage: "calendar") }
-                    .tag(2)
-                BodyView(pendingSignals: $pendingSignals)
-                    .tabItem { Label("Body", systemImage: "scalemass") }
-                    .tag(3)
-                SettingsView()
-                    .tabItem { Label("Settings", systemImage: "gearshape") }
-                    .tag(4)
-            }
+            tabs
 
             // Plate math is one tap from anywhere. Non-negotiable. The button
             // floats in a band each tab's root list and the active session
@@ -114,6 +103,79 @@ struct RootView: View {
         guard defaults.double(forKey: Self.gymTagLastAutoDayKey) != day else { return }
         defaults.set(day, forKey: Self.gymTagLastAutoDayKey)
         showGymTag = true
+    }
+
+    // Tags are unchanged (Today is still 0, Body 3) so launch, deep links and
+    // tests keep their meaning; only the visual order moved Today to the
+    // middle, under the gorilla. The mark is drawn ~12% taller than the SF
+    // Symbols beside it (GorillaMark is a 30 pt template) so it is easy to
+    // mash; the system item supplies the Liquid Glass look, the 44 pt+ hit
+    // area and the large content viewer.
+    @ViewBuilder private var tabs: some View {
+        if #available(iOS 18.0, *) {
+            TabView(selection: tabSelection) {
+                Tab("Program", systemImage: "list.bullet.clipboard", value: 1) { ProgramOverviewView() }
+                Tab("History", systemImage: "calendar", value: 2) { HistoryView() }
+                Tab(value: 0) { today } label: { Label("Today", image: "GorillaMark") }
+                    .accessibilityHint("Returns to today's workout")
+                Tab("Body", systemImage: "scalemass", value: 3) { BodyView(pendingSignals: $pendingSignals) }
+                Tab("Settings", systemImage: "gearshape", value: 4) { SettingsView() }
+            }
+        } else {
+            TabView(selection: tabSelection) {
+                ProgramOverviewView()
+                    .tabItem { Label("Program", systemImage: "list.bullet.clipboard") }
+                    .tag(1)
+                HistoryView()
+                    .tabItem { Label("History", systemImage: "calendar") }
+                    .tag(2)
+                today
+                    .tabItem { Label("Today", image: "GorillaMark") }
+                    .tag(0)
+                BodyView(pendingSignals: $pendingSignals)
+                    .tabItem { Label("Body", systemImage: "scalemass") }
+                    .tag(3)
+                SettingsView()
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .tag(4)
+            }
+        }
+    }
+
+    private var today: some View {
+        HomeView(pendingSessionID: $pendingSessionID).id(todayRoot)
+    }
+
+    /// The tab bar writes through here on every tap, including a tap on the
+    /// tab that is already selected, which is how Today hears a second tap.
+    /// Programmatic changes (deep links) assign `selection` directly and skip
+    /// this, so a widget opening a workout is not second-guessed.
+    private var tabSelection: Binding<Int> {
+        Binding(get: { selection }, set: { tapped in
+            if tapped == 0 { returnToToday() } else { selection = tapped }
+        })
+    }
+
+    /// Today "drops back to the main screen and what you're doing": a workout
+    /// being timed reopens its live session through the same path as the
+    /// cadence://workout link; otherwise Today rebuilds from its root.
+    private func returnToToday() {
+        selection = 0
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { todayRoot += 1 }
+        if let live = liveSessionID { pendingSessionID = live }
+    }
+
+    /// The open session whose workout clock is running. The durable clock
+    /// record is the authority (it survives a relaunch before the session
+    /// screen re-adopts it). A session opened only to read the plan is not in
+    /// progress, and neither is a watch session waiting for review.
+    private var liveSessionID: String? {
+        guard let record = WorkoutClockPersistence.load() else { return nil }
+        return openSessions.first {
+            $0.id == record.sessionID && $0.syncReviewReasonRaw == nil
+        }?.id
     }
 }
 

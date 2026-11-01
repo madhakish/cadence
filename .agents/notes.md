@@ -41,3 +41,6 @@ it stops being true. Keep this file short enough to read every time.
 - UI-test fixtures should wait for a readiness signal, not a fixed delay. The
   watch fixture listens for a Darwin notification (#369); the WebKit
   service-worker test waits for the update event (#361).
+- The shared simulator runs whichever Cadence build was installed last,
+  often another agent's. Install your own build under the lock right before
+  a capture or `simctl launch`; `xcodebuild test` does that for you.
