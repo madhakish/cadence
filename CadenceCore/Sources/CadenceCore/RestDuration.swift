@@ -4,6 +4,20 @@ import Foundation
 /// Matches the existing native/web backup validators' 0...3600-second range.
 public enum RestDuration {
     public static let maximumSeconds = 3600
+    /// The rests people actually take. Anything else is one stepper away.
+    public static let presets = [60, 90, 120, 180, 240, 300]
+    /// Fine adjustment grain. Nobody's recovery hinges on 1:37 versus 1:38.
+    public static let stepSeconds = 15
+
+    /// One stepper press. An off-grid value (a stored 1:37, a running timer's
+    /// 2:41) lands on the next 15-second mark in that direction rather than
+    /// staying off-grid forever; the result is clamped to 0...maximumSeconds.
+    public static func stepped(_ seconds: Int, up: Bool) -> Int {
+        let value = min(max(0, seconds), maximumSeconds)
+        let floor = value / stepSeconds * stepSeconds
+        let next = up ? floor + stepSeconds : (floor == value ? value - stepSeconds : floor)
+        return min(max(0, next), maximumSeconds)
+    }
 
     public static func parse(hours: String, minutes: String, seconds: String) -> Int? {
         let fields = [hours, minutes, seconds].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

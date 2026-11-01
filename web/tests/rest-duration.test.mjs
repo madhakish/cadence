@@ -22,6 +22,10 @@ assert.equal(C.restDurationParse('1','0','1'), null);
 assert.equal(C.restDurationLabel(90), '00:01:30');
 assert.equal(C.restDurationLabel(3600), '01:00:00');
 assert.equal(C.REST_DURATION_MAX, 3600);
+for (const [start, up, expected] of [[90, true, 105], [90, false, 75], [97, true, 105], [97, false, 90],
+  [0, false, 0], [10, false, 0], [3600, true, 3600], [3590, true, 3600], [-5, true, 15], [4000, false, 3585]])
+  assert.equal(C.restDurationStepped(start, up), expected, `${start} ${up ? '+' : '-'}`);
+assert.deepEqual([...C.REST_DURATION_PRESETS], [60, 90, 120, 180, 240, 300]);
 
 const clock = C.restClockStart(300, 100);
 const edited = C.restClockSettingRemaining(clock, 97, 200);

@@ -32,16 +32,22 @@ For the exercise you're resting from, the first rule that applies wins:
 
 ## The five timers in Settings
 
-All five appear under **Settings → Rest & training behavior**. Tap a value
-to enter hours, minutes and seconds directly, from **00:00:00 to 01:00:00**.
-This is the existing native/web backup range; previously the controls stopped
-at ten minutes. Exact seconds such as 00:01:37 survive export and restore. They are *defaults*: turning one changes every
-exercise that falls through to it, and never touches an exercise that has
-a rest of its own. **Save** applies the draft; **Cancel** or dismissal leaves
-the stored value untouched. Web also accepts pasted HH:MM:SS. Extra seconds
-carry into minutes (90 seconds displays as 00:01:30); invalid entry stays
-visible and cannot be saved. Setting a timer to 0:00 disables the countdown for
-that bucket.
+All five appear under **Settings → Rest & training behavior**, from **0:00
+to 60:00** (the existing native/web backup range). On iPhone, tap a value to
+open the duration editor: the value shown big, presets for 1:00, 1:30, 2:00,
+3:00, 4:00 and 5:00 (the current one is lit), **−15 s / +15 s** for anything
+else (hold to repeat; an off-grid value such as 1:37 steps to the next
+quarter-minute mark), and **Off**. The web editor still takes hours, minutes
+and seconds directly and accepts pasted HH:MM:SS; extra seconds carry into
+minutes and invalid entry cannot be saved. Exact seconds such as 1:37 survive
+export and restore, and opening and saving the editor without touching it
+keeps them. They are *defaults*: turning one changes every exercise that
+falls through to it, and never touches an exercise that has a rest of its
+own. **Save** applies the draft; **Cancel** or dismissal leaves the stored
+value untouched. Setting a timer to 0:00 (Off) disables the countdown for
+that bucket. The per-exercise **Rest override** and the running timer's
+**Remaining rest** use the same editor, with **Use default from Settings**
+and **End rest** in place of Off.
 
 A handful of seeded accessories deliberately carry their own rest instead
 of using the buckets — heavy barbell accessories (hang variants, pulls,

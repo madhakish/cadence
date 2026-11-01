@@ -3018,6 +3018,15 @@ export function restDurationParse(hours, minutes, seconds) {
   const total = values[0] * 3600 + values[1] * 60 + values[2];
   return total <= REST_DURATION_MAX ? total : null;
 }
+// Mirrors RestDuration.presets / stepSeconds / stepped(_:up:).
+export const REST_DURATION_PRESETS = Object.freeze([60, 90, 120, 180, 240, 300]);
+export const REST_DURATION_STEP = 15;
+export function restDurationStepped(seconds, up) {
+  const value = Math.min(Math.max(0, seconds), REST_DURATION_MAX);
+  const floor = Math.floor(value / REST_DURATION_STEP) * REST_DURATION_STEP;
+  const next = up ? floor + REST_DURATION_STEP : (floor === value ? value - REST_DURATION_STEP : floor);
+  return Math.min(Math.max(0, next), REST_DURATION_MAX);
+}
 export function restDurationLabel(seconds) {
   const value = Math.max(0, seconds);
   return [Math.floor(value / 3600), Math.floor(value / 60) % 60, value % 60]
