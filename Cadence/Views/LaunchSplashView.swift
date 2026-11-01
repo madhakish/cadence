@@ -104,6 +104,7 @@ struct LaunchSplashView: View {
     private static let chalk = Color(red: 238 / 255, green: 234 / 255, blue: 226 / 255)
     private static let wordSize: CGFloat = 34
     private static let tracking: CGFloat = 11
+    private static let overhang: CGFloat = 48
 
     private var reduceMotion: Bool {
 #if DEBUG
@@ -175,11 +176,15 @@ struct LaunchSplashView: View {
                     .opacity(easeOut(wordIn))
                     .offset(y: rise)
                     .overlay(alignment: .bottom) {
+                        // Canvas clips to its bounds, and the pop and the sparks
+                        // fly past the wordmark: overhang so they are not sliced.
                         Canvas { context, size in
-                            drawFuse(in: &context, size: size, t: t, calm: calm, inset: Self.tracking / 2)
+                            drawFuse(in: &context, size: size, t: t, calm: calm,
+                                     inset: Self.tracking / 2 + Self.overhang)
                         }
-                        .frame(height: 44)
-                        .offset(y: 32)
+                        .frame(height: 2 * Self.overhang)
+                        .padding(.horizontal, -Self.overhang)
+                        .offset(y: 10 + Self.overhang) // line sits 10 pt under the glyphs
                     }
             }
             .offset(y: LaunchSplash.markSize / 2 + 38)
@@ -291,7 +296,7 @@ struct LaunchSplashView: View {
                 let r = 6 + 34 * easeOut(popT)
                 glowDot(in: &fire, at: CGPoint(x: x1, y: y), radius: r, color: ember, opacity: 0.8 * fall)
                 glowDot(in: &fire, at: CGPoint(x: x1, y: y), radius: r * 0.45, color: whiteHot, opacity: fall)
-                let flare = CGRect(x: x1 - r * 2.4, y: y - 1.5, width: r * 4.8, height: 3)
+                let flare = CGRect(x: x1 - r * 1.8, y: y - 1.5, width: r * 3.6, height: 3)
                 fire.fill(Path(ellipseIn: flare), with: .color(whiteHot.opacity(0.9 * fall)))
             }
         }
