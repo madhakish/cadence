@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { openFirstInstall } from './first-install.mjs';
 import { startServer } from './server.mjs';
 
 test('[WEB-EXERCISE-FAVORITES] saved shortcuts survive reopen and select through the shared picker', async ({ page }, info) => {
   const server = await startServer();
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   try {
-    await page.goto(server.url);
-    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller
-      && performance.getEntriesByType('navigation')[0]?.type === 'reload').catch(() => false)).toBe(true);
+    await openFirstInstall(page, server.url);
     // Root controls must scroll past the persistent calculator, rather than
     // remaining visible/tappable beneath it at intermediate scroll positions.
     for (const width of [390, 1280]) {

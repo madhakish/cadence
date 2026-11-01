@@ -80,8 +80,10 @@ final class PhoneWatchLink: NSObject {
             }
             modality = WorkoutClassification.classify(kinds)
         }
-        return WatchPlan(next: next, activeSessionID: open?.id, settings: watchSettings, sentAt: now,
-                         nextModality: modality)
+        var plan = WatchPlan(next: next, activeSessionID: open?.id, settings: watchSettings, sentAt: now,
+                             nextModality: modality)
+        plan.signatures = MotionRecordingStore.autocompleteState()?.signatures
+        return plan
     }
 
     // MARK: Messages from the watch
@@ -286,6 +288,11 @@ extension PhoneWatchLink: WCSessionDelegate {
         guard let sidecar = file.metadata?[WatchWire.motionMetadataKey] as? Data,
               let id = try? MotionRecordingStore.store(samplesAt: file.fileURL, sidecar: sidecar) else { return }
         Task { @MainActor in self.send(.recordingStored(recordingID: id)) }
+        // A new recording may enable (or disable) autocomplete for an exercise.
+        Task.detached(priority: .utility) {
+            _ = try? MotionRecordingStore.refreshAutocomplete()
+            await MainActor.run { PhoneWatchLink.shared.pushPlan() }
+        }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {

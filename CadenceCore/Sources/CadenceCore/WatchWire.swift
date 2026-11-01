@@ -57,6 +57,9 @@ public struct WatchPlan: Codable, Hashable, Sendable {
     /// The planned day's `WorkoutClassification`, so the watch's workout takes
     /// the type the phone would export (design section 6). Fixed at start.
     public var nextModality: WorkoutModality?
+    /// Detector signatures for exercises that passed the accuracy bar on the
+    /// owner's recordings (design section 10). Absent or empty: no autocomplete.
+    public var signatures: [RepSignature]?
 
     public init(next: SyncSessionSnapshot?, active: SyncSessionSnapshot? = nil, activeSessionID: String? = nil,
                 settings: WatchSettings, sentAt: Date, nextModality: WorkoutModality? = nil) {

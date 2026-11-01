@@ -97,6 +97,18 @@ public enum DetectorEvaluation {
         }
     }
 
+    /// Signatures for the exercises that pass the bar, each learned from all of
+    /// its labelled sets. Only these are ever sent to the watch: an exercise is
+    /// auto-logged only after it has been shown accurate on the owner's own
+    /// recordings (design anti-goal 4).
+    public static func enabledSignatures(_ recordings: [MotionRecordingData]) -> [RepSignature] {
+        evaluate(recordings).filter(\.passes).compactMap { result in
+            let sets = recordings.flatMap { labelledSets(result.exerciseID, in: $0) }
+            let rate = recordings.first?.sidecar.sampleRate ?? MotionRecording.defaultSampleRate
+            return RepDetector.signature(exerciseID: result.exerciseID, from: sets, sampleRate: rate)
+        }
+    }
+
     /// The aggregate table: the only output that may be shared.
     public static func table(_ results: [ExerciseResult]) -> String {
         func pct(_ value: Double) -> String { String(format: "%5.1f%%", value * 100) }

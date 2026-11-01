@@ -50,6 +50,9 @@ struct StartView: View {
                     .font(.footnote)
                     .padding(.top, 8)
                     .accessibilityHint("Recordings help Cadence learn to count your reps. They go to your iPhone only.")
+                Toggle("Confirm detected sets", isOn: $model.confirmBeforeLogging)
+                    .font(.footnote)
+                    .accessibilityHint("When on, a set your watch detects waits for you to confirm it instead of logging itself.")
             }
             .padding(.horizontal, 4)
         }
@@ -86,7 +89,6 @@ struct HeartRateBadge: View {
 struct SetView: View {
     @EnvironmentObject private var model: WatchSessionModel
     @State private var reps = 0.0
-    @State private var weightLb = 0.0
     @State private var editingLoad = false
 
     var body: some View {
@@ -95,6 +97,7 @@ struct SetView: View {
         } else if let exercise = model.currentExercise, let set = model.currentSet {
             let index = (exercise.sets.firstIndex { $0.id == set.id } ?? 0) + 1
             VStack(spacing: 6) {
+                ProposalBanner()
                 HStack {
                     Text(set.isWarmup ? "Warmup" : "Set \(index) of \(exercise.sets.count)")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -104,12 +107,13 @@ struct SetView: View {
                 }
                 Text(exercise.catalog.name).font(.headline).lineLimit(2).multilineTextAlignment(.center)
                 Button { editingLoad = true } label: {
-                    Text("\(model.display(weightLb)) × \(Int(reps))")
+                    Text("\(model.display(model.load(for: set))) × \(Int(reps))")
                         .font(.title3.monospacedDigit().weight(.semibold))
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("load")
                 .accessibilityHint("Adjust the load. Turn the Digital Crown to change reps.")
-                Button("Done") { model.complete(set, reps: Int(reps), weightLb: weightLb) }
+                Button("Done") { model.complete(set, reps: Int(reps), weightLb: model.load(for: set)) }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .accessibilityIdentifier("done")
                 Button("Skip", role: .destructive) { model.skip(set) }
@@ -121,7 +125,9 @@ struct SetView: View {
                                   isContinuous: false, isHapticFeedbackEnabled: true)
             .onAppear { load(set) }
             .onChange(of: set.id) { _, _ in load(set) }
-            .sheet(isPresented: $editingLoad) { LoadAdjuster(weightLb: $weightLb) }
+            .sheet(isPresented: $editingLoad) {
+                LoadAdjuster(weightLb: Binding(get: { model.load(for: set) }, set: { model.adjustLoad(set.id, to: $0) }))
+            }
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(.green)
@@ -133,7 +139,6 @@ struct SetView: View {
 
     private func load(_ set: SyncSessionView.Set) {
         reps = Double(set.reps)
-        weightLb = set.weightLb
     }
 }
 
@@ -151,6 +156,7 @@ struct LoadAdjuster: View {
                 Button("+5") { weightLb += 5 }
             }
             Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("loadDone")
             Button("Drop load…") { choosingReason = true }
                 .font(.footnote)
         }
@@ -193,13 +199,20 @@ struct RestView: View {
                     Button("+30 s") { model.addRest(30) }
                     Button("Skip") { model.endRest() }.accessibilityIdentifier("skipRest")
                 }
+                ProposalBanner()
+                if let reps = model.autoLoggedReps, let setID = model.lastLoggedSetID {
+                    Button("\(reps) reps · Edit") { model.reopen(setID); model.endRest() }
+                        .font(.headline)
+                        .accessibilityIdentifier("autoLogged")
+                        .accessibilityHint("Logged from your wrist motion. Tap to correct it.")
+                }
                 if let setID = model.lastLoggedSetID {
                     EffortTags(setID: setID)
                     Button("Edit last set") { model.reopen(setID); model.endRest() }
                         .font(.footnote)
                 }
                 if let next = model.currentSet, let exercise = model.currentExercise {
-                    Text("Next: \(exercise.catalog.name) · \(model.display(next.weightLb)) × \(next.reps)")
+                    Text("Next: \(exercise.catalog.name) · \(model.display(model.load(for: next))) × \(next.reps)")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
             }
@@ -344,6 +357,28 @@ struct TimedSetView: View {
         .onChange(of: set.id) { _, _ in
             startedAt = nil
             stoppedAt = nil
+        }
+    }
+}
+
+/// Tap-to-confirm (design section 10): a detected set waits here until the
+/// owner confirms it; rest has already started.
+struct ProposalBanner: View {
+    @EnvironmentObject private var model: WatchSessionModel
+
+    var body: some View {
+        if let proposal = model.proposal {
+            VStack(spacing: 4) {
+                Text("Detected \(proposal.reps) reps").font(.headline)
+                HStack {
+                    Button("Confirm") { model.confirmProposal() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("confirmDetected")
+                    Button("Not a set") { model.dismissProposal() }
+                        .font(.footnote)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 }

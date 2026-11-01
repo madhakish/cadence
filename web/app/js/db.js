@@ -1007,7 +1007,7 @@ export const exportJSON = async () => JSON.stringify(await exportBundle(), null,
 export async function exportCSV() {
   const sessions = await Sessions.completed();
   const head = ["date", "exercise", "set_index", "weight_lb", "weight_kg", "reps", "is_warmup", "status", "per_side", "load_basis", "implement_count", "flags", "body_flag_site", "body_flag_note", "autoreg_reason", "session_notes"];
-  const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const esc = C.csvField; // formula-safe, shared with native CSVExport ([INV-CSV-NO-FORMULA])
   const rows = [head.join(",")];
   for (const s of sessions) {
     for (const e of s.exercises || []) {

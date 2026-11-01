@@ -30,7 +30,9 @@ if [[ -n "${HEAD_SHA:-}" ]]; then
   if [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]]; then
     git diff-tree --root --check "$HEAD_SHA"
   else
-    git diff --check "$BASE_SHA" "$HEAD_SHA"
+    # From the merge base, like changed-paths.sh: a base branch that moved on
+    # must not make lines it changed look like this change's whitespace.
+    git diff --check "$(git merge-base "$BASE_SHA" "$HEAD_SHA" || echo "$BASE_SHA")" "$HEAD_SHA"
   fi
 else
   git diff --check HEAD
@@ -61,6 +63,7 @@ fi
 
 bash .github/scripts/test-cancel-stale-pr-runs.sh
 bash .github/scripts/test-classify-ci-paths.sh
+bash .github/scripts/test-changed-paths.sh
 bash .github/scripts/test-ci-topology.sh
 bash .github/scripts/test-signing-preflight.sh
 node --test .github/scripts/test-verify-native-smoke.mjs .github/scripts/test-verify-pages-recovery.mjs .github/scripts/test-check-parity.mjs

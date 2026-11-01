@@ -149,6 +149,10 @@ const walkJs = (dir) => readdirSync(dir).flatMap((name) => {
     "[INV-WEB-CACHE-OWNERSHIP] the app worker does not delete every cache that is merely not its own");
   ok(/ownedByThisWorker/.test(appWorker),
     "[INV-WEB-CACHE-OWNERSHIP] the app worker's eviction is guarded by a prefix check");
+  ok(!/\bcaches\.match\(/.test(codeOnly(appWorker)),
+    "[INV-WEB-CACHE-OWNERSHIP] the app worker reads only its own cache, never every cache on the origin");
+  ok(/res\.ok\s*&&\s*res\.type\s*===\s*"basic"/.test(appWorker),
+    "[INV-WEB-CACHE-OWNERSHIP] the app worker caches only successful same-origin responses");
 }
 
 // ---- the app's old scope stands down instead of serving a stale shell ----
