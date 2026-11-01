@@ -47,6 +47,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(resume.exists, "the menu alone deletes nothing")
         confirm.tap()
         XCTAssertTrue(resume.waitForNonExistence(timeout: 5))
+        for _ in 0..<3 { app.swipeDown() }
         XCTAssertTrue(app.buttons["start-today"].isHittable)
         capture("after-01b-home-ready-iphone")
 

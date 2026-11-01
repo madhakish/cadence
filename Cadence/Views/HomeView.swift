@@ -216,10 +216,40 @@ struct HomeView: View {
         return (load, scheme)
     }
 
+    /// The solver's stack for a barbell lift at a load, through the one
+    /// rack-resolution path every bar view uses. Nil for anything that is not
+    /// a loaded barbell: no plates are invented for dumbbells or bodyweight.
+    private func loadedBar(_ exercise: Exercise?, weightLb: Double, bar: Bar, gym: Gym?, unit: WeightUnit) -> LoadedBar? {
+        guard exercise?.type == .barbell, weightLb > 0 else { return nil }
+        return LoadedBar(
+            solution: authoritativePlateSolution(targetLb: weightLb, fallbackUnit: unit, bar: bar, gym: gym,
+                                                 stationDenomination: exercise?.stationDenomination),
+            style: exercise?.movementGroup == "olympic" ? .bumper : .steel,
+            theme: gym?.plateTheme ?? .custom
+        )
+    }
+
+    private func planLoadedBar(_ program: Program, _ lift: ProgramLift) -> LoadedBar? {
+        let exercise = exercises.first { $0.name == lift.exerciseName }
+        return loadedBar(exercise, weightLb: previewPlans(program, lift).snapped.weightLb,
+                         bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym, unit: entryUnit)
+    }
+
+    /// The heaviest prescribed set as it stands, on the bar the session
+    /// exercise actually uses (its stored override, else the gym's default).
+    private func sessionLoadedBar(_ entry: SessionExercise, gym: Gym?) -> LoadedBar? {
+        guard let top = entry.prescribedSets.max(by: { $0.weightLb < $1.weightLb }) else { return nil }
+        let bar = entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb
+        return loadedBar(entry.exercise, weightLb: top.weightLb, bar: bar, gym: gym, unit: top.enteredUnit)
+    }
+
     @ViewBuilder
     private func resumeHero(_ open: WorkoutSession) -> some View {
         let tracking = workoutClock.isTracking(sessionID: open.id)
         let title = sessionTitle(open)
+        let gym = gyms.first { $0.id == open.gymID } ?? defaultGym
+        let topBar = open.orderedExercises.lazy.compactMap { sessionLoadedBar($0, gym: gym) }.first
+        if let topBar { HeroBarImage(loaded: topBar) }
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 HeroKicker(text: tracking ? (workoutClock.isPaused ? "Paused" : "In progress") : "Open session",
@@ -244,15 +274,16 @@ struct HomeView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 18).padding(.bottom, 10)
-        .heroBand(.edge)
+        .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
+        .heroBand(topBar == nil ? .edge : .none)
         ForEach(open.orderedExercises) { entry in
             let name = entry.exercise?.name ?? "Exercise"
             let line = sessionLine(entry)
             NavigationLink {
                 ExerciseDetailByNameView(name: name)
             } label: {
-                HeroLiftLine(name: name, load: line.load, scheme: line.scheme) { EmptyView() }
+                HeroLiftLine(name: name, load: line.load, scheme: line.scheme,
+                             plates: sessionLoadedBar(entry, gym: gym)) { EmptyView() }
             }
             .accessibilityHint("Shows exercise history, program cycle, and settings")
             .heroBand(.rule)
@@ -294,6 +325,9 @@ struct HomeView: View {
     @ViewBuilder
     private func startHero(_ program: Program, _ day: ProgramDay) -> some View {
         let name = workoutName(program, day)
+        // Today's top lift, loaded: the day's first barbell slot at its plan.
+        let topBar: LoadedBar? = program.tfhPolicyData != nil ? nil : day.orderedLifts.lazy.compactMap { planLoadedBar(program, $0) }.first
+        if let topBar { HeroBarImage(loaded: topBar) }
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
                 HeroKicker(text: program.currentWeek == ProgramProgression.deloadWeek ? "Deload · light work" : "Next workout",
@@ -324,8 +358,8 @@ struct HomeView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 18).padding(.bottom, 10)
-        .heroBand(.edge)
+        .padding(.top, topBar == nil ? 18 : 4).padding(.bottom, 10)
+        .heroBand(topBar == nil ? .edge : .none)
         if program.tfhPolicyData != nil {
             ForEach(day.orderedLifts) { lift in
                 TFHSlotPlanView(program: program, slotID: lift.id, name: lift.exerciseName)
@@ -346,7 +380,8 @@ struct HomeView: View {
                 } label: {
                     HeroLiftLine(name: lift.exerciseName,
                                  load: unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""),
-                                 scheme: "\(plan.sets)×\(plan.reps)") {
+                                 scheme: "\(plan.sets)×\(plan.reps)",
+                                 plates: planLoadedBar(program, lift)) {
                         SlotPrescriptionBadge(
                             lift: lift, rotation: program.currentWeek,
                             movementGroup: exercise?.movementGroup,
@@ -570,7 +605,12 @@ struct HomeView: View {
                 // taller than the button it explained.
                 Section {
                     Button { showActivityLog = true } label: {
-                        HStack(spacing: 12) {
+                        // The "+" leads, like Blank session's: the trailing
+                        // edge is where the floating plate button parks.
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Image(systemName: "plus")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Wood Splitting")
                                     .font(.headline)
@@ -579,10 +619,7 @@ struct HomeView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            Image(systemName: "plus")
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
@@ -640,6 +677,18 @@ struct HomeView: View {
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 8) {
+                        EngravedGorilla().frame(width: 40, height: 40)
+                        Text("Today")
+                            .font(.headline.weight(.black))
+                            .fontWidth(.condensed)
+                            .tracking(1.6)
+                            .textCase(.uppercase)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
+                }
                 // The keychain replacement stays one tap from launch, in the
                 // same corner every time, instead of a full-width accent slab
                 // shouting over the workout. The shortcut, control and
@@ -1092,12 +1141,76 @@ private struct HeroActionLabelStyle: LabelStyle {
     }
 }
 
+/// A barbell lift's exact stack as the solver resolved it, with the look the
+/// rest of the app paints it in. Every Today plate graphic reads from this.
+private struct LoadedBar {
+    let solution: PlateSolution
+    let style: PlateVisualStyle
+    let theme: PlateThemeID
+}
+
+/// Today's top lift, loaded, as the hero's picture. It is the shared
+/// `BarbellView` at its full-bar presentation, so it is whatever renderer
+/// the rest of the app uses (the sprite bar today, the studio platform when
+/// that lands) and never a Today-only drawing. The well behind it darkens
+/// from the studio backdrop into the band's steel.
+private struct HeroBarImage: View {
+    let loaded: LoadedBar
+
+    var body: some View {
+        BarbellView(solution: loaded.solution, plateStyle: loaded.style, plateTheme: loaded.theme,
+                    presentation: .fullBar, showsReadout: false)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 14).padding(.bottom, 6)
+            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+            .listRowSeparator(.hidden)
+            .listRowBackground(
+                ZStack(alignment: .top) {
+                    BrushedSteel(seed: 1)
+                    LinearGradient(colors: [Theme.sceneStudio, Theme.sceneStudio.opacity(0)],
+                                   startPoint: .top, endPoint: .bottom)
+                    Rectangle().fill(Theme.hairline).frame(height: 1)
+                }
+            )
+    }
+}
+
+/// Edge-on plates for one side, inside to outside, in the plate theme's own
+/// colours and proportions: a loading chart, not another number.
+private struct PlateStackMini: View {
+    let loaded: LoadedBar
+    @ScaledMetric(relativeTo: .body) private var unit: CGFloat = 1
+
+    var body: some View {
+        let plates = loaded.solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }
+        HStack(spacing: 1.5 * unit) {
+            ForEach(Array(plates.enumerated()), id: \.offset) { _, plate in
+                let geometry = PlateTheme.geometry(plate, theme: loaded.theme, style: loaded.style)
+                let colour = PlateTheme.colour(plate, theme: loaded.theme, style: loaded.style)
+                RoundedRectangle(cornerRadius: 1.5 * unit)
+                    .fill(Color(hex: colour.fill))
+                    .overlay { RoundedRectangle(cornerRadius: 1.5 * unit).stroke(Color(hex: colour.edge), lineWidth: 1) }
+                    .frame(width: max(4, geometry.thickness / 5.5) * unit,
+                           height: max(10, geometry.diameter / 450 * 34) * unit)
+            }
+        }
+        // The sleeve the stack sits on runs past the outermost plate.
+        .padding(.leading, 3 * unit).padding(.trailing, 8 * unit)
+        .background {
+            Capsule().fill(Theme.forgedSteel.opacity(0.55)).frame(height: 3 * unit)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Each side: \(loaded.solution.loadout.perSideLabel)")
+    }
+}
+
 /// One lift in the hero: name left, load right in condensed heavy figures.
 /// At accessibility sizes the two stack so neither gets truncated to "Ba…".
 private struct HeroLiftLine<Detail: View>: View {
     let name: String
     let load: String?
     let scheme: String?
+    var plates: LoadedBar?
     @ViewBuilder let detail: Detail
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -1105,7 +1218,7 @@ private struct HeroLiftLine<Detail: View>: View {
         let stacked = typeSize.isAccessibilitySize
         let layout = stacked
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
         layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
@@ -1115,7 +1228,7 @@ private struct HeroLiftLine<Detail: View>: View {
                 detail
             }
             if !stacked { Spacer(minLength: 8) }
-            VStack(alignment: stacked ? .leading : .trailing, spacing: 1) {
+            let figures = VStack(alignment: stacked ? .leading : .trailing, spacing: 1) {
                 if let load {
                     Text(load)
                         .font(.title2.weight(.black).monospacedDigit())
@@ -1128,9 +1241,64 @@ private struct HeroLiftLine<Detail: View>: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            let stack = plates.flatMap { $0.solution.loadout.perSide.isEmpty ? nil : $0 }
+            if stacked {
+                figures
+                if let stack { PlateStackMini(loaded: stack) }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    if let stack { PlateStackMini(loaded: stack) }
+                    figures
+                }
+            }
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The exact Vitruvian artwork as a small mark engraved into steel. The
+/// raster is untouched (DECISIONS: gorilla integration); its inverted
+/// luminance is only a mask, so the lines read as cut metal on any theme.
+private struct EngravedGorilla: View {
+    var body: some View {
+        Color(lightHex: 0x4A4F56, darkHex: 0xA6ABB2)
+            .mask {
+                Image("VitruvianFront")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .colorInvert()
+                    .contrast(2.2)
+                    .luminanceToAlpha()
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// Brushed steel: fine horizontal grain over the band colour. Deterministic
+/// per row, so a redraw never shimmers.
+private struct BrushedSteel: View {
+    var seed: UInt64 = 0
+
+    var body: some View {
+        Theme.card.overlay {
+            Canvas { context, size in
+                var state = 0x9E37_79B9_7F4A_7C15 &+ seed &* 0xBF58_476D_1CE4_E5B9
+                func next() -> Double {
+                    state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                    return Double(state >> 33) / Double(1 << 31)
+                }
+                var y = 0.0
+                while y < size.height {
+                    let height = 0.33 + next() * 0.67
+                    let alpha = 0.01 + next() * 0.022
+                    context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: height)),
+                                 with: .color(Color.primary.opacity(alpha)))
+                    y += height + 0.5 + next() * 1.5
+                }
+            }
+        }
     }
 }
 
@@ -1139,13 +1307,13 @@ private struct HeroLiftLine<Detail: View>: View {
 private enum HeroRule { case edge, rule, none }
 
 private extension View {
-    /// A row of the Today band: steel fill edge to edge, hairlines instead
+    /// A row of the Today band: brushed steel edge to edge, hairlines instead
     /// of a card outline, system separators off so the rules are ours.
     func heroBand(_ top: HeroRule, bottomEdge: Bool = false) -> some View {
         listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
             .listRowSeparator(.hidden)
             .listRowBackground(
-                Theme.card
+                BrushedSteel(seed: top == .edge ? 2 : top == .rule ? 3 : 4)
                     .overlay(alignment: .top) {
                         if top != .none {
                             Theme.hairline
