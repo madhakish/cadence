@@ -69,7 +69,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
       # The same script backs `make check` and the pre-commit hook.
@@ -127,7 +127,7 @@ jobs:
         with:
           persist-credentials: false
       # The same Ruby `make check` requires, not the image's.
-      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
       - name: Check signing material
@@ -360,7 +360,7 @@ jobs:
       - name: Run unit tests (Darwin)
         working-directory: CadenceCore
         run: swift test
-      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -775,7 +775,7 @@ jobs:
           IPA_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa
           CHECKSUM_PATH: ${{ github.workspace }}/dist/Cadence-store.ipa.sha256
         run: bash .github/scripts/verify-release-artifact.sh
-      - uses: ruby/setup-ruby@26e5b7d197ebf60545ee9667bcbace0be11ccaec # v1.334.0
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: "3.3"
           bundler-cache: true
