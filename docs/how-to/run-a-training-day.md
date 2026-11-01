@@ -46,6 +46,22 @@ lifts appear under "Next up" with their own suggestions.
   already completed this session on the same movement with a bar — keeping
   at least the last two — whenever its ramp refreshes after a bar, gym, or
   working-weight change.
+- **The set you're on** (iOS) heads the lift: a numbered circle per set
+  (red is now, filled is done, dashed is skipped), then the load and reps
+  to lift, then the loaded bar. Tap the numbers or a circle to edit that one
+  set; touch and hold a circle to skip it, reopen it, or grade quality and
+  reps in reserve.
+- **Log with Done** (iOS). The bottom bar's **Done** logs the set you're on
+  exactly as shown, and **Skip** marks it skipped. A short *Set 2 logged*
+  receipt, with a haptic when haptics are on, confirms the write; then a
+  running rest takes their place. Timed holds start from **Start hold**;
+  conditioning logs from its circle.
+- **One box per prescription** (iOS). Below the current set, the plan shows
+  consecutive sets with the same kind, load, and reps as one box — a 3×5 is
+  one box with three markers, while ramping warmups stay a box each. A set
+  you logged differently shows its own numbers under its marker
+  (*4 × 205*); the box never rewrites the plan around it. **Edit sets**
+  lists every set one row each, for fixing several at once.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.
@@ -58,7 +74,8 @@ lifts appear under "Next up" with their own suggestions.
 - **Opening a session is not starting it.** The logger opens showing
   **not started** so you can read the plan, check loadouts, or reopen a
   session without logging time you didn't train. **Start workout** — in
-  the bottom bar or the session menu — begins the clock. If you start one
+  the bottom bar or the session menu — begins the clock. Logging sets does
+  not need it. If you start one
   by accident, **Reset to not started** puts it back; the plan and any
   logged sets are untouched. A session that was never started banks
   without writing a Health workout, since it has no honest duration.
