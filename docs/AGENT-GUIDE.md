@@ -409,6 +409,15 @@ Native validation is change-aware behind that aggregate:
   registration, and the App Store Connect key before any release build, on
   main and manual runs (signing secrets never reach PR code; PRs run the
   offline signing contract); the signed build and the aggregate wait on it;
+- `signing-health.yml` runs that preflight daily and on dispatch, read-only,
+  with certificate and profile expiry (a notice within 30 days, an error once
+  expired or when an App ID has no active App Store profile), and keeps one
+  "Signing health: action needed" issue in step with the result;
+- on pull requests, `Main release health` (`main-health-gate.mjs`) fails a
+  release-producing title while main's newest completed push run concluded
+  failure, through the aggregate; release-path changes (`.github/**`,
+  `fastlane/**`, `Gemfile*`, `project.yml`) and the `release-fix` label are
+  exempt;
 - the app builds start only after core and web suites pass; the core job uses
   the runner's selected Xcode Swift toolchain and reports its version;
 - a pull request's paths are diffed from its merge base with main, never

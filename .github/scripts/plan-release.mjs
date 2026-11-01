@@ -16,6 +16,11 @@ const git = (cwd, args) =>
 
 const lines = (value) => value.split("\n").filter(Boolean);
 
+// semantic-release's analyzer with the release job's preset: the one answer
+// to "does this release, and how", for the planner and main-health-gate.mjs.
+export const releaseType = (commits) =>
+  analyzeCommits({ preset: "conventionalcommits" }, { cwd: RELEASE_CWD, commits, logger });
+
 export async function planRelease({ cwd, sha, verifySignedArtifact = false }) {
   const tagAtHead = lines(git(cwd, ["tag", "--points-at", sha, "--list", "v[0-9]*"]))
     .find((tag) => SEMVER_TAG.test(tag));
@@ -32,10 +37,7 @@ export async function planRelease({ cwd, sha, verifySignedArtifact = false }) {
     hash,
     message: git(cwd, ["show", "-s", "--format=%B", hash]),
   }));
-  const type = await analyzeCommits(
-    { preset: "conventionalcommits" },
-    { cwd: RELEASE_CWD, commits, logger },
-  );
+  const type = await releaseType(commits);
 
   if (verifySignedArtifact) {
     const version = tagAtHead?.slice(1) ??

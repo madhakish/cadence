@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planRelease } from "./plan-release.mjs";
+import { planRelease, releaseType } from "./plan-release.mjs";
 
 const repo = mkdtempSync(join(tmpdir(), "cadence-release-plan-"));
 const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
@@ -70,8 +70,22 @@ try {
     { simulator: true, store: true, source: "build", type: "major", version: "2.0.0" },
     "the planner must preserve semantic-release's highest pending bump",
   );
+
+  // main-health-gate.mjs classifies a pull request title with this analyzer:
+  // only a title that would release is held while main is red.
+  for (const [title, expected] of [
+    ["feat(watch): sets complete themselves", "minor"],
+    ["fix: repair a regression", "patch"],
+    ["perf: faster history", "patch"],
+    ["refactor!: drop the v1 backup reader", "major"],
+    ["ci: daily signing health", null],
+    ["docs: explain the gate", null],
+    ["chore(deps): bump a tool", null],
+  ]) {
+    assert.equal(await releaseType([{ hash: "title", message: title }]), expected, title);
+  }
 } finally {
   rmSync(repo, { recursive: true, force: true });
 }
 
-console.log("Release artifact planner contract tests passed (6 scenarios)");
+console.log("Release artifact planner contract tests passed (7 scenarios)");

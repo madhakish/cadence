@@ -13,6 +13,11 @@
 #    an unaccepted agreement (a new Program License Agreement blocked match).
 # 4. Every shipped App ID is registered in the developer portal (match cannot
 #    register one, even when provisioning).
+# 5. The account has an unexpired distribution certificate, and every shipped
+#    App ID an active App Store profile, neither expiring within
+#    EXPIRY_WARNING_DAYS (a notice). They lapse a year after match creates
+#    them, outside the repository; the daily signing-health workflow reports
+#    them in time.
 #
 # Never prints a credential. Env (CI passes the same secrets as store-build):
 #   MATCH_GIT_URL, MATCH_GIT_BASIC_AUTHORIZATION, MATCH_GIT_BRANCH (default: the Matchfile git_branch),
@@ -21,15 +26,21 @@
 #     optional: no credentials (fork/Dependabot PRs) is a notice, not a failure
 #     local: owner's machine; the certs check falls back to `gh auth token`
 #     and the App Store Connect checks are skipped without a key
+#   SIGNING_FINDINGS=<path>  write the errors and expiry warnings there as a
+#     Markdown list (empty when there are none), for signing-health.yml
 #   SIGNING_HTTP_FIXTURES=<json>  tests only: canned responses by request name
 require "base64"
 require "json"
 require "net/http"
 require "openssl"
+require "time"
 require "uri"
 require_relative "signing-targets"
 
 class SigningPreflight
+  ASC_API = "https://api.appstoreconnect.apple.com/v1".freeze
+  EXPIRY_WARNING_DAYS = 30
+
   def initialize(env, project_path)
     @env = env
     @mode = env.fetch("SIGNING_PREFLIGHT", "required")
@@ -39,6 +50,8 @@ class SigningPreflight
     @fixtures = env["SIGNING_HTTP_FIXTURES"] && JSON.parse(File.read(env["SIGNING_HTTP_FIXTURES"]))
     @errors = []
     @notices = []
+    @warnings = []
+    @now = Time.now.utc
   end
 
   def run
@@ -57,7 +70,9 @@ class SigningPreflight
       missing("ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_CONTENT (App Store Connect key)")
     end
     @notices.each { |n| say(:notice, n) }
+    @warnings.each { |w| say(:notice, w) }
     @errors.each { |e| say(:error, e) }
+    write_findings
     if @errors.empty?
       puts "Signing preflight passed for #{@app_ids.join(', ')}#{@readonly ? '' : ' (provisioning run: MATCH_READONLY=false)'}"
       0
@@ -70,6 +85,14 @@ class SigningPreflight
 
   def missing(what)
     @errors << "missing #{what}"
+  end
+
+  def write_findings
+    path = @env["SIGNING_FINDINGS"].to_s
+    return if path.empty?
+
+    File.write(path, (@errors.map { |e| "- **Error:** #{e}\n" } +
+                      @warnings.map { |w| "- **Expiring:** #{w}\n" }).join)
   end
 
   def say(level, message)
@@ -184,10 +207,9 @@ class SigningPreflight
     token = @fixtures ? "fixture" : asc_token(*creds)
     return unless token
 
+    auth = { "Authorization" => "Bearer #{token}" }
     ids = @app_ids.join(",")
-    status, body = get("asc_bundle_ids",
-                       "https://api.appstoreconnect.apple.com/v1/bundleIds?filter%5Bidentifier%5D=#{ids}&limit=200",
-                       { "Authorization" => "Bearer #{token}" })
+    status, body = get("asc_bundle_ids", "#{ASC_API}/bundleIds?filter%5Bidentifier%5D=#{ids}&limit=200", auth)
     unless status == 200
       details = (body["errors"] || []).map { |e| [e["code"], e["detail"]].compact.join(": ") }.join("; ")
       if details =~ /agreement/i
@@ -204,6 +226,51 @@ class SigningPreflight
       @errors << "App ID #{id} is not registered in the developer portal, and match cannot register it. " \
                  "Register it under Certificates, IDs & Profiles > Identifiers (docs/TESTFLIGHT.md)"
     end
+    check_expiry(auth)
+  end
+
+  # Apple's side of the signing material: what the certs repo holds stops
+  # signing once Apple's copy expires or is invalidated.
+  def check_expiry(auth)
+    status, body = get("asc_certificates",
+                       "#{ASC_API}/certificates?filter%5BcertificateType%5D=DISTRIBUTION,IOS_DISTRIBUTION" \
+                       "&fields%5Bcertificates%5D=displayName,expirationDate&limit=200", auth)
+    return @errors << "cannot list distribution certificates in App Store Connect (HTTP #{status})" unless status == 200
+
+    check_dates("distribution certificate", (body["data"] || []).map { |c| expiration(c) })
+
+    status, body = get("asc_profiles",
+                       "#{ASC_API}/profiles?filter%5BprofileType%5D=IOS_APP_STORE&filter%5BprofileState%5D=ACTIVE" \
+                       "&include=bundleId&fields%5Bprofiles%5D=name,expirationDate,bundleId" \
+                       "&fields%5BbundleIds%5D=identifier&limit=200", auth)
+    return @errors << "cannot list App Store profiles in App Store Connect (HTTP #{status})" unless status == 200
+
+    bundle_ids = (body["included"] || []).select { |i| i["type"] == "bundleIds" }
+                                         .to_h { |i| [i["id"], i.dig("attributes", "identifier")] }
+    profiles = (body["data"] || []).group_by { |p| bundle_ids[p.dig("relationships", "bundleId", "data", "id")] }
+    @app_ids.each do |id|
+      check_dates("active App Store profile for #{id}", (profiles[id] || []).map { |p| expiration(p) })
+    end
+  end
+
+  # The latest-expiring candidate decides. Missing or expired fails a
+  # read-only run, like missing material in the certs repo.
+  def check_dates(what, dates)
+    latest = dates.compact.max
+    if latest.nil?
+      need_provisioning("the developer account has no #{what}")
+    elsif latest <= @now
+      need_provisioning("the #{what} expired on #{latest.strftime('%F')}")
+    elsif (days = ((latest - @now) / 86_400).floor) <= EXPIRY_WARNING_DAYS
+      @warnings << "the #{what} expires on #{latest.strftime('%F')}, in #{days} days. " \
+                   "Renew it before then (docs/TESTFLIGHT.md, Signing health)"
+    end
+  end
+
+  def expiration(resource)
+    Time.parse(resource.dig("attributes", "expirationDate").to_s).utc
+  rescue ArgumentError
+    nil
   end
 
   def asc_token(key_id, issuer, content)

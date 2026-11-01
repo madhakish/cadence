@@ -1,0 +1,64 @@
+name: Signing health
+
+# Signing material changes outside this repository: certificates and profiles
+# expire, a token is revoked, Apple publishes an agreement the Account Holder
+# must accept. Main's Signing preflight only notices when something merges, so
+# this runs the same preflight daily, read-only, and keeps one tracking issue
+# in step with the result. Schedule and manual runs only: signing secrets never
+# reach pull-request code.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# A manual run next to the scheduled one must not open a second issue.
+concurrency:
+  group: signing-health
+  cancel-in-progress: false
+
+# All actions are pinned to full commit SHAs, the same pins as ci.yml.
+jobs:
+  check:
+    name: Signing health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
+        with:
+          ruby-version: "3.3"
+      # MATCH_READONLY is pinned to true, whatever the repository variable
+      # says: a provisioning run's preflight proves write access by pushing a
+      # scratch branch, and this check never writes.
+      - name: Check signing material (read-only)
+        id: preflight
+        continue-on-error: true
+        env:
+          SIGNING_PREFLIGHT: required
+          SIGNING_FINDINGS: ${{ runner.temp }}/signing-findings.md
+          MATCH_READONLY: "true"
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: ruby .github/scripts/check-signing-material.rb
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          FINDINGS_FILE: ${{ runner.temp }}/signing-findings.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/signing-health-issue.sh
+      - name: Fail the run when signing is broken
+        if: steps.preflight.outcome != 'success'
+        run: |
+          echo "The signing health check failed; the tracking issue lists why." >&2
+          exit 1
