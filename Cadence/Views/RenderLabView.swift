@@ -35,6 +35,8 @@ enum RenderLab {
         let mixed = load(.bar45lb, [lb(45), lb(25), lb(10), lb(5), lb(2.5)])
         let kgs = load(.bar20kg, [kg(25), kg(20), kg(10), kg(2.5), kg(1.25)])
         let collared = load(.bar45lb, [lb(45), lb(25)], collar: 5)
+        // The approved plate-loading mockup: 138.7 lb on a 45 lb bar.
+        let mockup = load(.bar45lb, [kg(20), kg(1.25)])
         func item(_ name: String, _ loadout: Loadout, _ theme: PlateThemeID, _ shot: StudioShot,
                   style: PlateVisualStyle = .steel) -> Item {
             let (w, h): (Int, Int) = switch shot {
@@ -58,6 +60,9 @@ enum RenderLab {
             item("10-hero-collars-cadenceHouse", collared, .cadenceHouse, .hero),
             item("11-row-mixed-lbGreyHammertone", mixed, .lbGreyHammertone, .row),
             item("12-hero-mixed-blackBumpersBand", mixed, .blackBumpersBand, .hero),
+            item("13-hero-mockup-custom", mockup, .custom, .hero, style: .bumper),
+            item("14-blowup-mockup-custom", mockup, .custom, .blowup, style: .bumper),
+            item("15-hero-kg-iwfTraining", kgs, .iwfTraining, .hero, style: .bumper),
         ]
     }
 }
@@ -71,7 +76,7 @@ extension RenderLab {
                 guard let device = MTLCreateSystemDefaultDevice() else { return continuation.resume(returning: nil) }
                 let scene = SCNScene()
                 scene.background.contents = StudioTextures.environment
-                scene.lightingEnvironment.contents = StudioTextures.environment
+                scene.lightingEnvironment.contents = StudioTextures.studioLight
                 scene.lightingEnvironment.intensity = StudioLighting.environmentIntensity
                 for (x, metal) in [(-260.0, 1.0), (260.0, 0.0)] {
                     let ball = SCNSphere(radius: 220)

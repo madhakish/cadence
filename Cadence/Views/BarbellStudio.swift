@@ -141,6 +141,14 @@ final class BarbellStudio {
         for disc in layout.discs {
             let node = StudioPlates.node(for: disc, style: style, theme: theme)
             node.position = SCNVector3(Float(disc.centerX), 0, 0)
+            // A plate standing on the platform presses a soft dark line into
+            // it. The shadow map is too coarse to draw that, and without it
+            // a 20 kg bumper looks like it is hovering. Rides with the plate
+            // when the inspector slides it out.
+            if disc.radius >= floorDrop - 1 {
+                node.addChildNode(StudioTextures.contactShadow(thickness: disc.thickness, radius: disc.radius,
+                                                              y: -floorDrop + 0.6))
+            }
             root.addChildNode(node)
             if disc.side < 0 { nearDiscs.append((disc, node)) } else { farDiscs.append((disc, node)) }
         }
@@ -172,7 +180,8 @@ final class BarbellStudio {
         camera.bloomIntensity = 0.18
         camera.bloomThreshold = 1.1
         camera.bloomBlurRadius = 6
-        camera.screenSpaceAmbientOcclusionIntensity = 1.1
+        camera.contrast = 0.12
+        camera.screenSpaceAmbientOcclusionIntensity = 0.7
         camera.screenSpaceAmbientOcclusionRadius = 40
         camera.screenSpaceAmbientOcclusionNormalThreshold = 0.3
         camera.screenSpaceAmbientOcclusionDepthThreshold = 0.2
@@ -555,11 +564,25 @@ enum StudioFaces {
         var colour = [UInt8](repeating: 255, count: n * n * 4)
         var height = [Double](repeating: 0, count: n * n)
         let grainAmount = s.finish == .rubber ? 0.06 : s.finish == .castIron || s.finish == .hammertone ? 0.25 : 0.02
+        // Surface tooth from the September photographs: rubber speckle for
+        // bumpers, sand-cast steel for everything else. Each denomination
+        // turns the photo by its own angle so neighbours never match.
+        let photo = s.finish == .rubber ? StudioTextures.rubberDetail : StudioTextures.steelDetail
+        let photoAlbedo = s.finish == .rubber ? 0.4 : 0.35
+        let photoRelief = s.finish == .rubber ? 0.12 : 0.22
+        let turn = Double((s.denomination + s.unit).unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) } % 360) * .pi / 180
+        let (cosT, sinT) = (cos(turn), sin(turn))
         for y in 0..<n {
             for x in 0..<n {
                 let i = y * n + x
                 let k = Double(mask[i]) / 255
                 let mo = 1 - mottleAmount + mottleAmount * 2 * mottle[(y % m) * m + x % m]
+                var d = 1.0
+                if let photo {
+                    let u = (Double(x) + 0.5) / Double(n) - 0.5, v = (Double(y) + 0.5) / Double(n) - 0.5
+                    d = photo.sample(u * cosT - v * sinT, u * sinT + v * cosT)
+                }
+                let tooth = pow(d, photoAlbedo * (1 - 0.6 * k))
                 var r = fill.0 * mo, g = fill.1 * mo, b = fill.2 * mo
                 if let ink {
                     r = r * (1 - k) + ink.0 * k; g = g * (1 - k) + ink.1 * k; b = b * (1 - k) + ink.2 * k
@@ -567,10 +590,10 @@ enum StudioFaces {
                     // Cast lettering catches a little more light on its crown.
                     r *= 1 + 0.25 * k; g *= 1 + 0.25 * k; b *= 1 + 0.25 * k
                 }
-                colour[i * 4] = toSRGB(r)
-                colour[i * 4 + 1] = toSRGB(g)
-                colour[i * 4 + 2] = toSRGB(b)
-                height[i] = k * s.relief + grain[(y * 3 % m) * m + (x * 3) % m] * grainAmount
+                colour[i * 4] = toSRGB(r * tooth)
+                colour[i * 4 + 1] = toSRGB(g * tooth)
+                colour[i * 4 + 2] = toSRGB(b * tooth)
+                height[i] = k * s.relief + grain[(y * 3 % m) * m + (x * 3) % m] * grainAmount + (d - 1) * photoRelief
             }
         }
         // Height in mm → normal. Rows run down the image; tangent-space y is up.
@@ -724,16 +747,16 @@ enum StudioPlatform {
 /// The gym environment (baked equirect from the bar's position) lights and
 /// reflects; one soft overhead key casts the contact shadows.
 enum StudioLighting {
-    static let exposure: CGFloat = 0.0
-    /// The environment was baked one stop under (docs/design-pass/lookdev/bake.py).
-    static let environmentIntensity: CGFloat = 2.3
-    static let keyIntensity: CGFloat = 650
+    static let exposure: CGFloat = -0.2
+    /// The light tent is 8-bit, so its softboxes top out at 1.0; the
+    /// intensity is what lets chrome see them brighter than the room.
+    static let environmentIntensity: CGFloat = 3.2
+    static let keyIntensity: CGFloat = 1100
 
     static func apply(to scene: SCNScene, floorY: Double) {
-        let environment = StudioTextures.environment
-        scene.lightingEnvironment.contents = environment
+        scene.lightingEnvironment.contents = StudioTextures.studioLight
         scene.lightingEnvironment.intensity = environmentIntensity
-        scene.background.contents = environment
+        scene.background.contents = StudioTextures.environment
         scene.background.intensity = 1
         let key = SCNLight()
         key.type = .directional
@@ -741,7 +764,7 @@ enum StudioLighting {
         key.color = UIColor(red: 1, green: 0.985, blue: 0.96, alpha: 1)
         key.castsShadow = true
         key.shadowMode = .deferred
-        key.shadowColor = UIColor.black.withAlphaComponent(0.72)
+        key.shadowColor = UIColor.black.withAlphaComponent(0.85)
         key.shadowRadius = 14
         key.shadowSampleCount = 24
         key.shadowMapSize = CGSize(width: 4096, height: 4096)
@@ -750,7 +773,10 @@ enum StudioLighting {
         key.shadowBias = 2
         let node = SCNNode()
         node.light = key
-        node.eulerAngles = SCNVector3(-Float.pi * 0.42, -Float.pi * 0.06, 0)
+        // High front-left, as a catalogue key: the near faces take a
+        // gradient, the tyres a highlight, and the shadow falls back across
+        // the oak where it reads as contact.
+        node.eulerAngles = SCNVector3(-Float.pi * 0.3, -Float.pi * 0.2, 0)
         scene.rootNode.addChildNode(node)
     }
 }
@@ -798,7 +824,7 @@ enum StudioMaterials {
         tiled(m.roughness, StudioTextures.smudgeRoughness, 4, 3)
         return m
     }()
-    static let shaft: SCNMaterial = pbr(UIColor(white: 0.9, alpha: 1), metalness: 1, roughness: 0.19)
+    static let shaft: SCNMaterial = pbr(UIColor(white: 0.92, alpha: 1), metalness: 1, roughness: 0.13)
     static let knurl: SCNMaterial = {
         let m = pbr(UIColor(white: 0.86, alpha: 1), metalness: 1, roughness: 0.34)
         tiled(m.normal, StudioTextures.knurlNormal, 1, 1)
@@ -845,7 +871,8 @@ enum StudioMaterials {
             let m = pbr(UIColor(rgb: fill), metalness: finish.metal, roughness: finish.roughness)
             switch finish.finish {
             case .rubber:
-                m.roughness.contents = NSNumber(value: max(0.5, min(0.66, finish.roughness)))
+                // Satin, not chalk: new bumpers carry a soft sheen off the mould.
+                m.roughness.contents = NSNumber(value: max(0.42, min(0.52, finish.roughness)))
                 tiled(m.normal, StudioTextures.grainNormal, 14, 14)
                 m.normal.intensity = 0.3
             case .powder:
@@ -878,7 +905,7 @@ enum StudioMaterials {
             let m = plateBody(finish, fill: fill).copy() as! SCNMaterial
             if finish.finish == .rubber {
                 tiled(m.diffuse, StudioTextures.scuffedTyre(fill: fill), 3, 1)
-                m.roughness.contents = NSNumber(value: 0.66)
+                m.roughness.contents = NSNumber(value: 0.58)
             }
             return m
         }
@@ -908,7 +935,7 @@ enum StudioMaterials {
     /// A printed or cast plate face: baked colour and lettering relief.
     static func face(_ spec: StudioFaces.Spec) -> SCNMaterial {
         let maps = StudioFaces.maps(spec)
-        let m = pbr(.white, metalness: spec.metal, roughness: spec.finish == .rubber ? 0.58 : spec.roughness)
+        let m = pbr(.white, metalness: spec.metal, roughness: spec.finish == .rubber ? 0.48 : spec.roughness)
         m.diffuse.contents = maps.diffuse
         m.normal.contents = maps.normal
         filtered(m.diffuse)
@@ -980,6 +1007,57 @@ enum StudioMaterials {
 /// runtime-branded oak, and tileable noise maps for wear and grain.
 enum StudioTextures {
     static let environment: UIImage = decoded("StudioGym")
+
+    /// What the metal and rubber reflect: a product-photography light tent,
+    /// not the gym. The baked gym is mostly oak floor and dark ceiling, so a
+    /// chrome bar lit by it turned orange and every plate went dull. This is
+    /// a dark neutral room with a big overhead softbox, a wide front key and
+    /// two tall strips behind, the way equipment is shot for a catalogue.
+    /// The gym stays as the visible background. Equirect: u = 0.5 looks
+    /// toward −z (away from the camera), v = 0 straight up. Symmetric in x,
+    /// so the mapping's handedness cannot put a light on the wrong side.
+    static let studioLight: UIImage = {
+        let w = 1024, h = 512
+        var px = [UInt8](repeating: 255, count: w * h * 4)
+        func box(_ yaw: Double, _ pitch: Double, yaw0: Double, yaw1: Double, pitch0: Double, pitch1: Double, soft: Double) -> Double {
+            func edge(_ v: Double, _ a: Double, _ b: Double) -> Double {
+                let t = min((v - a) / soft, (b - v) / soft)
+                return max(0, min(1, t))
+            }
+            return edge(yaw, yaw0, yaw1) * edge(pitch, pitch0, pitch1)
+        }
+        for y in 0..<h {
+            let pitch = (0.5 - (Double(y) + 0.5) / Double(h)) * 180
+            for x in 0..<w {
+                // 0 = away from the camera (−z), ±180 = toward it; |yaw| only.
+                let yaw = abs(((Double(x) + 0.5) / Double(w) - 0.5) * 360)
+                var r: Double, g: Double, b: Double
+                if pitch >= 0 {
+                    let t = pitch / 90
+                    r = 0.012 + 0.012 * t; g = r; b = r * 1.04
+                } else {
+                    // Below the horizon: the platform's bounce, kept mostly neutral.
+                    r = 0.030; g = 0.025; b = 0.020
+                }
+                var light = 0.0
+                light += box(0, pitch, yaw0: -1, yaw1: 400, pitch0: 58, pitch1: 91, soft: 6)            // overhead
+                light += 0.85 * box(yaw, pitch, yaw0: 118, yaw1: 181, pitch0: 8, pitch1: 42, soft: 8)    // front key
+                light += 0.7 * box(yaw, pitch, yaw0: 32, yaw1: 46, pitch0: -4, pitch1: 48, soft: 3)      // rear strips
+                light += 0.35 * box(yaw, pitch, yaw0: 82, yaw1: 98, pitch0: 0, pitch1: 30, soft: 5)      // side fill
+                r += light; g += light * 0.99; b += light * 0.97
+                let i = (y * w + x) * 4
+                func srgb(_ v: Double) -> UInt8 { UInt8(max(0, min(255, (pow(max(0, min(1, v)), 1 / 2.2) * 255).rounded()))) }
+                px[i] = srgb(r); px[i + 1] = srgb(g); px[i + 2] = srgb(b)
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(px) as CFData),
+              let cg = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                               space: CGColorSpaceCreateDeviceRGB(),
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                               provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        else { return environment }
+        return UIImage(cgImage: cg)
+    }()
 
     /// An asset-catalog image redrawn into a plain RGBA bitmap, so SceneKit
     /// receives ordinary CGImage-backed contents.
@@ -1061,6 +1139,98 @@ enum StudioTextures {
         }
     }()
 
+    /// High-passed luminance of an owner-approved September plate photograph
+    /// (`PlateBumper`, `PlateSteel`, 5d2b150): the real rubber speckle and
+    /// cast-steel tooth, as a multiplier around 1 with the studio lighting
+    /// divided out. Sampled by position relative to the plate's diameter.
+    final class PhotoDetail: @unchecked Sendable {
+        let n: Int
+        let ratio: [Float]
+        init(n: Int, ratio: [Float]) { self.n = n; self.ratio = ratio }
+
+        /// u, v in −0.5...0.5 across the plate's diameter.
+        func sample(_ u: Double, _ v: Double) -> Double {
+            let x = min(n - 1, max(0, Int((u * 0.97 + 0.5) * Double(n))))
+            let y = min(n - 1, max(0, Int((v * 0.97 + 0.5) * Double(n))))
+            return Double(ratio[y * n + x])
+        }
+    }
+
+    static let rubberDetail = photoDetail("PlateBumper")
+    static let steelDetail = photoDetail("PlateSteel")
+
+    static func photoDetail(_ name: String) -> PhotoDetail? {
+        guard let source = UIImage(named: name)?.cgImage else { return nil }
+        let n = 1024
+        var gray = [UInt8](repeating: 0, count: n * n)
+        guard let ctx = CGContext(data: &gray, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(source, in: CGRect(x: 0, y: 0, width: n, height: n))
+        let table: [Float] = (0...255).map { Float(pow(Double($0) / 255, 2.2)) }
+        let lum = gray.map { table[Int($0)] }
+        // Local mean by a summed-area box (r = 12 px, about 9 mm): dividing by
+        // it keeps the grain and drops the photo's light falloff and rings.
+        var sat = [Double](repeating: 0, count: (n + 1) * (n + 1))
+        for y in 0..<n {
+            var row = 0.0
+            for x in 0..<n {
+                row += Double(lum[y * n + x])
+                sat[(y + 1) * (n + 1) + x + 1] = sat[y * (n + 1) + x + 1] + row
+            }
+        }
+        let r = 12
+        var ratio = [Float](repeating: 1, count: n * n)
+        for y in 0..<n {
+            let y0 = max(0, y - r), y1 = min(n, y + r + 1)
+            for x in 0..<n {
+                let x0 = max(0, x - r), x1 = min(n, x + r + 1)
+                let sum = sat[y1 * (n + 1) + x1] - sat[y0 * (n + 1) + x1] - sat[y1 * (n + 1) + x0] + sat[y0 * (n + 1) + x0]
+                let mean = sum / Double((y1 - y0) * (x1 - x0))
+                guard mean > 0.002 else { continue }
+                // Clamped hard: the photo's moulding pits would otherwise
+                // print as black flecks on a coloured plate.
+                ratio[y * n + x] = Float(max(0.85, min(1.25, Double(lum[y * n + x]) / mean)))
+            }
+        }
+        return PhotoDetail(n: n, ratio: ratio)
+    }
+
+    private static let contactGradient: UIImage = {
+        let n = 128
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        for y in 0..<n {
+            for x in 0..<n {
+                let u = (Double(x) + 0.5) / Double(n) * 2 - 1, v = (Double(y) + 0.5) / Double(n) * 2 - 1
+                let d = (u * u + v * v).squareRoot()
+                let a = max(0, 1 - d)
+                // Premultiplied black: only alpha matters.
+                px[(y * n + x) * 4 + 3] = UInt8(min(255, pow(a, 1.8) * 0.75 * 255))
+            }
+        }
+        return image(px, n)
+    }()
+
+    /// A soft ellipse on the floor under a standing plate: long across the
+    /// contact line (z), short along the bar (x).
+    static func contactShadow(thickness: Double, radius: Double, y: Double) -> SCNNode {
+        let plane = SCNPlane(width: CGFloat(thickness + 70), height: CGFloat(radius * 1.1))
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = contactGradient
+        m.blendMode = .alpha
+        m.writesToDepthBuffer = false
+        m.isDoubleSided = false
+        plane.materials = [m]
+        let node = SCNNode(geometry: plane)
+        node.eulerAngles.x = -.pi / 2
+        node.position = SCNVector3(0, Float(y), 0)
+        node.castsShadow = false
+        node.renderingOrder = 10
+        return node
+    }
+
     /// Face mottling and moulding grain, sampled by the plate-face baker.
     static let mottleField = Noise.field(size: 256, cells: 8, octaves: 4, seed: 11)
     static let grainField = Noise.field(size: 256, cells: 64, octaves: 2, seed: 3)
@@ -1072,7 +1242,9 @@ enum StudioTextures {
             return (base + (0.97 - base) * c, base + (0.97 - base) * c, base + (0.95 - base) * c)
         }
     }()
-    static let smudgeRoughness = gray(Noise.field(size: 256, cells: 4, octaves: 3, seed: 5), lo: 0.03, hi: 0.1)
+    // Roughness below about 0.1 speckles black on curved chrome in SceneKit's
+    // PBR path; real hard chrome is not a mirror anyway.
+    static let smudgeRoughness = gray(Noise.field(size: 256, cells: 4, octaves: 3, seed: 5), lo: 0.11, hi: 0.2)
     static let grainNormal = normal(grainField, strength: 2.0)
     static let hammerNormal = normal(Noise.field(size: 256, cells: 20, octaves: 3, seed: 9), strength: 6.0)
     static let brushedNormal: UIImage = {
@@ -1215,7 +1387,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 1
+    static let version = 2
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
@@ -1293,6 +1465,9 @@ final class StudioRenderer: @unchecked Sendable {
                 }
             }
             _ = StudioTextures.environment
+            _ = StudioTextures.studioLight
+            _ = StudioTextures.rubberDetail
+            _ = StudioTextures.steelDetail
             _ = StudioTextures.brandedOak
             _ = StudioMaterials.oakTop
             _ = StudioMaterials.knurl

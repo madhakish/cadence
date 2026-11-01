@@ -30,10 +30,18 @@ has no users and is out of scope for this change.
   4 ft oak centre and ¾" stall mats. The existing Vitruvian artwork
   (`VitruvianFront`, read unchanged) is burned into the oak at runtime. Dark
   engraving lines char the wood and the paper ground leaves it bare.
-- **Light.** The gym environment (`StudioGym`) lights and reflects the scene.
-  It is an equirectangular render taken from the bar's position in the
-  approved look-dev scene, baked one stop under. A soft warm overhead key light
-  casts the contact shadows.
+- **Light.** The gym environment (`StudioGym`) is the visible background.
+  What the bar and plates reflect is a product-photography light tent
+  generated at launch (`StudioTextures.studioLight`): a dark neutral room
+  with an overhead softbox, a wide front key and two tall rear strips. The
+  gym alone made the chrome orange (it is mostly oak floor) and the plates
+  dull. A front-left key light casts the shadows, and each plate standing on
+  the platform gets a soft contact shadow.
+- **Surface tooth.** Plate faces borrow their micro-texture from the
+  September photographs the owner approved (`PlateBumper`, `PlateSteel`,
+  5d2b150): the high-passed luminance of the real rubber and cast steel
+  modulates the baked face colour and relief. Colour still comes only from
+  the theme tables.
 
 ## Shots
 
