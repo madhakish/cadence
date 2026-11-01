@@ -88,3 +88,22 @@ fastlane/test_output/
 *.cer
 *.mobileprovision
 *.certSigningRequest
+
+# Build output and test results (xcodebuild -derivedDataPath build/…; fastlane
+# writes the sealed IPA and its checksum/version files to dist/).
+build/
+dist/
+*.xcresult
+# Info.plists XcodeGen generates from project.yml `info:` blocks.
+Cadence/Info.plist
+CadenceWatch/Info.plist
+CadenceWidgets/Info.plist
+
+# Real training and health data must never be committed (AGENTS.md privacy).
+# Exported watch motion recordings (unzipped for cadence-motion-eval) and app
+# exports land here easily; tests use synthetic fixtures under web/tests.
+*.cdmr
+sidecar.json
+Cadence-motion-recordings-*.zip
+cadence-export*.json
+cadence-sets*.csv

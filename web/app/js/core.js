@@ -4603,3 +4603,13 @@ export function holdClockStop(state, now) {
   if (state.stoppedEpoch != null || !Number.isFinite(now)) return state;
   return { ...state, stoppedEpoch: state.startEpoch + holdClockElapsed(state, now) };
 }
+
+// CSV field encoding, mirrored by native CadenceCore `CSVExport.field`: the sets
+// export is opened in spreadsheets, so a free-text field must never be evaluated
+// as a formula. A leading = + - @, tab or CR gets an apostrophe; a field holding
+// a comma, quote, LF or CR is quoted. [INV-CSV-NO-FORMULA]
+export function csvField(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}

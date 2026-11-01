@@ -9,6 +9,20 @@ function eq(a, b, msg) { ok(a === b, `${msg} (got ${a}, want ${b})`); }
 function near(a, b, eps, msg) { ok(approx(a, b, eps), `${msg} (got ${a}, want ${b}±${eps})`); }
 const kgPerSide = (sol) => sol.perSide.reduce((s, pc) => s + pc.plate.value * pc.count, 0);
 
+// ---- CSV export: formula-safe fields (mirrors CSVExportTests) ----
+// [INV-CSV-NO-FORMULA]
+eq(C.csvField('=HYPERLINK("http://x","y")'), `"'=HYPERLINK(""http://x"",""y"")"`, "formula is defused and quoted");
+eq(C.csvField("+1"), "'+1", "leading plus");
+eq(C.csvField("-5 lb, felt heavy"), `"'-5 lb, felt heavy"`, "leading minus with a comma");
+eq(C.csvField("@cmd"), "'@cmd", "leading at");
+eq(C.csvField("\tx"), "'\tx", "leading tab");
+eq(C.csvField("a\rb"), `"a\rb"`, "a lone CR is quoted");
+eq(C.csvField("Back Squat"), "Back Squat", "ordinary text unchanged");
+eq(C.csvField(135), "135", "numbers unchanged");
+eq(C.csvField("a,b"), `"a,b"`, "comma quoted");
+eq(C.csvField('say "hi"'), `"say ""hi"""`, "quotes doubled");
+eq(C.csvField(null), "", "missing is empty");
+
 // ---- Units ----
 near(C.kgFromLb(C.lbFromKg(42.5)), 42.5, 1e-9, "kg/lb round trip");
 near(C.lbFromKg(20), 44.0924, 0.001, "20kg→lb");

@@ -220,11 +220,18 @@ self.addEventListener("message", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+  // Read only this worker's own cache: a bare caches.match searches every cache
+  // on the shared github.io origin, so another project could otherwise plant an
+  // entry this app would serve. [INV-WEB-CACHE-OWNERSHIP]
+  const own = caches.open(CACHE);
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+    own.then((c) => c.match(req)).then((hit) => hit || fetch(req).then((res) => {
+      // Cache only successful same-origin responses, never a 404 or an error page.
+      if (res.ok && res.type === "basic") {
+        const copy = res.clone();
+        own.then((c) => c.put(req, copy)).catch(() => {});
+      }
       return res;
-    }).catch(() => caches.match("index.html")))
+    }).catch(() => own.then((c) => c.match("index.html"))))
   );
 });
