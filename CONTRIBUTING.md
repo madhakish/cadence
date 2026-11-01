@@ -104,6 +104,11 @@ report.** See the reporting template for how to redact one.
 
 ## Validation
 
+`make test` runs the CI preflight plus the Core and web suites; `make native`
+builds the iPhone app and runs the watch UI tests; `make signing` checks the
+signing material. `brew install pre-commit && make hooks` runs `make check`
+before each commit and `make test` before each push. Or run the pieces:
+
 ```bash
 cd CadenceCore && swift test
 cd web && npm ci && npm test     # parity + IndexedDB + smoke + invariant gate

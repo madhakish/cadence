@@ -3,6 +3,10 @@
 # CI can fetch them on every run. No Mac, no Keychain, no manual cert wrangling.
 git_url(ENV["MATCH_GIT_URL"])
 storage_mode("git")
+# The certs repo's protected default branch; CI provisioning lands changes on
+# it by pull request (Fastfile land_provisioning). Keep in step with the
+# Fastfile's CERTS_BRANCH.
+git_branch("main")
 type("appstore")
 app_identifier([
   ENV["APP_IDENTIFIER"] || "com.madhakish.Cadence",
