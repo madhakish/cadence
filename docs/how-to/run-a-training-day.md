@@ -46,14 +46,19 @@ lifts appear under "Next up" with their own suggestions.
   already completed this session on the same movement with a bar — keeping
   at least the last two — whenever its ramp refreshes after a bar, gym, or
   working-weight change.
-- **Log with Done.** On iOS the bottom bar's **Done** names the set you're
-  on (for example *Done · 6 × 138.7 lb*) and logs it exactly as shown. Change
-  reps or load first with **Adjust reps or load** under the big numbers; the
-  set's status control there still completes, skips, or grades it, and
-  touching and holding it opens quality and reps-in-reserve. A short
+- **One box per prescription** (iOS). Consecutive sets with the same kind,
+  load, and reps share a box — a 3×5 is one box with three markers, while
+  ramping warmups stay a box each. Markers show planned, current (red),
+  done, and skipped; a set you logged differently shows its own numbers
+  under its marker (*4 × 205*), and the box never rewrites the plan around
+  it. Tap a marker, or the big numbers, to edit that one set; touch and hold
+  a marker to skip it, reopen it, or grade quality and reps in reserve.
+  **Edit sets** lists every set one row each, for fixing several at once.
+- **Log with Done** (iOS). The bottom bar's **Done** names the set you're on
+  (for example *Done · 6 × 138.7 lb*) and logs exactly that set. A short
   *Set 2 logged* receipt, with a haptic when haptics are on, confirms the
-  write; then a running rest takes Done's place. Timed holds and
-  conditioning keep their own start/log controls in the set row.
+  write; then a running rest takes Done's place. Timed holds start from
+  **Start hold** in their box; conditioning logs from its marker.
 - **Check the equipment context.** “Training at” follows the gym captured by
   the session. Changing it updates default bars and warmups; a bar selected on
   one exercise is saved with that session and survives reopening it.

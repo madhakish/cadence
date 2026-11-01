@@ -38,6 +38,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(done.frame.height, 56, "Done is at least Theme.bigTap tall")
         capture("after-03-current-session-iphone")
         let inspect = app.buttons["expand-loaded-bar"].firstMatch
+        let tree = XCTAttachment(string: app.debugDescription); tree.name = "DEBUG-tree"; tree.lifetime = .keepAlways; add(tree)
         let window = app.windows.firstMatch.frame
         let visible = CGRect(x: window.minX, y: window.minY + 100,
                              width: window.width, height: window.height - 220)
@@ -253,15 +254,62 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        capture("after-22-session-done-accessibility-iphone")
         let done = app.buttons["done-set"]
         XCTAssertTrue(done.waitForExistence(timeout: 3))
         XCTAssertTrue(done.isHittable)
-        capture("after-22-session-done-accessibility-iphone")
         done.tap()
         XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
         capture("after-22-session-logged-accessibility-iphone")
         XCTAssertTrue(done.waitForExistence(timeout: 5))
         XCTAssertEqual(done.label, "Done, working set 3 of 3")
+    }
+
+    /// One box per prescription: the fixture's squat (two warmups, then a
+    /// 3-set working prescription with set 1 done) shows each warmup in its
+    /// own box and the work as ONE box with three markers. A marker opens
+    /// that one set's editor; "Edit sets" lists every set, one row each.
+    func test23GroupedSetPlanAndEditor() {
+        for (size, suffix) in [("UICTContentSizeCategoryAccessibilityXXXL", "-accessibility"), ("UICTContentSizeCategoryL", "")] {
+            app.terminate()
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", size]
+            app.launch()
+            XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+            app.buttons["resume-session"].tap()
+            XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+            let full = app.buttons["Show full set plan"].firstMatch
+            for _ in 0..<6 where !full.isHittable { app.swipeUp() }
+            XCTAssertTrue(full.isHittable)
+            full.tap()
+            for _ in 0..<6 { app.swipeDown() }
+            capture("after-23-set-plan-expanded\(suffix)-iphone")
+            if !suffix.isEmpty { continue }
+
+            let working = element("current-exercise-Back Squat")
+            XCTAssertTrue(working.waitForExistence(timeout: 3))
+            XCTAssertEqual(working.label, "Working sets, 3 by 6 at 138.7 lb, 1 of 3 done")
+            let markers = working.buttons.matching(identifier: "set-marker")
+            XCTAssertEqual(markers.count, 3, "one marker per working set, in one box")
+            XCTAssertEqual(markers.element(boundBy: 1).label, "Set 2 of 3, current")
+            // Two ramping warmups keep a box each (different loads).
+            XCTAssertTrue(app.buttons["Warmup 1 of 2, done"].exists)
+            XCTAssertTrue(app.buttons["Warmup 2 of 2, done"].exists)
+
+            markers.element(boundBy: 2).tap()
+            let editor = app.navigationBars["Set"]
+            XCTAssertTrue(editor.waitForExistence(timeout: 5), "a marker opens that one set's editor")
+            capture("after-23-set-editor-from-marker-iphone")
+            editor.buttons["Done"].tap()
+            XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+
+            let edit = working.buttons["Edit sets"]
+            XCTAssertTrue(edit.waitForExistence(timeout: 5))
+            edit.tap()
+            XCTAssertTrue(element("set-plan-editor").waitForExistence(timeout: 5))
+            XCTAssertEqual(app.buttons.matching(identifier: "Set status").count, 5,
+                           "the editor lists every set, warmups included, one row each")
+            capture("after-23-set-plan-editor-iphone")
+        }
     }
 
     private func allowHoldNotificationsIfPrompted() {
@@ -363,10 +411,12 @@ final class VisualProofUITests: XCTestCase {
 
         // The proof fixture starts on squat work set 2 of 3. Resolve both;
         // focus must move to the next authored lift without another tap.
-        for _ in 0..<2 {
-            let status = app.buttons["Set status"].firstMatch
-            XCTAssertTrue(status.waitForExistence(timeout: 3))
-            status.tap()
+        // Logged from the thumb-zone Done; a receipt briefly holds the slot.
+        for ordinal in 2...3 {
+            let done = app.buttons["done-set"]
+            XCTAssertTrue(done.waitForExistence(timeout: 5))
+            XCTAssertEqual(done.label, "Done, working set \(ordinal) of 3")
+            done.tap()
         }
         XCTAssertTrue(element("current-exercise-Romanian Deadlift").waitForExistence(timeout: 5))
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
@@ -467,7 +517,8 @@ final class VisualProofUITests: XCTestCase {
     func test13SetCompletionKeepsDominantBlockStill() {
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        let track = app.otherElements["Working sets"].firstMatch
+        // The working box with its set markers replaced the separate track.
+        let track = element("current-exercise-Back Squat")
         let hero = element("current-set-hero")
         XCTAssertTrue(track.waitForExistence(timeout: 3))
         XCTAssertTrue(hero.waitForExistence(timeout: 3))
@@ -476,16 +527,15 @@ final class VisualProofUITests: XCTestCase {
         let heroBefore = hero.frame
         capture("after-13-session-before-set-iphone")
 
-        // Logged from the primary path: the bottom bar's Done. (test07 still
-        // logs through the row's status control, so both paths stay proven.)
+        // Logged from the primary path: the bottom bar's Done.
         let done = app.buttons["done-set"]
         XCTAssertTrue(done.waitForExistence(timeout: 3))
         done.tap()
-        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
         // The receipt takes Done's slot briefly; the screenshot shows it.
         XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
         capture("after-13-session-after-set-iphone")
-        XCTAssertTrue(element("set-logged-stamp").waitForNonExistence(timeout: 4), "the receipt lapses on its own")
+        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        XCTAssertTrue(element("set-logged-stamp").waitForNonExistence(timeout: 5), "the receipt lapses on its own")
         XCTAssertEqual(done.label, "Done, working set 3 of 3")
         XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
