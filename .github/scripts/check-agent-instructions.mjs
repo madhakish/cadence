@@ -8,7 +8,9 @@ export const budgets = {
   'AGENTS.md': [200, 8192],
   'CLAUDE.md': [20, 1024],
   '.github/copilot-instructions.md': [40, 2048],
-  'AGENT-COORDINATION.md': [120, 6144],
+  'AGENT-COORDINATION.md': [60, 3072],
+  // Team notes load every session, so the cap forces pruning, not piling up.
+  '.agents/notes.md': [60, 3584],
 };
 export const commonFiles = [...Object.keys(budgets), '.agents/torvalds-doctrine.md'];
 
@@ -70,7 +72,7 @@ export function validateInstructions(root) {
         if (fragment && dest.endsWith('.md') && !anchors(read(dest)).has(fragment)) errors.push(`${path}: missing anchor ${raw}`);
       }
       const required = {
-        'AGENTS.md': ['AGENT-COORDINATION.md', '.agents/torvalds-doctrine.md'],
+        'AGENTS.md': ['AGENT-COORDINATION.md', '.agents/torvalds-doctrine.md', '.agents/notes.md'],
         '.github/copilot-instructions.md': ['AGENTS.md', 'AGENT-COORDINATION.md', '.agents/torvalds-doctrine.md'],
       }[path] ?? [];
       for (const dest of required) if (!destinations.has(dest)) errors.push(`${path}: must link ${dest}`);
@@ -93,8 +95,8 @@ export function validateInstructions(root) {
     visited.add(path);
   }
   for (const path of imports.keys()) visit(path);
-  if (JSON.stringify([...(imports.get('CLAUDE.md') ?? [])].sort()) !== JSON.stringify(['AGENT-COORDINATION.md', 'AGENTS.md'])) {
-    errors.push('CLAUDE.md must import AGENTS.md and AGENT-COORDINATION.md exactly once each');
+  if (JSON.stringify([...(imports.get('CLAUDE.md') ?? [])].sort()) !== JSON.stringify(['.agents/notes.md', 'AGENT-COORDINATION.md', 'AGENTS.md'])) {
+    errors.push('CLAUDE.md must import AGENTS.md, AGENT-COORDINATION.md and .agents/notes.md exactly once each');
   }
   const totalBytes = [...loaded].reduce((n, path) => n + Buffer.byteLength(texts.get(path) ?? ''), 0);
   if (totalBytes > 20480) errors.push('Common instructions including doctrine and automatic imports exceed 20480 bytes');

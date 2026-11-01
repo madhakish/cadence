@@ -5,6 +5,7 @@
 #   make native    iPhone build + watch UI tests on simulators (macOS + Xcode)
 #   make signing   live signing preflight against the certs repo and Apple
 #   make hooks     install the pre-commit and pre-push hooks
+#   make who       open PRs, their files, and overlap with this branch
 #
 # Before merging anything that can ship: `make test`, `make native` when
 # native code changed, and `make signing` when targets, App IDs, entitlements
@@ -24,7 +25,7 @@ PHONE_SIM ?= iPhone 17
 WATCH_SIM ?= Apple Watch SE 3 (40mm)
 DERIVED   ?= build/DerivedData
 
-.PHONY: help check test test-core test-web native native-phone native-watch signing hooks
+.PHONY: help check test test-core test-web native native-phone native-watch signing hooks who
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-13s %s\n", $$1, $$2}'
@@ -64,3 +65,6 @@ signing: ## Live signing preflight (certs repo via gh; Apple checks need ASC_* e
 hooks: ## Install the pre-commit (make check) and pre-push (make test) hooks
 	@command -v pre-commit >/dev/null || { echo "install pre-commit first: brew install pre-commit" >&2; exit 1; }
 	pre-commit install --hook-type pre-commit --hook-type pre-push
+
+who: ## Open PRs, their files, and overlap with this branch (needs gh)
+	node .github/scripts/who.mjs
