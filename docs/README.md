@@ -84,3 +84,16 @@ Developer docs live elsewhere: [TESTFLIGHT.md](TESTFLIGHT.md) covers the
 release pipeline. [AGENTS.md](../AGENTS.md) is the contributor and agent entry
 point; the [engineering guide](AGENT-GUIDE.md) covers architecture, persistence,
 parity, and verification.
+
+## Maintainer workflows
+
+- [Repository agent guide](../AGENTS.md): task ownership, migration, privacy
+  and verification boundaries.
+- [Native visual proof](../.agents/skills/cadence-native-proof/SKILL.md): load
+  math, geometry, native pixels and source-pinned capture inventories.
+- [Parity and Health outcomes](../.agents/skills/cadence-parity-health/SKILL.md):
+  shared domain contracts, device-local permissions and export-state evidence.
+
+These developer guides supplement the product documentation above. Archived
+proof folders record their original source SHA and acceptance limits; they
+are not automatically evidence for the current build.
