@@ -559,7 +559,7 @@ export const TOLERANCE_LB = 2.0;
 // Loaded the way a human actually loads: within the band, a stack that IS the
 // heaviest-first greedy fill of its own weight (in its own unit system) beats
 // any re-shuffled stack — 105/side is 45+45+10+5, never 35×3. Between greedy
-// stacks the fewest plates win (220 → 2×20 kg, not 45+35+5+2.5).
+// stacks the fewest plates win (220 → 25+15 kg, not 45+35+5+2.5).
 export const LOADING_POLICIES = ["closest", "under", "over", "exact"];
 export const loadingPolicyLabel = (policy) => ({
   closest: "Closest", under: "Never over", over: "Never under", exact: "Exact / competition",
@@ -582,8 +582,14 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
   for (const p of plates) seen.set(plateId(p), p);
   const sorted = [...seen.values()].sort((a, b) => plateLb(b) - plateLb(a));
 
-  const empty = () => makeSolution(bar, [], targetLb, collarLb, policy,
-    policyAllows(loadoutTotalLb(bar, [], collarLb) - targetLb, policy));
+  // The bare bar is the only candidate. When it reconstructs the load exactly
+  // it is an exact solve like any other, not a gym-policy fallback.
+  const empty = () => {
+    const deviation = loadoutTotalLb(bar, [], collarLb) - targetLb;
+    const exact = preferExact && policyAllows(deviation, "exact");
+    return makeSolution(bar, [], targetLb, collarLb, exact ? "exact" : policy,
+      exact || policyAllows(deviation, policy));
+  };
   if (!(perSideTarget > 1e-9) || sorted.length === 0) return empty();
 
   const values = sorted.map(plateLb);
@@ -678,18 +684,34 @@ export function solve(targetLb, bar, plates, maxPerPlateSide = 10, collarLb = 0,
   // search a tight bound from the first node AND guarantees we never return a
   // worse-than-simple stack if the 300k-node cap trips on a heavy mixed
   // inventory (e.g. 405 → 45×4, not a kg+lb frankenstack).
-  const seedGreedy = (unit) => {
+  const seedGreedy = (unit, weight) => {
     counts.fill(0);
-    let remaining = perSideTarget, used = 0, distinct = 0;
+    let left = weight, used = 0, distinct = 0;
     for (let i = 0; i < sorted.length; i += 1) {
       if (sorted[i].unit !== unit) continue;
-      const c = Math.min(maxPerPlateSide, Math.floor(remaining / values[i] + 1e-9));
-      if (c > 0) { counts[i] = c; remaining -= c * values[i]; used += c; distinct += 1; }
+      const c = Math.min(maxPerPlateSide, Math.floor(left / values[i] + 1e-9));
+      if (c > 0) { counts[i] = c; left -= c * values[i]; used += c; distinct += 1; }
     }
-    if (used > 0) consider(remaining, used, distinct, false);
+    if (used > 0) consider(perSideTarget - (weight - left), used, distinct, false);
   };
-  seedGreedy("lb");
-  seedGreedy("kg");
+  // Then every clean stack inside the band. A clean stack is the greedy fill
+  // of its own weight, and one unit's plates only ever weigh multiples of
+  // their common step, so filling each step across the band finds them all in
+  // a few passes. A clean in-band stack outranks everything else, so whenever
+  // one exists the answer no longer hangs on the node cap, which the default
+  // 13-denomination mixed rack trips on heavy loads (363 → 45×3+25 lb).
+  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+  for (const unit of ["lb", "kg"]) {
+    seedGreedy(unit, perSideTarget);
+    const grid = sorted.filter((p) => p.unit === unit && p.value > 0 && p.value < 1e9)
+      .map((p) => Math.round(p.value * 1000)).reduce(gcd, 0);
+    if (!(grid > 0)) continue;
+    const step = toLb(grid / 1000, unit);
+    const first = Math.max(1, Math.ceil((perSideTarget - TOLERANCE_LB / 2) / step - 1e-9));
+    const last = Math.floor((perSideTarget + TOLERANCE_LB / 2) / step + 1e-9);
+    if (!Number.isFinite(last) || !(last >= first) || !(last - first < 4096)) continue;
+    for (let k = 0; k <= last - first; k += 1) seedGreedy(unit, (first + k) * step);
+  }
   counts.fill(0);
 
   search(0, perSideTarget, 0, 0, 0, 0);
