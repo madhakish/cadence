@@ -65,7 +65,7 @@ public enum PlateMath {
     /// stack that IS the heaviest-first greedy fill of its own weight (in its
     /// own unit system) beats any re-shuffled stack — 105/side is 45+45+10+5,
     /// never 35×3, because the big plates go on first. Between greedy stacks
-    /// the fewest plates win (220 → 2×20 kg, not 45+35+5+2.5), then fewest
+    /// the fewest plates win (220 → 25+15 kg, not 45+35+5+2.5), then fewest
     /// distinct denominations (matched pairs), then a single unit system (no
     /// kg+lb frankenstacks), then closeness, then erring under. Outside the
     /// band it falls back to plain closest-then-fewest. Mixed units are still
@@ -90,9 +90,14 @@ public enum PlateMath {
         let sorted = Array(Set(plates)).sorted { $0.lb > $1.lb }
 
         guard perSideTarget > 1e-9, !sorted.isEmpty else {
+            // The bare bar is the only candidate. When it reconstructs the
+            // load exactly it is an exact solve like any other, not a gym-
+            // policy fallback (44.09 on a 20 kg bar is not "over" anything).
             let loadout = Loadout(bar: bar, perSide: [], collarLb: collarLb)
-            return PlateSolution(loadout: loadout, targetLb: targetLb, policy: policy,
-                                 satisfiesPolicy: policyAllows(loadout.totalLb - targetLb, policy: policy))
+            let deviation = loadout.totalLb - targetLb
+            let exact = preferExact && policyAllows(deviation, policy: .exact)
+            return PlateSolution(loadout: loadout, targetLb: targetLb, policy: exact ? .exact : policy,
+                                 satisfiesPolicy: exact || policyAllows(deviation, policy: policy))
         }
 
         let values = sorted.map(\.lb)
@@ -197,17 +202,33 @@ public enum PlateMath {
         // tight bound from the first node, and never a worse-than-simple stack
         // if the 300k cap trips on a heavy mixed inventory (e.g. 405 → 45×4,
         // not a kg+lb frankenstack).
-        func seedGreedy(_ unit: WeightUnit) {
+        func seedGreedy(_ unit: WeightUnit, fill weight: Double) {
             for i in counts.indices { counts[i] = 0 }
-            var remaining = perSideTarget, used = 0, distinct = 0
+            var left = weight, used = 0, distinct = 0
             for i in sorted.indices where sorted[i].unit == unit {
-                let c = min(maxPerPlateSide, Int((remaining / values[i] + 1e-9).rounded(.down)))
-                if c > 0 { counts[i] = c; remaining -= Double(c) * values[i]; used += c; distinct += 1 }
+                let c = min(maxPerPlateSide, Int((left / values[i] + 1e-9).rounded(.down)))
+                if c > 0 { counts[i] = c; left -= Double(c) * values[i]; used += c; distinct += 1 }
             }
-            if used > 0 { consider(remaining, used, distinct, false) }
+            if used > 0 { consider(perSideTarget - (weight - left), used, distinct, false) }
         }
-        seedGreedy(.lb)
-        seedGreedy(.kg)
+        // Then every clean stack inside the band. A clean stack is the greedy
+        // fill of its own weight, and one unit's plates only ever weigh
+        // multiples of their common step, so filling each step across the
+        // band finds them all in a few passes. A clean in-band stack outranks
+        // everything else, so whenever one exists the answer no longer hangs
+        // on the node cap, which the default 13-denomination mixed rack trips
+        // on heavy loads (363 → 45×3+25 lb, not 25 kg×2+20 kg+2.5 kg).
+        for unit in [WeightUnit.lb, .kg] {
+            seedGreedy(unit, fill: perSideTarget)
+            let grid = sorted.filter { $0.unit == unit && $0.value > 0 && $0.value < 1e9 }
+                .map { Int(($0.value * 1000).rounded()) }.reduce(0, Self.gcd)
+            guard grid > 0 else { continue }
+            let step = Weight.toLb(Double(grid) / 1000, from: unit)
+            let first = max(1, ((perSideTarget - toleranceLb / 2) / step - 1e-9).rounded(.up))
+            let last = ((perSideTarget + toleranceLb / 2) / step + 1e-9).rounded(.down)
+            guard last.isFinite, last >= first, last - first < 4096 else { continue }
+            for k in 0...Int(last - first) { seedGreedy(unit, fill: (first + Double(k)) * step) }
+        }
         for i in counts.indices { counts[i] = 0 }
 
         search(0, perSideTarget, 0, 0, 0, 0)
@@ -432,6 +453,8 @@ public enum PlateMath {
             targetLb: targetLb, selected: selected, below: below, above: above
         )
     }
+
+    private static func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
 
     private static func policyAllows(_ deviationLb: Double, policy: LoadingPolicy) -> Bool {
         switch policy {
