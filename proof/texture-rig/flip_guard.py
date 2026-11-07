@@ -75,24 +75,28 @@ def inspect(path, role):
                     raise Refuse(f"{role} has transparent pixels (alpha min {lo}); FLIP ignores alpha, "
                                  f"so flatten it onto the background the app shows first: {path}")
             return {"path": os.path.abspath(path), "sha256": sha256(data), "size": list(im.size), "mode": im.mode,
-                    "colour": colour_tags(im.info)}
+                    "colour": srgb_or_refuse(im.info, role, path)}
     except Refuse:
         raise
     except Exception as e:  # truncated or corrupt data
         raise Refuse(f"{role} doesn't decode ({e}): {path}")
 
 
-def colour_tags(info):
-    """How the PNG says its RGB should be read. FLIP ignores all of it and reads sRGB, so it only
-    compares like with like when both inputs say the same thing. Untagged counts as sRGB, and an
-    sRGB chunk overrides gAMA/cHRM (PNG spec)."""
+def srgb_or_refuse(info, role, path):
+    """FLIP reads every PNG as sRGB and ignores colour tags, so anything tagged otherwise would be
+    judged as the wrong colours, and matching tags on both sides don't make that right (two linear
+    gAMA 1.0 renders were scored PASS on a change that FAILs once converted). Untagged and sRGB-chunk
+    PNGs are sRGB; an sRGB chunk overrides gAMA/cHRM (PNG spec). Everything else is refused."""
     if info.get("icc_profile"):
-        return "icc " + sha256(info["icc_profile"])
-    if "srgb" in info:
-        return "srgb"
-    if "gamma" in info or "chromaticity" in info:
-        return f"gAMA {info.get('gamma')} cHRM {info.get('chromaticity')}"
-    return "srgb"
+        tag = "an ICC profile"
+    elif "srgb" in info:
+        return "sRGB chunk"
+    elif "gamma" in info or "chromaticity" in info:
+        tag = f"gAMA {info.get('gamma')} / cHRM {info.get('chromaticity')}"
+    else:
+        return "untagged (sRGB)"
+    raise Refuse(f"{role} carries {tag}; FLIP would read it as sRGB anyway. Convert it to sRGB "
+                 f"(or strip the tag if the pixels already are): {path}")
 
 
 def pooled(text):
@@ -143,9 +147,6 @@ def main(argv):
     golden, candidate = inspect(golden_path, "golden"), inspect(candidate_path, "candidate")
     if golden["size"] != candidate["size"]:
         raise Refuse(f"golden is {golden['size']} but candidate is {candidate['size']}; FLIP compares equal sizes only")
-    if golden["colour"] != candidate["colour"]:
-        raise Refuse(f"golden says {golden['colour']!r} but candidate says {candidate['colour']!r}; FLIP reads both "
-                     "as sRGB, so it would measure the tags, not the render")
 
     os.makedirs(out_dir, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".flip-", dir=out_dir)
