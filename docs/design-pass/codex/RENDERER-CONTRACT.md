@@ -150,7 +150,7 @@ So a detail map also changes roughness and the normal. Author it as a combined m
 
 ### Texture preview rig
 
-The rig is a local DEBUG tool on this Mac, not committed. It renders the 135 lb fixture with a folder of textures, and does it without a UI suite: one build plus one app launch under the shared Xcode lock.
+The rig is a local DEBUG tool on this Mac, not committed; only its FLIP guard (`proof/texture-rig/flip_guard.sh` and `flip_guard.py`) is. It renders the 135 lb fixture with a folder of textures, and does it without a UI suite: one build plus one app launch under the shared Xcode lock.
 
 ```sh
 bash /Users/thudak/git/cadence-photoreal/proof/texture-rig/rig.sh <texture-folder> <output-folder>
@@ -162,3 +162,7 @@ bash /Users/thudak/git/cadence-photoreal/proof/texture-rig/rig.sh <texture-folde
   - `closeup-plate.png`: 1024², the near 45 lb bumper face and hub on #374's own platform.
   - `rig-manifest.json`: which files were picked up.
 - **Source:** #374 at 8a3301a plus `proof/texture-rig/rig.patch`. The script applies the patch in a scratch worktree, so #374's branch is never modified.
+
+### Verifying a renderer change
+
+A renderer change is measured against a golden render before anyone argues about it. Render the 135 lb fixture before and after the change, then run `bash proof/texture-rig/flip_guard.sh <golden.png> <candidate.png> <out-dir>` with `FLIP_VENV` set to a venv outside the repository that holds `flip-evaluator==1.7` and `pillow` (the script's header has the two commands). The rig does this for `hero-135.png` and `closeup-plate.png` when `RIG_FLIP_GOLDEN` names an earlier output folder, and writes to `<output>/flip/`. The guard keeps NVIDIA FLIP's error map as `<stem>-flip.png` and writes `<stem>-flip.json` beside it, with mean, weighted median and max FLIP (LDR, 67 pixels per degree), the thresholds, and the SHA-256 of the golden, the candidate and the map. It exits 1 when mean FLIP is above 0.001 or the weighted median is above 0.05 (`FLIP_MAX_MEAN`, `FLIP_MAX_WMEDIAN`), and 2 when it can't judge: no venv, different sizes or colour profiles, or transparency, which FLIP ignores. The thresholds come from the 2026-11-01 bumper-face A/B. A against its own repeat scores 0.000011 mean and 0.0064 weighted median, and the v2 detail map at stage size, where nobody can see it, scores 0.00042 and 0.014; all pass. A 1 % warm tint on the equipment fails on the mean (0.0016). A contact shadow slid 20 px fails only on the weighted median (0.091 at 15 % depth), because its mean, 0.0004, is no bigger than v2's. That is why there are two gates. A pass means nothing visible changed. A fail is not a veto: the change is visible, so it needs the owner's side-by-side (AGENTS.md), with the map and the manifest attached to the PR.
