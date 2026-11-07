@@ -13,8 +13,8 @@
 #       FLIP_MAX_MEAN (default 0.001), FLIP_MAX_WMEDIAN (default 0.05). Why these:
 #       docs/design-pass/codex/RENDERER-CONTRACT.md, "Verifying a renderer change".
 set -euo pipefail
-fail() { echo "flip-guard: CAN'T JUDGE: $*" >&2; exit 2; }
-[ $# -eq 3 ] || fail "usage: flip_guard.sh <golden.png> <candidate.png> <out-dir>"
-[ -n "${FLIP_VENV:-}" ] || fail "FLIP_VENV is not set; point it at a venv with flip-evaluator==1.7 and pillow (see the header of $0)"
-[ -x "$FLIP_VENV/bin/python" ] && [ -x "$FLIP_VENV/bin/flip" ] || fail "FLIP_VENV=$FLIP_VENV has no bin/python and bin/flip"
-exec "$FLIP_VENV/bin/python" -I "$(cd "$(dirname "$0")" && pwd)/flip_guard.py" "$@"
+# Without a usable FLIP_VENV, any python3 still runs flip_guard.py far enough to
+# delete an earlier verdict for this candidate and then refuse (exit 2).
+PY=python3
+if [ -n "${FLIP_VENV:-}" ] && [ -x "$FLIP_VENV/bin/python" ]; then PY=$FLIP_VENV/bin/python; fi
+exec "$PY" -I "$(cd "$(dirname "$0")" && pwd)/flip_guard.py" "$@"

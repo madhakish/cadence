@@ -74,13 +74,25 @@ def inspect(path, role):
                 if lo != 255:
                     raise Refuse(f"{role} has transparent pixels (alpha min {lo}); FLIP ignores alpha, "
                                  f"so flatten it onto the background the app shows first: {path}")
-            icc = im.info.get("icc_profile")
             return {"path": os.path.abspath(path), "sha256": sha256(data), "size": list(im.size), "mode": im.mode,
-                    "iccProfileSha256": sha256(icc) if icc else None}
+                    "colour": colour_tags(im.info)}
     except Refuse:
         raise
     except Exception as e:  # truncated or corrupt data
         raise Refuse(f"{role} doesn't decode ({e}): {path}")
+
+
+def colour_tags(info):
+    """How the PNG says its RGB should be read. FLIP ignores all of it and reads sRGB, so it only
+    compares like with like when both inputs say the same thing. Untagged counts as sRGB, and an
+    sRGB chunk overrides gAMA/cHRM (PNG spec)."""
+    if info.get("icc_profile"):
+        return "icc " + sha256(info["icc_profile"])
+    if "srgb" in info:
+        return "srgb"
+    if "gamma" in info or "chromaticity" in info:
+        return f"gAMA {info.get('gamma')} cHRM {info.get('chromaticity')}"
+    return "srgb"
 
 
 def pooled(text):
@@ -99,6 +111,23 @@ def main(argv):
     if len(argv) != 3:
         raise Refuse("usage: flip_guard.sh <golden.png> <candidate.png> <out-dir>")
     golden_path, candidate_path, out_dir = argv
+    stem = os.path.splitext(os.path.basename(candidate_path))[0]
+    map_path = os.path.join(os.path.abspath(out_dir), f"{stem}-flip.png")
+    manifest_path = os.path.join(os.path.abspath(out_dir), f"{stem}-flip.json")
+    for p in (golden_path, candidate_path):
+        if os.path.realpath(p) in (os.path.realpath(map_path), os.path.realpath(manifest_path)):
+            raise Refuse(f"{p} is where this run writes its output; pick another out-dir")
+    # First, before anything can refuse: a verdict from an earlier run must never sit beside
+    # inputs it didn't judge. unlink removes a symlink, not what it points at.
+    for p in (map_path, manifest_path):
+        if os.path.lexists(p):
+            os.unlink(p)
+
+    venv = os.environ.get("FLIP_VENV", "")
+    if not venv:
+        raise Refuse("FLIP_VENV is not set; point it at a venv with flip-evaluator==1.7 and pillow (see flip_guard.sh)")
+    if os.path.realpath(sys.prefix) != os.path.realpath(venv):
+        raise Refuse(f"FLIP_VENV={venv} has no usable bin/python (this is {sys.executable})")
     try:
         version = importlib.metadata.version("flip-evaluator")
     except importlib.metadata.PackageNotFoundError:
@@ -109,26 +138,16 @@ def main(argv):
     if not os.access(flip, os.X_OK):
         raise Refuse(f"no flip executable at {flip}")
     limits = {"mean": threshold("FLIP_MAX_MEAN"), "weightedMedian": threshold("FLIP_MAX_WMEDIAN")}
-
-    os.makedirs(out_dir, exist_ok=True)
-    stem = os.path.splitext(os.path.basename(candidate_path))[0]
-    map_path = os.path.join(os.path.abspath(out_dir), f"{stem}-flip.png")
-    manifest_path = os.path.join(os.path.abspath(out_dir), f"{stem}-flip.json")
-    for p in (golden_path, candidate_path):
-        if os.path.realpath(p) in (os.path.realpath(map_path), os.path.realpath(manifest_path)):
-            raise Refuse(f"{p} is where this run writes its output; pick another out-dir")
-    # A verdict from an earlier run must never sit beside inputs it didn't judge.
-    for p in (map_path, manifest_path):
-        if os.path.lexists(p):
-            os.unlink(p)
+    guard = {f: sha256(open(os.path.join(HERE, f), "rb").read()) for f in ("flip_guard.sh", "flip_guard.py")}
 
     golden, candidate = inspect(golden_path, "golden"), inspect(candidate_path, "candidate")
     if golden["size"] != candidate["size"]:
         raise Refuse(f"golden is {golden['size']} but candidate is {candidate['size']}; FLIP compares equal sizes only")
-    if golden["iccProfileSha256"] != candidate["iccProfileSha256"]:
-        raise Refuse("golden and candidate carry different colour profiles; FLIP reads both as sRGB, "
-                     "so it would measure the profile, not the render")
+    if golden["colour"] != candidate["colour"]:
+        raise Refuse(f"golden says {golden['colour']!r} but candidate says {candidate['colour']!r}; FLIP reads both "
+                     "as sRGB, so it would measure the tags, not the render")
 
+    os.makedirs(out_dir, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".flip-", dir=out_dir)
     try:
         run = subprocess.run([flip, "-r", golden["path"], "-t", candidate["path"], "-d", work, "-b", "flip",
@@ -137,28 +156,27 @@ def main(argv):
         if run.returncode != 0 or not os.path.isfile(produced_map) or not os.path.isfile(produced_txt):
             raise Refuse(f"flip exited {run.returncode}: {(run.stdout + run.stderr).strip()}")
         values = pooled(open(produced_txt).read())
+        failed = [k for k in ("mean", "weightedMedian") if values[k] > limits[k]]
+        manifest = {
+            "tool": {"name": "flip-evaluator", "version": version, "mode": "LDR", "ppd": PPD},
+            "guard": guard,
+            "golden": golden,
+            "candidate": candidate,
+            "errorMap": {"path": map_path, "sha256": sha256(open(produced_map, "rb").read())},
+            "flip": values,
+            "thresholds": limits,
+            "pass": not failed,
+            "failed": failed,
+            "evaluatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        }
+        produced_json = os.path.join(work, "flip.json")  # inside the fresh mkdtemp: nothing can be planted there
+        with open(produced_json, "x") as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
+            f.write("\n")
         os.replace(produced_map, map_path)
+        os.replace(produced_json, manifest_path)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-
-    failed = [k for k in ("mean", "weightedMedian") if values[k] > limits[k]]
-    manifest = {
-        "tool": {"name": "flip-evaluator", "version": version, "mode": "LDR", "ppd": PPD},
-        "guard": {f: sha256(open(os.path.join(HERE, f), "rb").read()) for f in ("flip_guard.sh", "flip_guard.py")},
-        "golden": golden,
-        "candidate": candidate,
-        "errorMap": {"path": map_path, "sha256": sha256(open(map_path, "rb").read())},
-        "flip": values,
-        "thresholds": limits,
-        "pass": not failed,
-        "failed": failed,
-        "evaluatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-    }
-    tmp = manifest_path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(manifest, f, indent=2, sort_keys=True)
-        f.write("\n")
-    os.replace(tmp, manifest_path)
 
     verdict = "PASS" if not failed else "FAIL (" + ", ".join(failed) + ")"
     print(f"flip-guard: {stem} {verdict}: mean {values['mean']:.6f} (max {limits['mean']}), "
