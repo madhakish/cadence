@@ -42,3 +42,6 @@ it stops being true. Keep this file short enough to read every time.
 - UI-test fixtures should wait for a readiness signal, not a fixed delay. The
   watch fixture listens for a Darwin notification (#369); the WebKit
   service-worker test waits for the update event (#361).
+- `PlateMathOracleTests` restates the plate objective on its own, in exact
+  integer mass. An intended change to solve or quantize ranking must change
+  the oracle's key too; a red oracle is not a snapshot to regenerate (#388).
