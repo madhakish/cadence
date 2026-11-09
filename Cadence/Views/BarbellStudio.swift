@@ -2,6 +2,7 @@ import CadenceCore
 import Metal
 import os
 import SceneKit
+import simd
 import SwiftUI
 import UIKit
 
@@ -49,10 +50,11 @@ final class BarbellStudio {
     // MARK: Framing
 
     /// Places the camera for a shot at a viewport aspect (width / height).
-    func frame(_ shot: StudioShot, aspect: Double) {
+    func frame(_ shot: StudioShot, aspect: Double, captionFraction: Double = 0) {
         let camera = cameraNode.camera!
         camera.projectionDirection = .horizontal
-        let eye: SCNVector3, target: SCNVector3, fov: Double, fStop: Double
+        var eye: SCNVector3
+        let target: SCNVector3, fov: Double, fStop: Double
         switch shot {
         case .row:
             // Lifter's eye at bar height, straight on; the bar fills the width.
@@ -82,6 +84,9 @@ final class BarbellStudio {
             fov = aspect >= 1.2 ? 48.5 : 58
             fStop = 7.1
         }
+        if shot == .blowup {
+            eye = fittedBlowupEye(eye, target: target, fieldOfView: fov, aspect: aspect, captionFraction: captionFraction)
+        }
         camera.fieldOfView = CGFloat(fov)
         cameraNode.position = eye
         // Explicit world up: look(at:) alone reuses the node's current up,
@@ -92,6 +97,37 @@ final class BarbellStudio {
         // SceneKit's circle of confusion treats scene units as metres; this
         // scene is in millimetres, so the physical f-stop scales by 1/1000.
         camera.fStop = CGFloat(fStop / 1000)
+    }
+
+    /// Keep the authored lens and viewing direction, moving back only when
+    /// a plate would leave either viewport dimension. With a horizontal FOV,
+    /// a wider canvas narrows the vertical view; stack width alone cannot fit it.
+    private func fittedBlowupEye(_ eye: SCNVector3, target: SCNVector3, fieldOfView: Double,
+                                aspect: Double, captionFraction: Double) -> SCNVector3 {
+        func vector(_ p: SCNVector3) -> SIMD3<Double> { .init(Double(p.x), Double(p.y), Double(p.z)) }
+        let centre = vector(target), offset = vector(eye) - centre
+        var distance = simd_length(offset)
+        let away = offset / distance
+        let right = simd_normalize(simd_cross(SIMD3<Double>(0, 1, 0), away))
+        let up = simd_cross(away, right)
+        let tanHorizontal = tan(fieldOfView * .pi / 360)
+        let tanVertical = tanHorizontal / max(0.01, aspect)
+        let bottom = max(0.1, 0.92 - 2 * captionFraction)
+        for entry in nearDiscs {
+            let (low, high) = entry.node.boundingBox
+            for corner in 0..<8 {
+                let local = SCNVector3(corner & 1 == 0 ? low.x : high.x,
+                                      corner & 2 == 0 ? low.y : high.y,
+                                      corner & 4 == 0 ? low.z : high.z)
+                let p = vector(entry.node.convertPosition(local, to: nil)) - centre
+                let y = simd_dot(p, up)
+                let fitWidth = abs(simd_dot(p, right)) / (tanHorizontal * 0.92)
+                let fitHeight = abs(y) / (tanVertical * (y < 0 ? bottom : 0.92))
+                distance = max(distance, simd_dot(p, away) + max(fitWidth, fitHeight))
+            }
+        }
+        let fitted = centre + away * distance
+        return SCNVector3(Float(fitted.x), Float(fitted.y), Float(fitted.z))
     }
 
     /// 0 assembled ... 1 exploded. Only the near sleeve's stack slides; the
@@ -1387,7 +1423,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 2
+    static let version = 3
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()

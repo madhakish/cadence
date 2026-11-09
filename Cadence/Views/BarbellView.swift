@@ -215,22 +215,26 @@ struct BarbellInspectionView: View {
     var body: some View {
         let scene = BarbellScene(loadout: solution.loadout, style: plateStyle, exploded: exploded, theme: plateTheme)
         let layout = BarbellInspector.layout(loadout: solution.loadout, style: plateStyle, explode: exploded ? 1 : 0, theme: plateTheme)
+        let captionScale = max(1, captionSize / 14)
+        // Grow both dimensions with the captions. Widening alone either clips
+        // the plates or forces the camera back until enlarged captions overlap.
+        let height = exploded ? 300 * captionScale : 300
         VStack(alignment: .leading, spacing: 12) {
             GeometryReader { proxy in
                 let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
-                let width = exploded ? max(proxy.size.width, CGFloat(minimum) * max(1, captionSize / 14)) : proxy.size.width
+                let width = exploded ? max(proxy.size.width, CGFloat(minimum) * captionScale) : proxy.size.width
                 ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
                     // Every iOS 17 device has Metal; the studio has no non-Metal path.
                     BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
                                      exploded: exploded, reduceMotion: reduceMotion)
-                    .frame(width: width, height: 300)
+                    .frame(width: width, height: height)
                     .contentShape(Rectangle())
                     .onTapGesture { toggle() }
                 }
                 .scrollDisabled(!exploded || width <= proxy.size.width)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
             }
-            .frame(height: 300)
+            .frame(height: height)
             .accessibilityIdentifier("barbell-inspection-artwork")
             .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
             .accessibilityHint(exploded ? "The near sleeve's plates are slid out; both sides are mirrored. Tap to assemble." : "The whole loaded bar. Tap to slide the plates out and inspect each one.")
