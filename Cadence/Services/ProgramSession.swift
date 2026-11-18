@@ -164,14 +164,17 @@ enum ProgramSession {
             let blockLoads = prescription.blocks.map {
                 neat($0.weightLb, exercise, isMain: exactLoad, phase: phase)
             }
-            let topPreparationLoad = blockLoads.max() ?? weightLb
+            // When the method opens with a prescribed ramp, build up to its
+            // first rung. Warming up to the top set can overshoot that opener.
+            let preparationLoad = (prescription.blocks.first?.kind == .ramp
+                ? blockLoads.first : blockLoads.max()) ?? weightLb
             if exercise.type == .barbell && resolvedWarmup != .none {
                 let fullRamp = WarmupRamp.ramp(
-                    workingLb: topPreparationLoad, barLb: barLb,
+                    workingLb: preparationLoad, barLb: barLb,
                     roundingLb: program.roundingLb,
                     includeEmptyBar: includesEmptyBarWarmup(for: exercise)
                 )
-                let achievedRamp = achievableWarmups(fullRamp, workingLb: topPreparationLoad,
+                let achievedRamp = achievableWarmups(fullRamp, workingLb: preparationLoad,
                                                      gym: defaultGym, bar: selectedBar, exercise: exercise)
                 let ramp = resolvedWarmup == .short ? Array(achievedRamp.suffix(2)) : achievedRamp
                 for wu in ramp {
@@ -182,7 +185,7 @@ enum ProgramSession {
                     so += 1
                 }
             } else if exercise.type == .dumbbell && resolvedWarmup != .none {
-                let fullRamp = WarmupRamp.dumbbellRamp(workingLb: topPreparationLoad, roundingLb: loadStep)
+                let fullRamp = WarmupRamp.dumbbellRamp(workingLb: preparationLoad, roundingLb: loadStep)
                 let ramp = resolvedWarmup == .short ? Array(fullRamp.suffix(2)) : fullRamp
                 for wu in ramp {
                     insertSet(entry, order: so, weight: wu.weightLb, reps: wu.reps, warmup: true,
@@ -531,6 +534,18 @@ enum ProgramSession {
                                  gym: Gym?, bar: Bar, stepLb: Double,
                                  phase: CyclePhase? = nil) -> Double {
         guard exercise?.type == .barbell, weightLb > 0 else { return weightLb }
+        let plates = PlateMath.stationPlates(
+            preference: exercise?.stationDenomination,
+            gymPlates: gym?.availablePlates ?? Plate.allStandard
+        )
+        let collarLb = gym?.collarWeightLb ?? 0
+        let policy = gym?.loadingPolicy ?? .closest
+        // A directional or exact policy constrains the original strategy target.
+        // Rounding first could turn a 132 lb ceiling into a 135 lb prescription.
+        if policy != .closest {
+            return PlateMath.solve(targetLb: weightLb, bar: bar, plates: plates,
+                                   collarLb: collarLb, policy: policy).loadout.totalLb
+        }
         let rounded = neatWeight(weightLb, isBarbell: true, isMain: isMain,
                                  barLb: bar.lb, stepLb: stepLb)
         // Quantize BEFORE solving (epic #155 Stage 3), but only a target that
@@ -546,22 +561,11 @@ enum ProgramSession {
         let onStep = stepLb > 0
             && abs(rounded / stepLb - (rounded / stepLb).rounded()) < 1e-9
         let quantized = onStep ? rounded : PlateMath.quantize(
-            targetLb: rounded, bar: bar,
-            plates: PlateMath.stationPlates(
-                preference: exercise?.stationDenomination,
-                gymPlates: gym?.availablePlates ?? Plate.allStandard
-            ),
-            collarLb: gym?.collarWeightLb ?? 0,
+            targetLb: rounded, bar: bar, plates: plates, collarLb: collarLb,
             options: .workingSet(bias: phase == .deload ? .down : .up)
         )
         let options = PlateMath.prescriptionOptions(
-            targetLb: quantized, bar: bar,
-            plates: PlateMath.stationPlates(
-                preference: exercise?.stationDenomination,
-                gymPlates: gym?.availablePlates ?? Plate.allStandard
-            ),
-            collarLb: gym?.collarWeightLb ?? 0,
-            policy: gym?.loadingPolicy ?? .closest,
+            targetLb: quantized, bar: bar, plates: plates, collarLb: collarLb,
             preferOverOnTie: phase == .volume
         )
         // The chosen stack's physical mass is the achievable prescription.
@@ -577,23 +581,21 @@ enum ProgramSession {
     /// extra warmup equal to the working weight.
     static func achievableWarmups(_ ramp: [WarmupSet], workingLb: Double,
                                   gym: Gym?, bar: Bar, exercise: Exercise? = nil) -> [WarmupSet] {
+        let rackPlates = PlateMath.stationPlates(
+            preference: exercise?.stationDenomination,
+            gymPlates: gym?.availablePlates ?? Plate.allStandard
+        )
+        let collarLb = gym?.collarWeightLb ?? 0
+        let policy = gym?.loadingPolicy ?? .closest
         var seen: Set<Double> = []
         return ramp.compactMap { warmup in
-            // Ramp rungs are approximate by definition, so they snap to
-            // large-plate loads first (epic #155 Stage 3): nobody builds a
-            // 130 lb warmup out of 25s, 10s and a change plate.
-            let rackPlates = PlateMath.stationPlates(
-                preference: exercise?.stationDenomination,
-                gymPlates: gym?.availablePlates ?? Plate.allStandard
-            )
-            let target = PlateMath.quantize(
+            let target = policy == .closest ? PlateMath.quantize(
                 targetLb: warmup.weightLb, bar: bar, plates: rackPlates,
-                collarLb: gym?.collarWeightLb ?? 0, options: .warmup
-            )
+                collarLb: collarLb, options: .warmup
+            ) : warmup.weightLb
             let solution = PlateMath.solve(
                 targetLb: target, bar: bar, plates: rackPlates,
-                collarLb: gym?.collarWeightLb ?? 0,
-                policy: gym?.loadingPolicy ?? .closest
+                collarLb: collarLb, policy: policy
             )
             let stored = PlateMath.storedPrescription(
                 targetLb: target, achievedLb: solution.loadout.totalLb,

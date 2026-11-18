@@ -257,15 +257,15 @@ The engine keeps three separate values:
    active gym's bar, collars, plates, and loading policy; and
 3. the final performed load entered during the session.
 
-Resolving is **loading guidance, not a new prescription**. When the closest
-clean stack lands within 2 lb of the target — routine when kg plates serve a
-lb prescription — the session keeps the neat programmed number and the bar
-graphic explains the actual plates, so a 220 lb prescription never becomes a
-221.4 lb one that then compounds through the stepper and progression. Only a
-genuinely unreachable target stores the achieved load.
+The planned load is the physical weight of the selected bar, collars, and
+plates. For example, a mixed rack can produce a fractional-pound planned load
+even when the program target is a whole number. The iPhone workout preview
+shows the program target beside the prescription when the rack changes it.
 
 With the default Closest policy, equal-distance ties choose the heavier load on
 a Volume exposure and the lighter load on Peak/other exposures. Explicit gym
-policies (Never over, Never under, or Exact) take priority. When snapping
+policies (Never over, Never under, or Exact) apply directly to the original
+working or warmup target, before any convenience rounding. If the rack cannot
+satisfy the policy, the solver falls back to its closest available stack. When snapping
 changes a target, the UI shows the nearest load below and above with a per-side
 plate breakdown.

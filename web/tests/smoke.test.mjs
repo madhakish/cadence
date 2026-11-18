@@ -283,6 +283,19 @@ for (const track of [
     "legacy empty plate inventory falls back to the standard rack");
   ok(barbell.stationPlates("lb", legacyRack).length === C.STANDARD_LB.length,
     "legacy empty inventory also renders the standard rack");
+  const policyRack = { ...gym, collarWeightLb: 0, plateToggles:
+    C.STANDARD_LB.map(plate => ({ ...plate, enabled: true })) };
+  for (const [policy, target, phase, expected] of [
+    ["under", 132, 1, 130], ["over", 138, 4, 140], ["exact", 130, 1, 130],
+  ]) {
+    const rack = { ...policyRack, loadingPolicy: policy };
+    for (const isMain of [true, false]) {
+      ok(session.neatProgramWeight(target, squat, isMain, 45, 5, rack, phase) === expected,
+        `${policy} honors the original ${target} lb working target (main: ${isMain})`);
+    }
+    const [warmup] = session.achievableWarmups([{ weightLb: target, reps: 3 }], 185, C.BARS.bar45lb, rack);
+    ok(warmup?.weightLb === expected, `${policy} honors the original ${target} lb warmup target`);
+  }
   const barOnlyRack = { ...legacyRack, plateToggles: [{ value: 45, unit: "lb", enabled: false }] };
   ok(session.neatProgramWeight(135, squat, true, 45, 5, barOnlyRack) === 50,
     "nonempty all-disabled inventory remains an intentional bar-only rack");
@@ -3265,6 +3278,10 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   let program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   const id = await session.createSessionFromProgramDay(program, program.days[0]);
   const s531 = await db.Sessions.get(id);
+  const firstRamp = s531.exercises[0].sets.find(set => set.prescriptionBlock === "ramp");
+  const warmups = s531.exercises[0].sets.filter(set => set.isWarmup);
+  ok(warmups.length > 0 && warmups.every(set => set.weightLb < firstRamp.weightLb),
+    "5/3/1 warmups finish below the first prescribed ramp set");
   const blocks = s531.exercises[0].sets.filter((set) => !set.isWarmup).map((set) => set.prescriptionBlock);
   ok(blocks.includes("amrap") && !blocks.includes("work"),
     `a 531 day carries an amrap top set and no ordinary work set (${blocks})`);
