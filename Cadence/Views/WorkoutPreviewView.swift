@@ -11,6 +11,7 @@ struct WorkoutPreviewView: View {
     let program: Program
     let day: ProgramDay
     let onStart: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var plateDetail: PreviewPlateDetail?
 
     private struct PreviewPlateDetail: Identifiable {
@@ -33,9 +34,8 @@ struct WorkoutPreviewView: View {
 
     /// The shared preview pipeline — the preview and the started session
     /// must never disagree.
-    private func previewPlans(for lift: ProgramLift) -> (raw: SessionPlan, snapped: SessionPlan) {
-        let exercise = exercises.first { $0.name == lift.exerciseName }
-        return ProgramSession.previewPlan(
+    private func previewPlans(for lift: ProgramLift, exercise: Exercise?) -> (raw: SessionPlan, snapped: SessionPlan) {
+        ProgramSession.previewPlan(
             for: lift, exercise: exercise, program: program, phase: phase,
             planningBase: ProgramSession.planningBase(
                 for: lift, exercise: exercise, program: program, sessions: completedSessions
@@ -45,12 +45,12 @@ struct WorkoutPreviewView: View {
         )
     }
 
-    private func targetPlan(for lift: ProgramLift) -> SessionPlan {
-        previewPlans(for: lift).raw
-    }
+    private var stacksLiftHeader: Bool { dynamicTypeSize.isAccessibilitySize || unitDisplay == .both }
 
-    private func plan(for lift: ProgramLift) -> SessionPlan {
-        previewPlans(for: lift).snapped
+    private var liftHeaderLayout: AnyLayout {
+        stacksLiftHeader
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
     }
 
     var body: some View {
@@ -78,43 +78,47 @@ struct WorkoutPreviewView: View {
                 } else {
                 ForEach(day.orderedLifts) { lift in
                     let exercise = exercises.first { $0.name == lift.exerciseName }
-                    let target = targetPlan(for: lift)
-                    let p = plan(for: lift)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
+                    let (target, plan) = previewPlans(for: lift, exercise: exercise)
+                    VStack(alignment: .leading, spacing: 8) {
+                        liftHeaderLayout {
                             NavigationLink {
                                 ExerciseDetailByNameView(name: lift.exerciseName)
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(lift.exerciseName).font(.subheadline.bold())
+                                    Text(lift.exerciseName).font(.display(.headline))
                                     SlotPrescriptionBadge(
                                         lift: lift, rotation: program.currentWeek,
-                                        movementGroup: exercises.first { $0.name == lift.exerciseName }?.movementGroup,
+                                        movementGroup: exercise?.movementGroup,
                                         focus: program.focus
                                     )
                                 }
                             }
                             .buttonStyle(.plain)
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(unitDisplay.format(lb: p.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
-                                    .font(.body.bold().monospacedDigit())
-                                Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: stacksLiftHeader ? .leading : .trailing, spacing: 2) {
+                                Text(unitDisplay.format(lb: plan.weightLb) + (exercise?.loadBasis.shortSuffix ?? ""))
+                                    .font(.figure(.title3))
+                                Text("\(plan.sets) × \(plan.reps)")
+                                    .font(.callout.monospacedDigit())
+                                if abs(target.weightLb - plan.weightLb) > 0.01 {
+                                    Text("Program target \(unitDisplay.format(lb: target.weightLb))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .accessibilityElement(children: .combine)
                         }
-                        if p.weightLb > 0 {
-                            let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
-                            let type = previewExercise?.type
-                            if type == .barbell {
+                        if plan.weightLb > 0 {
+                            if exercise?.type == .barbell {
                                 let bar = defaultGym?.defaultBar ?? .bar45lb
                                 let solution = authoritativePlateSolution(
-                                        targetLb: p.weightLb,
+                                        targetLb: plan.weightLb,
                                         fallbackUnit: unitDisplay.primaryUnit,
                                         bar: bar,
                                         gym: defaultGym,
-                                        stationDenomination: previewExercise?.stationDenomination
+                                        stationDenomination: exercise?.stationDenomination
                                     )
-                                let style: PlateVisualStyle = previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                let style: PlateVisualStyle = exercise?.movementGroup == "olympic" ? .bumper : .steel
                                 let theme = defaultGym?.plateTheme ?? .custom
                                 BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style, plateTheme: theme) {
                                     plateDetail = PreviewPlateDetail(solution: solution, style: style, theme: theme, requestedLb: target.weightLb)
@@ -122,8 +126,8 @@ struct WorkoutPreviewView: View {
                                 Text("\(solution.loadout.perSideLabel) / side")
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
-                            } else if type == .dumbbell {
-                                DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
+                            } else if exercise?.type == .dumbbell {
+                                DumbbellView(weightLb: plan.weightLb, unit: unitDisplay.primaryUnit)
                             }
                         }
                     }

@@ -10,6 +10,51 @@ final class ProgramEquipmentTests: XCTestCase {
         return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
     }
 
+    func testExplicitRackPolicyUsesOriginalWorkingAndWarmupTargets() {
+        let gym = Gym(name: "Synthetic pound rack")
+        gym.plateToggles = Plate.standardLb.map { PlateToggle(plate: $0) }
+        let lift = Exercise(name: "Synthetic squat", category: .main, type: .barbell, movementGroup: "squat")
+        let examples: [(LoadingPolicy, Double, CyclePhase, Double)] = [
+            (.under, 132, .volume, 130), (.over, 138, .deload, 140), (.exact, 130, .volume, 130)
+        ]
+        for (policy, target, phase, expected) in examples {
+            gym.loadingPolicy = policy
+            for main in [true, false] {
+                XCTAssertEqual(ProgramSession.achievableWeight(
+                    target, exercise: lift, isMain: main, gym: gym, bar: .bar45lb,
+                    stepLb: 5, phase: phase
+                ), expected)
+            }
+            let ramp = ProgramSession.achievableWarmups(
+                [WarmupSet(weightLb: target, reps: 3)], workingLb: 185,
+                gym: gym, bar: .bar45lb, exercise: lift
+            )
+            XCTAssertEqual(ramp, [WarmupSet(weightLb: expected, reps: 3)])
+        }
+    }
+
+    func testFiveThreeOneWarmupsFinishBelowFirstPrescribedRamp() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let squat = Exercise(name: "Back Squat", category: .main, type: .barbell, movementGroup: "squat")
+        let program = Program(name: "Synthetic 531")
+        let day = ProgramDay(name: "Lower", order: 0)
+        let lift = ProgramLift(exerciseName: squat.name, role: .main, prescription: .fiveThreeOne,
+                               baseWeightLb: 300, estimatedMaxLb: 340)
+        context.insert(squat)
+        context.insert(program)
+        context.insert(day)
+        context.insert(lift)
+        program.days.append(day)
+        day.lifts.append(lift)
+        let session = try ProgramSession.make(program: program, day: day, context: context)
+        let sets = try XCTUnwrap(session.exercises.first).orderedSets
+        let opener = try XCTUnwrap(sets.first { $0.prescriptionBlock == .ramp })
+        let warmups = sets.filter(\.isWarmup)
+        XCTAssertFalse(warmups.isEmpty)
+        XCTAssertTrue(warmups.allSatisfy { $0.weightLb < opener.weightLb })
+    }
+
     func testRestrictionRemovesMachineSlotsWithoutRewritingHistoryOrProgress() throws {
         let container = try makeContainer()
         let context = container.mainContext
