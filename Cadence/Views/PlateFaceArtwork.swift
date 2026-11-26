@@ -1,106 +1,21 @@
 import CadenceCore
 import SwiftUI
 
-/// The five complete reference photographs are equipment-specific. All other
-/// rows use source-derived unlettered material and the actual stored plate.
+/// Inventory and progress badges use the same photographic component as the
+/// assembled bar. Denominations come from the actual equipment record.
 struct PlateFaceArtwork: View {
     let plate: Plate
     let theme: PlateThemeID
     let style: PlateVisualStyle
     var showsLettering = true
 
-    static func referencePhoto(plate: Plate, theme: PlateThemeID, style: PlateVisualStyle) -> String? {
-        guard plate.unit == .lb,
-              theme == .lbColourBumpers || (theme == .custom && style == .bumper),
-              [55.0, 45, 35, 25, 10].contains(plate.value) else { return nil }
-        return "AstraBumper\(plate.denomination)lb"
-    }
-
-    static func surface(plate: Plate, theme: PlateThemeID, style: PlateVisualStyle) -> String {
-        surface(finish: PlateTheme.material(plate, theme: theme, style: style).finish,
-                blackRubber: theme == .blackBumpersBand || theme == .cadenceHouse)
-    }
-
-    static func surface(finish: PlateFinish, blackRubber: Bool) -> String {
-        switch finish {
-        case .rubber: blackRubber ? "AstraPlateBlackRubber" : "AstraPlateRubber"
-        case .powder: "AstraPlatePowder"
-        case .gloss: "AstraPlateGloss"
-        case .castIron: "AstraPlateCastIron"
-        case .hammertone: "AstraPlateHammertone"
-        case .machined: "AstraPlateMachined"
-        }
-    }
-
     var body: some View {
-        if showsLettering, let photo = Self.referencePhoto(plate: plate, theme: theme, style: style) {
-            Image(decorative: photo).resizable().scaledToFit()
-        } else {
-            let colour = PlateTheme.colour(plate, theme: theme, style: style)
-            let surface = Image(decorative: Self.surface(plate: plate, theme: theme, style: style)).resizable()
-            GeometryReader { proxy in
-                let width = proxy.size.width, height = proxy.size.height
-                let geometry = PlateTheme.geometry(plate, theme: theme, style: style)
-                let lip = showsLettering ? min(width * 0.14, width * CGFloat(geometry.thickness / geometry.diameter) * 0.75) : 0
-                let faceWidth = showsLettering ? width * 0.77 : width
-                ZStack {
-                    if showsLettering {
-                        // A shallow three-quarter angle gives a thick rubber tyre
-                        // and a thin calibrated disc visibly different profiles.
-                        paintedSurface(surface, fill: colour.fill)
-                            .brightness(-0.12)
-                            .frame(width: faceWidth, height: height)
-                            .offset(x: -lip / 2)
-                    }
-                    ZStack {
-                        paintedSurface(surface, fill: colour.fill)
-                        if let band = PlateTheme.band(plate, theme: theme) {
-                            Ellipse().strokeBorder(Color(hex: band), lineWidth: height * 0.035)
-                                .frame(width: faceWidth * 0.87, height: height * 0.87)
-                        }
-                        Image(decorative: "AstraPlateHub").resizable()
-                            .colorMultiply(hubTint)
-                        if showsLettering {
-                            Text(plate.label)
-                                .font(.system(size: height * 0.16, weight: .heavy))
-                                .monospacedDigit()
-                                .lineLimit(1).minimumScaleFactor(0.5)
-                                .foregroundStyle(Self.lettering(on: colour.fill))
-                                .frame(width: faceWidth * 0.76)
-                                .position(x: faceWidth / 2, y: height * 0.75)
-                        }
-                    }
-                    .frame(width: faceWidth, height: height)
-                    .offset(x: lip / 2)
-                }
-                .frame(width: width, height: height)
+        if let product = PhotoEquipment.disc(plate: plate, theme: theme, style: style, lettered: showsLettering) {
+            if showsLettering {
+                Image(uiImage: product).resizable().interpolation(.high).scaledToFit().accessibilityHidden(true)
+            } else {
+                Image(uiImage: product).resizable().interpolation(.high).accessibilityHidden(true)
             }
-        }
-    }
-
-    private func paintedSurface(_ image: Image, fill: UInt32) -> some View {
-        Color(hex: fill)
-            .overlay { image.blendMode(.hardLight) }
-            .compositingGroup()
-            .mask(image)
-    }
-
-    // Denomination text remains legible on black plates with dark colour bands.
-    static func lettering(on fill: UInt32) -> Color {
-        func linear(_ component: UInt32) -> Double {
-            let value = Double(component & 255) / 255
-            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        let luminance = 0.2126 * linear(fill >> 16) + 0.7152 * linear(fill >> 8) + 0.0722 * linear(fill)
-        return luminance > 0.18 ? Color(hex: 0x101113) : Color(hex: 0xF7F4EF)
-    }
-
-    private var hubTint: Color {
-        switch PlateTheme.description(theme).hubFinish {
-        case .chrome: .white
-        case .blackSteel: Color(white: 0.56)
-        case .castIron: Color(white: 0.50)
-        case .hammertone: Color(white: 0.76)
         }
     }
 }
@@ -169,16 +84,17 @@ struct PlateStackMini: View {
                 PlateFaceArtwork(plate: disc.plate, theme: theme, style: style,
                                  showsLettering: false)
                     .frame(width: disc.width * scale, height: disc.height * scale)
-                    .offset(x: disc.x * scale)
+                    .offset(x: (layout.width - disc.x - disc.width) * scale)
             }
             // The end of the sleeve emerges through the outermost bore.
             sleeve.frame(width: layout.exposedSleeve * scale, height: 3.8 * scale)
-                .offset(x: (layout.width - layout.exposedSleeve) * scale)
+            Image(decorative: "PhotoEndcap").resizable()
+                .frame(width: 1.9 * scale, height: 3.8 * scale)
         }
         .frame(width: layout.width * scale, height: 36 * scale, alignment: .leading)
     }
 
     private var sleeve: some View {
-        Image(decorative: "AstraSleeve").resizable()
+        Image(decorative: "PhotoSleeve").resizable()
     }
 }

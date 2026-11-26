@@ -1,5 +1,4 @@
 import SwiftUI
-import Metal
 import CadenceCore
 
 /// One rack-resolution path for native callers. The resulting `PlateSolution`
@@ -207,15 +206,8 @@ struct BarbellInspectionView: View {
                 let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
                 let width = exploded ? max(proxy.size.width, CGFloat(minimum) * captionScale) : proxy.size.width
                 ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
-                    Group {
-                        if MTLCreateSystemDefaultDevice() != nil {
-                            BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
-                                             exploded: exploded, reduceMotion: reduceMotion)
-                        } else {
-                            StudioLoadoutFallback(loadout: solution.loadout, theme: plateTheme, style: plateStyle,
-                                                  exploded: exploded)
-                        }
-                    }
+                    BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
+                                     exploded: exploded, reduceMotion: reduceMotion)
                     .frame(width: width, height: height)
                     .contentShape(Rectangle())
                     .onTapGesture { toggle() }
