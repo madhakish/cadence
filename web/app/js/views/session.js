@@ -74,7 +74,9 @@ export function achievableWarmups(ramp, workingLb, bar, gym = null, exercise = n
     // Ramp rungs are approximate by definition, so they snap to large-plate
     // loads first (epic #155 Stage 3): nobody builds a 130 lb warmup out of
     // 25s, 10s and a change plate.
-    const target = C.quantizeLoad(warmup.weightLb, bar, plates, collarLb, C.QUANTIZE_WARMUP);
+    const target = policy === "closest"
+      ? C.quantizeLoad(warmup.weightLb, bar, plates, collarLb, C.QUANTIZE_WARMUP)
+      : warmup.weightLb;
     // Store the physical mass of this ramp rung.
     const weightLb = C.storedPrescription(
       target, C.solve(target, bar, plates, 10, collarLb, policy).totalLb,
@@ -2203,9 +2205,13 @@ async function advanceProgram(session, milestones) {
 // card and the stored prescription never disagree.
 export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym = null, phase = null) {
   if (!exercise || exercise.type !== "barbell" || !(weightLb > 0)) return weightLb;
-  const rounded = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
   const bar = gym ? C.barById(gym.defaultBarId) : C.BARS.bar45lb;
   const plates = availablePlates(gym, exercise);
+  const collarLb = gym?.collarWeightLb || 0;
+  const policy = gym?.loadingPolicy || "closest";
+  // Explicit rack policies apply to the original strategy target.
+  if (policy !== "closest") return C.solve(weightLb, bar, plates, 10, collarLb, policy).totalLb;
+  const rounded = !isMain ? C.barLoadable(weightLb, barLb, stepLb) : weightLb;
   // Quantize BEFORE solving (epic #155 Stage 3): trade a change plate for a
   // clean neighbour within one step, erring up while the cycle is building
   // and down on the deload's recovery exposure, so a progressing lifter is
@@ -2217,11 +2223,11 @@ export function neatProgramWeight(weightLb, exercise, isMain, barLb, stepLb, gym
   // program's deliberate arithmetic (wave multiplier, deload fraction, e1RM
   // feedback), so quantizing it would silently rewrite progression.
   const onStep = stepLb > 0 && Math.abs(rounded / stepLb - Math.round(rounded / stepLb)) < 1e-9;
-  const target = onStep ? rounded : C.quantizeLoad(rounded, bar, plates, gym?.collarWeightLb || 0,
+  const target = onStep ? rounded : C.quantizeLoad(rounded, bar, plates, collarLb,
     C.quantizeWorkingSet(phase === 4 ? "down" : "up"));
   // Preserve the physical mass selected for this rack.
   return C.storedPrescription(target, C.prescriptionPlateOptions(target, bar, plates, 10,
-    gym?.collarWeightLb || 0, gym?.loadingPolicy || "closest", phase === 1).selected.totalLb,
+    collarLb, policy, phase === 1).selected.totalLb,
   C.barLabelLb(bar));
 }
 
@@ -2452,17 +2458,19 @@ export async function createSessionFromProgramDay(program, day) {
     const warmupPolicy = (lift.warmupPolicy || "automatic") === "automatic"
       ? ((lift.role === "complementary" && liftIndex > 0) || preparedMovementGroups.has(ex?.movementGroup) ? "short" : "full")
       : lift.warmupPolicy;
-    const topPreparationLoad = blockLoads.length ? Math.max(...blockLoads) : weightLb;
+    // A method with its own opening ramp already builds from there to the top set.
+    const preparationLoad = prescription.blocks[0]?.kind === "ramp"
+      ? blockLoads[0] : Math.max(weightLb, ...blockLoads);
     if (ex && ex.type === "barbell" && warmupPolicy !== "none") {
       const ramp = achievableWarmups(
-        C.warmupRamp(topPreparationLoad, barLb, program.roundingLb,
+        C.warmupRamp(preparationLoad, barLb, program.roundingLb,
           includesEmptyBarWarmup(ex.name)),
-        topPreparationLoad, bar, gym, ex,
+        preparationLoad, bar, gym, ex,
       );
       for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", ...loadOptions(ex) }));
     }
     if (ex && ex.type === "dumbbell" && warmupPolicy !== "none") {
-      const ramp = C.dumbbellWarmupRamp(topPreparationLoad, loadStep);
+      const ramp = C.dumbbellWarmupRamp(preparationLoad, loadStep);
       for (const wu of warmupPolicy === "short" ? ramp.slice(-2) : ramp) sets.push(mkSet(so++, wu.weightLb, wu.reps, { warm: true, unit, prescriptionBlock: "warmup", perSide: ex.isUnilateral, ...loadOptions(ex) }));
     }
     prescription.blocks.forEach((block, blockIndex) => {
