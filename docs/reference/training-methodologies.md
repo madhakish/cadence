@@ -94,7 +94,7 @@ misses reset that slot 5%.
 The slot base is the **training max** (90% of 1RM — the original book's value),
 never a working weight. Weeks map onto Cadence's four rotations: 65/75/85%
 ×5/5/5⁺, 70/80/90% ×3/3/3⁺, 75/85/95% ×5/3/1⁺, then 50/60% ×5 on Cadence’s shortened recovery rotation.
-Generated warmups build up to the first prescribed ramp set.
+Generated warmups build up to the first prescribed ramp set. Switching bars or gyms during the session recalculates the remaining warmups against that same opening set.
 The final set of each loading week is an AMRAP: the shown reps are the *minimum*, extra
 quality reps are welcome and feed the e1RM estimate. Only the top set gates
 progression — hit the minimum across the cycle and the TM moves +5 lb (press,

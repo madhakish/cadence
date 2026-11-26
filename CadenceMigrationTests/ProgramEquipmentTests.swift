@@ -48,11 +48,21 @@ final class ProgramEquipmentTests: XCTestCase {
         program.days.append(day)
         day.lifts.append(lift)
         let session = try ProgramSession.make(program: program, day: day, context: context)
-        let sets = try XCTUnwrap(session.exercises.first).orderedSets
+        let entry = try XCTUnwrap(session.exercises.first)
+        let sets = entry.orderedSets
         let opener = try XCTUnwrap(sets.first { $0.prescriptionBlock == .ramp })
         let warmups = sets.filter(\.isWarmup)
         XCTAssertFalse(warmups.isEmpty)
         XCTAssertTrue(warmups.allSatisfy { $0.weightLb < opener.weightLb })
+
+        let prescribedLoads = sets.filter { !$0.isWarmup }.map(\.weightLb)
+        XCTAssertGreaterThan(try XCTUnwrap(entry.plannedWeightLb), opener.weightLb)
+        entry.barID = Bar.bar35lb.id
+        synchronizeWarmups(entry, bar: .bar35lb, gym: nil, enteredUnit: .lb, context: context)
+        let rebuilt = entry.orderedSets.filter(\.isWarmup)
+        XCTAssertFalse(rebuilt.isEmpty)
+        XCTAssertTrue(rebuilt.allSatisfy { $0.weightLb < opener.weightLb })
+        XCTAssertEqual(entry.orderedSets.filter { !$0.isWarmup }.map(\.weightLb), prescribedLoads)
     }
 
     func testRestrictionRemovesMachineSlotsWithoutRewritingHistoryOrProgress() throws {
