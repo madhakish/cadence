@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// A first install precaches the whole app shell (about 220 files, 12.6 MB),
+// A first install precaches the whole app shell,
 // activates, and claims the open page; the production app answers that
 // controllerchange with exactly one reload. Wait for that reload's load event,
 // armed before navigating so it cannot be missed, instead of polling page state

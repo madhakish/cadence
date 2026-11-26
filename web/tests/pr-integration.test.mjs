@@ -48,10 +48,16 @@ assert.equal(profile.find((p) => C.plateId(p) === "45-lb").enabled, false, "an o
 assert.deepEqual(T.plateThemeInventory(inventory, "custom"), inventory);
 const p = { value: 20, unit: "kg" };
 const colour = T.plateThemeColour(p, "lbBlackIron", "steel");
-assert.equal(plateBadgeSVG(p, "steel", { plateTheme: "lbBlackIron" }).querySelector("circle").getAttribute("fill"), colour.fill);
+const assertIronBadge = badge => {
+  assert.match(badge.querySelector("image").getAttribute("href"), /PhotoFaceIron\.png$/);
+  const channels = [...badge.querySelector("feComponentTransfer").children].map(channel =>
+    Math.round(Number(channel.getAttribute("tableValues").split(" ")[1]) * 255).toString(16).padStart(2, "0"));
+  assert.equal("#" + channels.join(""), colour.fill);
+};
+assertIronBadge(plateBadgeSVG(p, "steel", { plateTheme: "lbBlackIron" }));
 const solution = C.enteredPlateSolution(C.BARS.bar45lb, [{ plate: p, count: 1 }]);
 const view = loadoutSummary(null, solution, { plateTheme: "lbBlackIron" });
 assert.equal(view.querySelector(".loadout-cell-text .sub").textContent, "Iron");
-assert.equal(view.querySelector(".plate-badge circle").getAttribute("fill"), colour.fill);
+assertIronBadge(view.querySelector(".plate-badge"));
 assert.equal(barbellSVG(solution, "full", "steel", { plateTheme: "lbBlackIron" }).plateTheme, "lbBlackIron");
 console.log("PR integration: carry lane bank/rebuild, preserved implement counts, themed badges and explicit profile inventory passed");

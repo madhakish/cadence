@@ -18,6 +18,15 @@ final class VisualProofUITests: XCTestCase {
 
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
+        let heroPlate = element("barbell-plate-left-0")
+        XCTAssertTrue(heroPlate.exists, "The default fixture's bar-total set should show a loaded bar")
+        // The primary action is on the first screen, above the tab bar.
+        assertOnFirstScreen(app.buttons["resume-session"])
+        // The membership tag stays one tap from launch (product rule), as a
+        // labelled header control rather than a full-width accent block.
+        XCTAssertTrue(app.buttons["gym-tag"].isHittable)
+        // The program's day list sits on the first screen, not under the tab bar.
+        XCTAssertTrue(app.buttons["preview-program-day"].isHittable)
 
         let activity = app.buttons["activity-quick-log"]
         for _ in 0..<4 where !activity.isHittable { app.swipeUp() }
@@ -25,6 +34,70 @@ final class VisualProofUITests: XCTestCase {
         activity.tap()
         XCTAssertTrue(element("activity-log-screen").waitForExistence(timeout: 5))
         capture("after-02-ad-hoc-work-iphone")
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        // Discard is off the main flow (behind the hero's menu) but still
+        // reachable, and still confirmed before anything is deleted.
+        let resume = app.buttons["resume-session"]
+        for _ in 0..<6 where !resume.isHittable { app.swipeDown() }
+        XCTAssertFalse(app.buttons["Discard session"].exists, "discard must not sit beside Resume")
+        app.buttons["session-actions"].tap()
+        let discard = app.buttons["Discard session"].firstMatch
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        let confirm = app.sheets.buttons["Discard session"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(resume.exists, "the menu alone deletes nothing")
+        confirm.tap()
+        XCTAssertTrue(resume.waitForNonExistence(timeout: 5))
+        for _ in 0..<3 { app.swipeDown() }
+        XCTAssertTrue(app.buttons["start-today"].isHittable)
+        capture("after-01b-home-ready-iphone")
+
+        app.terminate()
+        let category = app.launchArguments.firstIndex(of: "-UIPreferredContentSizeCategoryName")!
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        capture("after-01c-home-accessibility-iphone")
+        // At the largest text size Resume still lands on the first screen
+        // without a scroll; the hero's picture gives way, not the action.
+        assertOnFirstScreen(app.buttons["resume-session"])
+        let program = app.buttons["preview-program-day"]
+        for _ in 0..<4 where !program.isHittable { app.swipeUp() }
+        XCTAssertTrue(program.isHittable)
+        capture("after-01d-home-accessibility-program-iphone")
+
+        // A library edit must not relabel the already-open session. The
+        // fixture gives its heaviest prescribed sets captured meanings that
+        // differ from both the lighter sets and today's exercise definition.
+        app.terminate()
+        app.launchArguments[category + 1] = "UICTContentSizeCategoryL"
+        app.launchArguments.append("--today-load-basis-proof")
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        for (name, load) in [("Back Squat", "60 lb each"), ("Romanian Deadlift", "80 lb assistance")] {
+            let row = app.buttons["today-session-lift-\(name)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertTrue(row.label.contains(load), row.label)
+            XCTAssertFalse(row.label.contains("Each side:"), row.label)
+        }
+        XCTAssertFalse(heroPlate.exists, "Neither displayed load is a total on the bar")
+        capture("after-01e-home-captured-load-basis-iphone")
+
+        // The next workout follows the library as it stands now. Only the
+        // squat is back to a bar total once the captured session is gone.
+        app.buttons["session-actions"].tap()
+        app.buttons["Discard session"].firstMatch.tap()
+        app.sheets.buttons["Discard session"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["start-today"].waitForExistence(timeout: 5))
+        let plannedSquat = app.buttons["today-plan-lift-Back Squat"]
+        let plannedDeadlift = app.buttons["today-plan-lift-Romanian Deadlift"]
+        XCTAssertTrue(plannedSquat.exists && plannedDeadlift.exists)
+        XCTAssertTrue(plannedSquat.label.contains("Each side:"), plannedSquat.label)
+        XCTAssertFalse(plannedDeadlift.label.contains("Each side:"), plannedDeadlift.label)
+        XCTAssertTrue(heroPlate.exists, "The squat's planned total should show its loaded bar")
     }
 
     func test02CurrentSessionAndExactPlateStack() {
@@ -45,6 +118,24 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(inspect.isHittable)
         XCTAssertTrue(visible.contains(inspect.frame))
         capture("after-03b-current-set-plates-iphone")
+
+        // The fixture's squat is still catalogued as a barbell, but the last
+        // working set snapshots 60 lb per implement. Its exercise pane must
+        // present that recorded meaning without offering a whole-bar inspection.
+        app.terminate()
+        app.launchArguments.append("--today-load-basis-proof")
+        app.launch()
+        let resume = app.buttons["resume-session"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 8))
+        resume.tap()
+        let next = app.buttons["done-set"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        next.tap()
+        XCTAssertTrue(app.staticTexts["SET 3 OF 3"].waitForExistence(timeout: 5))
+        app.buttons["exercise-info-Back Squat"].tap()
+        XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["60 lb each"].exists)
+        XCTAssertFalse(app.buttons["expand-loaded-bar"].exists)
     }
 
     func test03ExercisePaneAndPreservedAnatomy() {
@@ -99,9 +190,9 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let achieved = app.staticTexts["ACHIEVED WITH BAR"]
-        for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
-        XCTAssertTrue(achieved.isHittable)
+        let achieved = element("loadout-achieved-total")
+        XCTAssertTrue(achieved.isHittable,
+                      "The achieved load must be readable before scrolling past the equipment stage")
         capture("after-07-plate-calculator-iphone")
 
         let inspect = element("expand-loaded-bar")
@@ -113,9 +204,11 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 3))
         assertInspectorState("Assembled", button: toggle)
         // The calculator beneath this sheet has its own accessible bar.
-        // The artwork is the SceneKit solid where Metal is available and the
-        // sprite scroll view otherwise; both expose the same plate children.
+        // Both photographic poses expose those same physical plate children.
         let artwork = element("barbell-inspection-artwork")
+        let frame = artwork.frame
+        XCTAssertEqual(frame.width / frame.height, 1672.0 / 941.0, accuracy: 0.03,
+                       "The assembled camera must fit the photograph without stretching its border.")
         let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
         XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)
@@ -143,6 +236,54 @@ final class VisualProofUITests: XCTestCase {
         toggle.tap()
         assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
+
+        app.navigationBars["Loaded bar"].buttons["Done"].tap()
+        let reference = app.buttons["Plate reference"]
+        for _ in 0..<10 where !reference.isHittable { app.swipeUp() }
+        XCTAssertTrue(reference.isHittable)
+        reference.tap()
+        let pounds = app.segmentedControls.buttons["Pounds"]
+        for _ in 0..<4 where !pounds.isHittable { app.swipeUp() }
+        XCTAssertTrue(pounds.isHittable)
+        pounds.tap()
+        let firstPlate = element("plate-reference-55-lb")
+        for _ in 0..<4 where !firstPlate.isHittable { app.swipeUp() }
+        XCTAssertTrue(firstPlate.isHittable)
+        XCTAssertTrue(firstPlate.label.contains("55 lb"))
+        capture("after-07b-astra-pound-plate-reference-iphone")
+        verifyLargeTextInspectorFraming()
+    }
+
+    /// Kept in test04 so the existing visual-proof workflow executes both
+    /// the geometric regression and the real inspector at maximum text size.
+    private func verifyLargeTextInspectorFraming() {
+        app.terminate()
+        app.launchArguments = ["--visual-proof", "--render-lab", "--studio-framing-proof",
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let done = app.staticTexts["render-lab-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 90), "Production studio projection checks must finish")
+        XCTAssertEqual(done.label, "render-lab-done", "A plate left the viewport or caption reserve")
+        let toggle = app.buttons["barbell-explode-toggle"]
+        for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(toggle.isHittable)
+        let artwork = element("barbell-inspection-artwork")
+        let assembledHeight = artwork.frame.height
+        toggle.tap()
+        assertInspectorState("Exploded", button: toggle)
+        let grows = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            artwork.frame.height > assembledHeight * 1.5
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [grows], timeout: 5), .completed,
+                       "The canvas must grow vertically as well as horizontally with its captions")
+        for _ in 0..<5 where artwork.frame.minY < app.windows.firstMatch.frame.minY + 80 { app.swipeDown() }
+        capture("barbell-long-stack-accessibility-top-iphone")
+        app.swipeLeft()
+        capture("barbell-long-stack-accessibility-scrolled-iphone")
+        for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(toggle.isHittable, "The assembled/exploded control remains reachable at large text")
+        capture("barbell-long-stack-accessibility-captions-iphone")
     }
 
     /// #196: the floating plate button must never sit on top of a control.
@@ -171,6 +312,15 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertFalse(plate.isHittable, "the session cover has no floating plate button; its bottom bar owns that band")
     }
 
+    /// Exists, hittable and wholly above the tab bar, without any scrolling.
+    private func assertOnFirstScreen(_ control: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(control.waitForExistence(timeout: 5), "\(control) never materialised", file: file, line: line)
+        XCTAssertTrue(control.isHittable, "\(control) is not hittable", file: file, line: line)
+        let tabBar = app.tabBars.firstMatch.frame
+        XCTAssertLessThanOrEqual(control.frame.maxY, tabBar.minY,
+                                 "\(control.frame) ends under the tab bar at \(tabBar.minY)", file: file, line: line)
+    }
+
     private func assertScrolledEndClearsPlateButton(_ surface: String, button plate: XCUIElement) {
         for _ in 0..<6 { app.swipeUp() }
         // Capture BEFORE asserting so the artifact shows the state that was
@@ -189,7 +339,7 @@ final class VisualProofUITests: XCTestCase {
 
     func test09WorkoutPreviewInspection() {
         let preview = app.buttons["preview-program-day"]
-        for _ in 0..<10 where !preview.isHittable { app.swipeUp() }
+        revealRootListRows([preview])
         XCTAssertTrue(preview.isHittable)
         preview.tap()
         XCTAssertTrue(element("workout-preview-screen").waitForExistence(timeout: 5))
@@ -631,12 +781,14 @@ final class VisualProofUITests: XCTestCase {
                                        height: window.maxY - top - 34)
             let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
             revealRootListRows([inputRow], viewport: inputViewport)
-            // The plain List pins the scrolled section's header over the top
-            // of this row at accessibility sizes, and the frame check above
-            // cannot see that. Nudge the row back below the header, then wait.
-            for _ in 0..<2 where !target.isHittable {
+            // A partly covered field can still be hittable. Measure the
+            // pinned header too, so the capture shows the whole input.
+            let requestedHeader = app.staticTexts["Requested target"].firstMatch
+            XCTAssertTrue(requestedHeader.exists)
+            for _ in 0..<6 where target.frame.minY < max(top, requestedHeader.frame.maxY + 8) {
                 scrollRootList(by: 80, viewport: inputViewport)
             }
+            XCTAssertGreaterThanOrEqual(target.frame.minY, requestedHeader.frame.maxY + 8)
             let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
             XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
                            "the target must be tappable once the keyboard has closed; field \(target.frame), row \(inputRow.frame), viewport \(inputViewport)")
@@ -656,6 +808,12 @@ final class VisualProofUITests: XCTestCase {
             units.buttons["kg"].tap()
             XCTAssertTrue(units.buttons["kg"].isSelected)
             XCTAssertEqual(target.value as? String, "139", "switching units preserves the entered number")
+            if name == "accessibility" {
+                let achieved = element("loadout-achieved-total")
+                revealRootListRows([achieved], viewport: inputViewport)
+                XCTAssertTrue(achieved.label.contains("Achieved total, bar included"))
+                capture("after-14-calculator-achieved-accessibility-iphone")
+            }
         }
     }
 
@@ -963,11 +1121,12 @@ final class VisualProofUITests: XCTestCase {
                                   height: window.maxY - top - 34)
             let stage = app.cells.containing(.button, identifier: "expand-loaded-bar").firstMatch
             revealRootListRows([stage], viewport: viewport)
+            let calculator = element("plate-calculator-screen")
             for side in ["left", "right"] {
-                let disc = element("barbell-plate-\(side)-0")
+                let disc = calculator.staticTexts["barbell-plate-\(side)-0"]
                 XCTAssertTrue(disc.waitForExistence(timeout: 3))
                 XCTAssertTrue(disc.label.contains(plate), "The visible plate must match the solved denomination")
-                XCTAssertFalse(element("barbell-plate-\(side)-1").exists)
+                XCTAssertFalse(calculator.staticTexts["barbell-plate-\(side)-1"].exists)
             }
             capture("after-calculator-single-\(plate.replacingOccurrences(of: " ", with: "-"))-iphone")
         }
@@ -1092,6 +1251,73 @@ final class VisualProofUITests: XCTestCase {
                       "confirming deletes the program and returns to the Program tab")
         XCTAssertTrue(blank.waitForNonExistence(timeout: 5), "the blank program's row is gone")
         XCTAssertTrue(populated.exists, "the seeded program keeps its row")
+    }
+
+    /// The gorilla Today tab "drops back to the main screen and what you're
+    /// doing". With nothing timed it lands on Today, never in a session that
+    /// was only opened. Once the workout clock runs, it reopens the live
+    /// session from another tab and from Today itself (a second tap on the
+    /// selected tab must still reach the app).
+    func test24TodayTabReturnsToLiveWorkout() {
+        let today = app.tabBars.buttons["Today"]
+        XCTAssertTrue(today.waitForExistence(timeout: 5))
+        capture("after-24-tab-bar-today-iphone")
+
+        app.tabBars.buttons["Program"].tap()
+        capture("after-24-tab-bar-unselected-iphone")
+        today.tap()
+        XCTAssertTrue(today.isSelected)
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        XCTAssertFalse(element("active-session-screen").exists, "an open but unstarted session is not in progress")
+
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        let start = app.buttons["Start workout"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        capture("after-24-live-session-iphone")
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["History"].tap()
+        today.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8),
+                      "Today reopens the timed workout from another tab")
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+
+        today.tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8),
+                      "a second tap on Today reopens the timed workout too")
+
+        // Leave no running clock or Live Activity behind on a shared simulator.
+        app.buttons["Workout and session controls"].firstMatch.tap()
+        let reset = app.buttons["Reset to not started"].firstMatch
+        XCTAssertTrue(reset.waitForExistence(timeout: 5))
+        reset.tap()
+        app.buttons["Back"].firstMatch.tap()
+        app.tabBars.buttons["Program"].tap()
+        today.tap()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 5))
+        XCTAssertFalse(element("active-session-screen").waitForExistence(timeout: 2),
+                       "with the clock reset the session is no longer in progress")
+    }
+
+    /// The tab bar keeps its size at accessibility text sizes (the system
+    /// shows the large content viewer on a long press instead), so the mark
+    /// and the plate button must still sit clear of each other there.
+    func test25TabBarAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments[app.launchArguments.count - 1] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+        XCTAssertTrue(element("home-screen").waitForExistence(timeout: 20))
+        let today = app.tabBars.buttons["Today"]
+        XCTAssertTrue(today.waitForExistence(timeout: 5))
+        capture("after-25-tab-bar-accessibility-iphone")
+        XCTAssertGreaterThanOrEqual(today.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(today.frame.width, 44)
+        XCTAssertFalse(today.frame.intersects(app.buttons["Plate calculator"].frame),
+                       "the Today mark and the plate button never overlap")
     }
 
     /// App palettes are distinct from the ten equipment themes. Retain both

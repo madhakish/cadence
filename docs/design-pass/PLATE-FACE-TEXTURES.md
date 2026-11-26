@@ -1,5 +1,7 @@
 # Plate face texture provenance
 
+> September material studies. The current native and web assets are documented in [Photographic equipment](photographic-equipment/README.md).
+
 Created September 20, 2026 with the built-in image generation tool for the
 two-view barbell inspection. These are original generated material details,
 not photographs of certified equipment or copied manufacturer artwork.

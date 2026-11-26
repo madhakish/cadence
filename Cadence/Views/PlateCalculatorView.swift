@@ -8,7 +8,7 @@ struct PlateCalculatorView: View {
     @Query private var gyms: [Gym]
     @Query private var settingsList: [AppSettings]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .largeTitle) private var targetSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .title) private var targetSize: CGFloat = 32
 
     @State private var mode: Mode = .target
     @State private var targetText = ""
@@ -81,24 +81,14 @@ struct PlateCalculatorView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(gym?.name.uppercased() ?? "YOUR GYM") · PLATE LOADING")
-                        .font(.caption.bold())
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                    Text("Know your load.")
-                        .font(.display(.largeTitle))
-                        .minimumScaleFactor(0.7)
+                Picker("Mode", selection: $mode) {
+                    ForEach(Mode.allCases, id: \.self) { Text($0.rawValue) }
                 }
-                .accessibilityElement(children: .combine)
+                .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            } header: {
+                if let gym { Text(gym.name) }
             }
-            Picker("Mode", selection: $mode) {
-                ForEach(Mode.allCases, id: \.self) { Text($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .listRowBackground(Color.clear)
 
             switch mode {
             case .target: targetSections
@@ -136,7 +126,7 @@ struct PlateCalculatorView: View {
 
     @ViewBuilder
     private var targetSections: some View {
-        Section("Requested target") {
+        Section {
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                 : AnyLayout(HStackLayout())
@@ -155,23 +145,13 @@ struct PlateCalculatorView: View {
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 120)
                 .accessibilityIdentifier("plate-target-unit")
             }
+        } header: {
+            pinnedHeader("Requested target")
         }
 
         if let solution {
             Section {
-                BarbellStageView(
-                    solution: solution,
-                    unit: targetUnit,
-                    plateStyle: plateStyle,
-                    plateTheme: plateTheme,
-                    onExpand: { showExpandedBar = true }
-                )
-            } header: {
-                Text("Load on the bar")
-            }
-
-            Section {
-                LoadoutSummaryView(requestedLb: targetLb, loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme)
+                calculatorLoad(solution, requestedLb: targetLb, unit: targetUnit)
                 if let mixed = mixedUnitExplanation(solution.loadout) {
                     Label(mixed, systemImage: "scalemass")
                         .font(.callout)
@@ -195,9 +175,8 @@ struct PlateCalculatorView: View {
                     .foregroundStyle(Theme.warn)
                 }
             } header: {
-                Text("Load summary")
+                pinnedHeader("Load summary")
             }
-
         }
     }
 
@@ -206,30 +185,17 @@ struct PlateCalculatorView: View {
     @ViewBuilder
     private var reverseSections: some View {
         Section {
-            // Draw exactly what the user says is on the bar — never re-solve it.
-            BarbellStageView(
-                solution: reverseSolution,
-                unit: .lb,
-                plateStyle: plateStyle,
-                plateTheme: plateTheme,
-                onExpand: { showExpandedBar = true }
-            )
-        } header: {
-            Text("On the bar")
-        }
-
-        Section {
-            LoadoutSummaryView(requestedLb: nil, loadout: reverseLoadout, plateStyle: plateStyle, plateTheme: plateTheme)
+            calculatorLoad(reverseSolution, requestedLb: nil, unit: .lb)
             if let mixed = mixedUnitExplanation(reverseLoadout) {
                 Label(mixed, systemImage: "scalemass")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Load summary")
+            pinnedHeader("Load summary")
         }
 
-        Section("Plates on one side") {
+        Section {
             ForEach(availablePlates.sorted(by: >).reversed(), id: \.id) { plate in
                 Stepper(value: Binding(
                     get: { reverseCounts[plate.id] ?? 0 },
@@ -254,10 +220,12 @@ struct PlateCalculatorView: View {
                 reverseOrder = []
             }
                 .frame(minHeight: 44)
+        } header: {
+            pinnedHeader("Plates on one side")
         }
 
         if !reversePerSide.isEmpty {
-            Section("Sleeve order · inside to outside") {
+            Section {
                 ForEach(Array(reversePerSide.enumerated()), id: \.element.id) { index, plateCount in
                     HStack {
                         Text(plateCount.label)
@@ -278,8 +246,28 @@ struct PlateCalculatorView: View {
                     }
                     .accessibilityElement(children: .contain)
                 }
+            } header: {
+                pinnedHeader("Sleeve order · inside to outside")
             }
         }
+    }
+
+    @ViewBuilder
+    private func calculatorLoad(_ solution: PlateSolution, requestedLb: Double?, unit: WeightUnit) -> some View {
+        LoadoutTotalView(requestedLb: requestedLb, loadout: solution.loadout)
+        BarbellStageView(solution: solution, unit: unit, plateStyle: plateStyle, plateTheme: plateTheme,
+                         onExpand: { showExpandedBar = true })
+        LoadoutContentsView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme)
+    }
+
+    /// Keep pinned labels on an opaque canvas as the equipment scrolls beneath.
+    private func pinnedHeader(_ title: String) -> some View {
+        Text(title)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(Theme.background)
+            .listRowInsets(EdgeInsets())
     }
 
     /// Reference-only plate families — colour, denomination, other-unit
@@ -310,8 +298,8 @@ struct PlateCalculatorView: View {
                 ForEach(referenceUnit == .kg ? Self.referenceKg : Self.referenceLb) { plate in
                     HStack(spacing: 12) {
                         PlateFaceBadge(plate: plate, style: .bumper)
-                            .scaleEffect(0.6)
-                            .frame(width: 32, height: 32)
+                            .scaleEffect(0.8)
+                            .frame(width: 42, height: 42)
                         Text(plate.colorToken(for: .bumper).capitalized)
                             .frame(width: 64, alignment: .leading)
                         Text(plate.label)
@@ -322,6 +310,7 @@ struct PlateCalculatorView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("plate-reference-\(plate.id)")
                 }
                 Text("IWF colours are shown for kilogram plates; 1.25 kg is an IPF denomination. IPF requires 25 kg red, 20 kg blue and 15 kg yellow; 10 kg and below may be any colour. Pound colours are a manufacturer convention, not IPF rules. Black plates also exist. This reference does not add plates to your gym inventory.")
                     .font(.caption)

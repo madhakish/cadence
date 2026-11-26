@@ -100,10 +100,10 @@ try {
     if (phase === 'after') {
       await top().locator('.barbell-expand').click();
       await expect(top().locator('.barbell-inspection-surface')).toBeVisible();
-      const solid = await top().locator('canvas.barbell-gl').count() > 0;
+      await expect(top().locator('svg.realistic .barbell-platform')).toHaveAttribute('href', /AstraPhotoStage/);
       await shot('plate-inspection');
       await top().locator('.barbell-explode').click(); await shot('plate-inspection-exploded');
-      captures.push({ width, renderer: solid ? 'WebGL solid' : 'sprite SVG fallback' });
+      captures.push({ width, renderer: 'photographic composition' });
       await closeTop();
     }
     await closeTop();

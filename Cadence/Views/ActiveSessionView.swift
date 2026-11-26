@@ -1212,7 +1212,7 @@ private struct ExerciseSection: View {
                 // Loadout visualization — plates for barbell lifts, the rack
                 // number for dumbbell lifts. The loadout is the set's own
                 // value, never a re-solve. Mirrors web.
-                if entry.exercise?.type == .barbell && current.weightLb > 0 {
+                if entry.exercise?.type == .barbell, current.loadBasis == .totalBar, current.weightLb > 0 {
                     let set = current
                     let exactSolution = solvedPlateSolution(for: set)
                     let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
@@ -1237,7 +1237,7 @@ private struct ExerciseSection: View {
                         plateStyle: style,
                         plateTheme: theme
                     )
-                } else if entry.exercise?.type == .dumbbell && current.weightLb > 0 {
+                } else if entry.exercise?.type == .dumbbell, current.loadBasis == .perImplement, current.weightLb > 0 {
                     DumbbellView(weightLb: current.weightLb, unit: current.enteredUnit)
                 }
             }
@@ -1281,7 +1281,7 @@ private struct ExerciseSection: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    if showLoadout, entry.exercise?.type == .barbell && set.weightLb > 0 {
+                    if showLoadout, entry.exercise?.type == .barbell, set.loadBasis == .totalBar, set.weightLb > 0 {
                         let exactSolution = solvedPlateSolution(for: set)
                         let style: PlateVisualStyle = entry.exercise?.movementGroup == "olympic" ? .bumper : .steel
                         let theme = gym?.plateTheme ?? .custom
@@ -1292,7 +1292,7 @@ private struct ExerciseSection: View {
                             presentation: .compactSide,
                             emphasis: isActive ? .current : .muted
                         )
-                    } else if showLoadout, entry.exercise?.type == .dumbbell && set.weightLb > 0 {
+                    } else if showLoadout, entry.exercise?.type == .dumbbell, set.loadBasis == .perImplement, set.weightLb > 0 {
                         DumbbellView(weightLb: set.weightLb, unit: set.enteredUnit)
                     }
                 }
@@ -2478,7 +2478,7 @@ private struct SetDetailSheet: View {
                             .accessibilityLabel("Increase weight")
                     }
 
-                    if isBarbell && lb > 0 {
+                    if isBarbell, set.loadBasis == .totalBar, lb > 0 {
                         BarbellView(
                             solution: authoritativePlateSolution(
                                 targetLb: lb,
@@ -2491,7 +2491,7 @@ private struct SetDetailSheet: View {
                             plateTheme: gym?.plateTheme ?? .custom
                         )
                             .frame(maxWidth: .infinity, alignment: .center)
-                    } else if exercise?.type == .dumbbell && lb > 0 {
+                    } else if exercise?.type == .dumbbell, set.loadBasis == .perImplement, lb > 0 {
                         DumbbellView(weightLb: lb, unit: unit)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }

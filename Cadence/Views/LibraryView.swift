@@ -87,7 +87,7 @@ struct ExerciseDetailView: View {
     }
 
     private var contextualSolution: PlateSolution? {
-        guard exercise.type == .barbell, let set = contextualSet, set.weightLb > 0 else { return nil }
+        guard exercise.type == .barbell, let set = contextualSet, set.loadBasis == .totalBar, set.weightLb > 0 else { return nil }
         return authoritativePlateSolution(
             targetLb: set.weightLb,
             fallbackUnit: set.enteredUnit,
@@ -95,6 +95,21 @@ struct ExerciseDetailView: View {
             gym: sessionGym,
             stationDenomination: exercise.stationDenomination
         )
+    }
+
+    /// An unlogged exercise may still be shown with a captured session
+    /// prescription. Only show category equipment compatible with that lift.
+    private var unloggedEquipmentContext: ExerciseCategory? {
+        switch exercise.type {
+        case .barbell:
+            (contextualSet?.loadBasis ?? exercise.loadBasis) == .totalBar ? .main : nil
+        case .dumbbell, .kettlebell:
+            .accessory
+        case .conditioning:
+            .conditioning
+        default:
+            nil
+        }
     }
 
     private var contextualEffortCue: String? {
@@ -230,7 +245,7 @@ struct ExerciseDetailView: View {
                             .tracking(0.8)
                             .foregroundStyle(Theme.accent)
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(set.weightLb > 0 ? settingsList.unitDisplay.format(lb: set.weightLb) : "Bodyweight")
+                            Text(set.weightLb > 0 ? settingsList.unitDisplay.format(lb: set.weightLb) + set.loadBasis.shortSuffix : "Bodyweight")
                                 .font(.system(size: 30, weight: .black, design: .rounded))
                                 .monospacedDigit()
                             if exercise.type != .timed && exercise.type != .conditioning {
@@ -303,7 +318,9 @@ struct ExerciseDetailView: View {
                         .foregroundStyle(.secondary)
                     if performance.recent.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            EquipmentContextImage(category: exercise.category, width: 160)
+                            if let unloggedEquipmentContext {
+                                EquipmentContextImage(category: unloggedEquipmentContext, width: 160)
+                            }
                             Text("No sessions yet.").foregroundStyle(.secondary)
                         }
                     }

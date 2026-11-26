@@ -1,0 +1,50 @@
+{
+  "selection": null,
+  "status": "Candidates for owner review; no runtime asset catalog changed",
+  "brandDecision": "https://github.com/madhakish/cadence/issues/177#issuecomment-6563484754",
+  "profileSha256": "8f2e69123ae7a9bab2ec69d2ff4148f229dd09e40e8392249d1153fab0f83cea",
+  "candidates": [
+    {
+      "candidate": "heritage",
+      "source": "docs/design-pass/astra-2026-11-01/09-icon-heritage-master.png",
+      "sourceSha256": "94fb87131079d4af40abcd2c62276035f70c507272d5764146ff977442f94dfd",
+      "file": "docs/design-pass/astra-native-ui/icons/heritage.png",
+      "sha256": "82510461449d70c77d50cdbaad76a8b471b94f329550f57f2be478ee013a8ee9",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "colorSpace": "sRGB (assigned; source RGB interpreted as sRGB)",
+      "operation": "Lanczos resize only; no crop, redraw, recolor or masking"
+    },
+    {
+      "candidate": "foundry",
+      "source": "docs/design-pass/astra-2026-11-01/10-icon-foundry-master.png",
+      "sourceSha256": "6b5b3d60cf918cbb3a43cfc9fdcea460bd846050d150ae90bdd0084d7a07491e",
+      "file": "docs/design-pass/astra-native-ui/icons/foundry.png",
+      "sha256": "b1cc15dbcbc9593b5600cc1ed8677cbb4a51a370f5cc57121d3e18db449c2cd3",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "colorSpace": "sRGB (assigned; source RGB interpreted as sRGB)",
+      "operation": "Lanczos resize only; no crop, redraw, recolor or masking"
+    },
+    {
+      "candidate": "focus",
+      "source": "docs/design-pass/astra-2026-11-01/11-icon-focus-master.png",
+      "sourceSha256": "05cd5901ff65939deb490dd3c1f354877b70d916184cd954eb3d2cd52987f632",
+      "file": "docs/design-pass/astra-native-ui/icons/focus.png",
+      "sha256": "2f46d91e16241afc796395222192fb7e8b675e086d770c39c550429002e7eed7",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "colorSpace": "sRGB (assigned; source RGB interpreted as sRGB)",
+      "operation": "Lanczos resize only; no crop, redraw, recolor or masking"
+    }
+  ]
+}

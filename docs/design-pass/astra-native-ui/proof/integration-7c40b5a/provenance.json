@@ -1,0 +1,25 @@
+{
+  "rendererRevision": "7c40b5a5f7f78d93a4e8e3716848690f2385838e",
+  "device": "iPhone 18 Pro simulator, iOS 27.2",
+  "entryPoint": "--visual-proof --render-lab",
+  "fixture": "Synthetic RenderLab.matrix, production BarbellStudio pipeline, cold cache",
+  "originalPngSHA256": {
+    "00-diag-environment.png": "12546c41c1c86aa31d7ac4d8223a0c61f9d2bf8c3dedf0febe12589e4d4cf28f",
+    "01-row-squat115-custom.png": "6acf8637e013c0c499a4e637179f2ee1bbf898a07c875612743f44ad0ce53a08",
+    "02-row-press100-custom.png": "d712215127f820cd22be6f4f2f9e453b12f2abb909e17410108457aa456826ca",
+    "03-hero-225-lbColourBumpers.png": "257abfb31447bb9cc03d39fb7e153159e6d54d644a904901ec96f71f4c13419e",
+    "04-hero-squat115-custom.png": "fbccef3fe1c85130565f491170ee3eb75c193de8aebf2c71f5a77918bcd5fa1b",
+    "05-hero-mixed-lbBlackIron.png": "aca2dbbec417879f51afbf10df276786bb2ae51d535db74f643cfd7ae7655174",
+    "06-hero-kg-iwfCompetition.png": "ea9159ec047be496ba47b9568500a3cfc0515a4ca600d2e6aaf562a98ea50811",
+    "07-hero-315-ipfCalibrated.png": "67dafe2205711ad9bd4b70d8731f6fc42b1435b1825fe29c4b2794c7ad8b62cd",
+    "08-blowup-mixed-lbColourBumpers.png": "00e7029c66303e856349d4622788a8f15961eef5041f80ab7a7784ec57a00da0",
+    "09-blowup-kg-iwfCompetition.png": "a1c5382d3a452fb39962af647796fc79b57cf8c2122d655b0f4a5f49bd065066",
+    "10-hero-collars-cadenceHouse.png": "0d7b9126e90a9e5edde18deefaee2d7d5bf91ebcb717060a43046e19d188057f",
+    "11-row-mixed-lbGreyHammertone.png": "fc3d1a2aee1d34716ec0696c5bada42ad40f90e3b520936be0075a6d2bda20eb",
+    "12-hero-mixed-blackBumpersBand.png": "76c1560e9359e26109d4639d32d694c888b7956f41571eab77236ba7a0577c12",
+    "13-hero-mockup-custom.png": "7676646b3485ce1e1513e24714659c958503adc9f448978b104fe921a4956824",
+    "14-blowup-mockup-custom.png": "506f9aa2b2b08fbb88f40c5ff56b78b2322705c8d3d51b33359cf99393cf804c",
+    "15-hero-kg-iwfTraining.png": "54292f5463189b0a55aaf4b86a3b7fe436d9b611a149346194e7c1474c4d9348"
+  },
+  "comparisonOperation": "Aspect-preserving resize and captions. Top left is reference 03 from #385. The three other panels are simulator renders."
+}

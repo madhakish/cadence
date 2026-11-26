@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { PLATE_SPRITES } from '../app/js/plate-sprites.js';
 import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, plateTintTarget, plateTintMatrixForFill, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
@@ -30,19 +29,18 @@ const before = JSON.stringify(solution);
 const closed = barbellScene(solution, 'bumper', false);
 const open = barbellScene(solution, 'bumper', true);
 const compact = B.barbellSVG(solution, 'compact', 'bumper');
+const assembled = B.barbellSVG(solution, 'full', 'bumper');
+assert.deepEqual(compact.scene.discs, assembled.scene.discs, 'compact and full presentations share the photographed camera');
 for (const target of compact.svg.querySelectorAll('.barbell-plate-target')) {
-  assert.ok(Math.abs(Number(target.getAttribute('cy')) - Number(target.getAttribute('cx')) * closed.axisY / closed.axisX) < 1e-8,
-    'front-face bore remains on the sleeve axis on both sides');
+  const group = target.parentElement;
+  const disc = compact.scene.discs.find(d => d.centerX === Number(group.dataset.centerX));
+  assert.equal(Number(target.getAttribute('cx')), disc.x);
+  assert.equal(Number(target.getAttribute('cy')), disc.y);
+  assert.equal(Number(target.getAttribute('ry')), disc.ry);
+  const face = compact.svg.querySelector(`image.barbell-plate-face[data-center-x="${disc.centerX}"]`);
+  assert.equal(face.parentElement.parentElement.getAttribute('transform'), `translate(${disc.x} ${disc.y}) matrix(1 0 .04 1 0 0)`);
+  assert.equal(face.parentElement.getAttribute('transform'), `scale(${disc.rx} ${disc.ry})`);
 }
-for (const face of compact.svg.querySelectorAll('image.barbell-plate-face')) {
-  const meta = PLATE_SPRITES.sprites[face.dataset.sprite];
-  const k = Number(face.getAttribute('width')) / meta.size[0];
-  const x = Number(face.getAttribute('x')) + meta.faceCenter[0] * k;
-  const y = Number(face.getAttribute('y')) + meta.faceCenter[1] * k;
-  assert.ok(Math.abs(y - x * closed.axisY / closed.axisX) < 1e-8,
-    'the photographed bore itself, not only its hit target, sits on the sleeve axis');
-}
-assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
 assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
 assert.equal(compact.svg.querySelectorAll('.barbell-plate-body[data-side="left"]').length, counts.length);
 assert.equal(compact.svg.getAttribute('role'), 'group', 'the SVG does not hide its plate accessibility children');
@@ -56,10 +54,14 @@ for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
 const tints = JSON.parse(readFileSync(new URL('./fixtures/plate-tints.json', import.meta.url), 'utf8'));
 assert.equal(tints.length, 12, 'every token in both styles');
 for (const {token, style, matrix} of tints) assert.deepEqual(plateTintMatrix(token, style), matrix);
-for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
-  const token = matrix.parentNode.id.split('-').at(-1);
-  const values = matrix.getAttribute('values').split(' ').map(Number);
-  assert.deepEqual(values, plateTintMatrix(token, 'bumper'), 'the face filter is the style-specific colourisation');
+const filters = compact.svg.querySelectorAll('feComponentTransfer');
+assert.ok(filters.length > 0);
+for (const transform of filters) {
+  const fill = transform.parentNode.id.split('-').at(-1);
+  for (const [index, channel] of ['R', 'G', 'B'].entries()) {
+    const stops = transform.querySelector('feFunc' + channel).getAttribute('tableValues').split(' ').map(Number);
+    assert.deepEqual(stops, [0, parseInt(fill.slice(index * 2, index * 2 + 2), 16) / 255, 1], 'neutral 50% grey maps to the exact equipment pigment');
+  }
 }
 // Luminance-driven: shading survives, the median lands on the pigment's target
 // share of the fill, and black iron is a dark tint rather than the raw texture.
@@ -112,19 +114,17 @@ assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
 // The inspection opens straight ahead, assembled; the tap explodes it.
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false', 'the inspection opens assembled');
-assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), '0px');
+assert.equal(inspector.querySelector('.barbell-inspection-surface').style.minWidth, '0px');
 const toggle = inspector.querySelector('.barbell-explode');
 assert.equal(toggle.getAttribute('aria-pressed'),'false');
 assert.match(toggle.getAttribute('aria-label'), /Explode plates/);
 toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(toggle.getAttribute('aria-pressed'),'true');
-const inspectionWidth = parseFloat(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'));
-assert.ok(inspectionWidth > 0 && inspectionWidth < open.width, 'inspection crops the mirrored bar to one sleeve');
-for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
-  assert.equal(label.getAttribute('font-size'), '14');
-  assert.equal(label.hasAttribute('textLength'), false);
-}
+assert.equal(inspector.querySelectorAll('svg.realistic .barbell-plate-face').length, counts.length, 'exploded inspection isolates the near sleeve');
+assert.equal(inspector.querySelectorAll('.barbell-plate-body[data-side="right"]').length, 0);
+assert.deepEqual([...inspector.querySelectorAll('.barbell-disc-caption')].map(n => n.textContent),
+  counts.map(({plate}) => C.plateLabel(plate)), 'each photo has an exact, legible caption');
 assert.equal(inspector.querySelectorAll('.barbell-stack-list li').length,4);
 assert.equal(JSON.stringify(solution), before);
 // A focusable plate can be activated to hear its name without flipping the
@@ -153,7 +153,7 @@ const customInspector = B.barbellStage(B.barbellSVG(customSolution, 'full', 'bum
 customInspector.querySelector('.barbell-explode').click();
 assert.deepEqual([...customInspector.querySelectorAll('.barbell-disc-caption')].map(n => n.textContent),
   ['20 kg', '20 kg', '0.625 kg'], 'each disc has its own exact, unscaled caption');
-assert.equal(customInspector.querySelector('.barbell-inspection-surface').style.minWidth, '368px', 'fallback uses the same compact three-disc width as the solid');
+assert.equal(customInspector.querySelector('.barbell-inspection-surface').style.minWidth, '368px', 'three discs retain fixed-size, nonoverlapping captions');
 assert.match(customInspector.querySelector('.barbell-stack-list').textContent, /0\.625 kg × 1 per side/, 'inspection list retains exact custom precision');
 assert.equal(customInspector.querySelectorAll('.barbell-backdrop, .barbell-reset-view').length, 0);
 customInspector.querySelector('.barbell-explode').click();
@@ -167,11 +167,8 @@ assert.equal(customInspector.querySelector('.barbell-explode').getAttribute('ari
   'tapping artwork inside the focusable app dialog still opens inspection');
 assert.equal(JSON.stringify(customSolution), customBefore, 'inspection never edits the loadout');
 const worker=readFileSync(new URL('../app/sw.js',import.meta.url),'utf8');
-for (const asset of ['js/barbell-scene.js','js/plate-sprites.js']) assert.ok(worker.includes(`"${asset}"`));
-{
-  // Every installed sprite is precached, so the loaded bar draws offline.
-  const sprites = readdirSync(new URL('../app/assets/plates/', import.meta.url)).filter((f) => f.endsWith('.png'));
-  assert.ok(sprites.length >= 16);
-  for (const file of sprites) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} precached`);
+for (const asset of ['js/barbell-scene.js','js/plate-art.js']) assert.ok(worker.includes(`"${asset}"`));
+for (const file of readdirSync(new URL('../app/assets/astra/', import.meta.url))) {
+  assert.ok(worker.includes(`"assets/astra/${file}"`), `${file} precached`);
 }
 console.log('Barbell inspection geometry, identity, controls, and offline assets passed');

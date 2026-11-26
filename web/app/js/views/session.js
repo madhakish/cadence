@@ -1,3 +1,4 @@
+import { equipmentArtKind } from "../plate-art.js";
 // Active-session logger — the core daily screen. Set entry, quality flags,
 // rest timer, autoregulation, body signals, completion + PR detection.
 import * as ui from "../ui.js";
@@ -885,7 +886,8 @@ export async function openSession(id) {
 
     // Loadout visualization — plates for barbell lifts, the rack number for
     // dumbbell lifts. Mirrors native.
-    if (showLoadout && ex && ex.type === "barbell" && s.weightLb > 0) {
+    const equipment = equipmentArtKind(ex, s);
+    if (showLoadout && equipment === "barbell" && s.weightLb > 0) {
       const selectedBar = barFor(se);
       const plateStyle = ex?.movementGroup === "olympic" ? "bumper" : "steel";
       const plateTheme = gymState.value?.plateTheme || "custom";
@@ -928,8 +930,8 @@ export async function openSession(id) {
       }
       return provenanceRow ? ui.h("div", {}, row, provenanceRow, wrap) : ui.h("div", {}, row, wrap);
     }
-    if (showLoadout && ex && ex.type === "dumbbell" && s.weightLb > 0) {
-      const wrap = ui.h("div", { class: "barbell-wrap" }, dumbbellSVG(s.weightLb, u), ui.h("span", { class: "sub", text: u }));
+    if (showLoadout && equipment === "dumbbell" && s.weightLb > 0) {
+      const wrap = ui.h("div", { class: "barbell-wrap" }, dumbbellSVG(s.weightLb, u));
       return provenanceRow ? ui.h("div", {}, row, provenanceRow, wrap) : ui.h("div", {}, row, wrap);
     }
     return provenanceRow ? ui.h("div", {}, row, provenanceRow) : row;

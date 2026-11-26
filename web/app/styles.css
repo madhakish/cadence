@@ -351,8 +351,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .barbell-wrap .plate-detail { flex-basis: 100%; }
 svg.barbell { height: 46px; max-width: 100%; }
 svg.barbell.emphasis-muted { opacity: .85; }
-svg.dumbbell { height: 36px; max-width: 100%; }
-.barbell-shadow { fill: #000; opacity: .14; }
+.dumbbell { display: inline-flex; align-items: center; gap: .4rem; font-variant-numeric: tabular-nums; }
+.dumbbell img { object-fit: contain; }
 .barbell-plate, .barbell-plate-face, .barbell-plate-rim, .barbell-plate-recess,
 .barbell-plate-hub { vector-effect: non-scaling-stroke; }
 .barbell-plate-target { pointer-events: visiblePainted; }
@@ -360,15 +360,12 @@ svg.dumbbell { height: 36px; max-width: 100%; }
    a diagram; dragging and browser zoom never manipulate the camera. */
 :root { --scene-studio: #1b1d21; --scene-dark: #0a0b0d; --scene-paper: #e6e2da; }
 .barbell-inspection-surface { position: relative; width: 100%; background: var(--scene-studio); }
-canvas.barbell-gl { display: block; width: 100%; height: 320px; touch-action: auto; cursor: pointer; }
 .barbell-disc-captions { position: absolute; inset: 0; pointer-events: none; }
 .barbell-disc-captions[hidden] { display: none; }
 .barbell-disc-caption { position: absolute; transform: translate(-50%, 0); font-size: 14px; line-height: 1.4; font-weight: 650; font-variant-numeric: tabular-nums; color: #f4f5f7; white-space: nowrap; padding: 4px 8px; background: var(--scene-studio); border-radius: 4px; pointer-events: auto; }
 .barbell-disc-caption:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .barbell-focus-note:empty { display: none; }
 .barbell-plate-label, .barbell-plate-unit { font-family: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; font-stretch: condensed; }
-.barbell-stage-track { container: plate-stage / inline-size; }
-.barbell.compact .barbell-plate-label, .barbell.compact .barbell-plate-print { display: none; }
 .barbell-plate-readout { display: flex; align-items: center; gap: 8px; overflow-x: auto; max-width: 100%; padding: 4px 0; white-space: nowrap; font-size: 14px; font-variant-numeric: tabular-nums; }
 .barbell-wrap > .barbell-plate-readout { flex-basis: 100%; }
 .barbell-plate-direction { color: var(--muted); }
@@ -488,7 +485,6 @@ button.muscle-key { min-height: 44px; display: inline-grid; grid-template-column
 .barbell-stage-track svg.barbell.full { display: block; width: 100%; height: auto; }
 .barbell-stage.hero { margin: 4px 0 10px; background: color-mix(in srgb, var(--card) 82%, transparent); }
 .barbell-stage.expanded { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
-.barbell-stage.expanded .barbell-stage-track { width: max(100%, var(--barbell-natural-width)); }
 .barbell-stage-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
 .barbell-caption { margin-top: 4px; }
 .barbell-expand[hidden] { display: none; }
@@ -647,7 +643,7 @@ button.adhoc-entry { text-align: left; border-left: 3px solid var(--accent); }
 }
 
 /* The actual approved plate faces are projected by the shared scene. */
-svg.barbell.compact.realistic { width: 100%; height: 84px; }
+svg.barbell.compact.realistic { width: 100%; height: auto; max-height: 112px; }
 .barbell-loading-key { font-size: 1rem; line-height: 1.5; padding: 6px 0; overflow-wrap: anywhere; }
 .barbell-stage-track svg.barbell.realistic { width: 100%; height: auto; display: block; }
 .barbell-stage:not(.expanded) .barbell-stage-track { max-width: 560px; margin-inline: auto; }
@@ -657,6 +653,7 @@ svg.barbell.compact.realistic { width: 100%; height: 84px; }
 }
 .barbell-stage.expanded { overflow: visible; }
 .barbell-stage.expanded .barbell-stage-track { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.barbell-stage.expanded .barbell-inspection-surface { width: min(100%, calc(55svh * var(--photo-aspect))); margin-inline: auto; }
 .barbell-stage.expanded .barbell-inspection-surface svg { width: 100%; max-width: none; }
 .barbell-stage-footer { flex-wrap: wrap; }
 .barbell-stack-list { padding: 0; list-style: none; }

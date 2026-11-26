@@ -2,16 +2,6 @@
   "provenance": "docs/design-pass/EQUIPMENT-CONTEXT.md",
   "assets": [
     {
-      "category": "Main",
-      "file": "main.png",
-      "native": "Cadence/Assets.xcassets/TrainingContextMain.imageset/main.png",
-      "width": 768,
-      "height": 512,
-      "bytes": 227515,
-      "sha256": "37ee2cffe5d44bee3d33a8c1837db5ebf5afcb9799070b2a2e75a28c61912413",
-      "sourceSHA256": "721569eee2de60ac7d7e9c36a722b4cb1de6b985acea33a36563f9a6821ff576"
-    },
-    {
       "category": "Accessory",
       "file": "accessory.png",
       "native": "Cadence/Assets.xcassets/TrainingContextAccessory.imageset/accessory.png",

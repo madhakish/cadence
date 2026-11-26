@@ -322,25 +322,25 @@ for (const track of [
   "bumper plates keep competition diameter while calibrated steel steps down by denomination");
   ok(bumperBar.querySelectorAll("image.barbell-plate-face").length === bumperRight.length * 2
     && bumperBar.querySelectorAll("image.barbell-plate-hub").length === bumperRight.length * 2
-    && bumperBar.querySelectorAll("text.barbell-plate-label").length >= bumperRight.length * 2,
+    && bumperBar.querySelectorAll(".barbell-plate-label").length >= bumperRight.length * 2,
   "plate bodies have disc faces, steel hubs, rims, and denomination marks rather than flat blocks");
-  const mixedLabelYs = [...mixedBar.querySelectorAll("text.barbell-plate-label")]
+  const mixedLabelYs = [...mixedBar.querySelectorAll(".barbell-plate-label")]
     .slice(0, 6).map((label) => Number(label.getAttribute("y")));
   ok(new Set(mixedLabelYs).size > 1,
     "adjacent denominations use staggered label rails instead of printing on top of one another");
-  ok(/bar-shaft-/.test(fullBar.querySelector("image.barbell-shaft")?.getAttribute("href") || "")
+  ok(/photo\/PhotoShaft\.png$/.test(fullBar.querySelector("image.barbell-shaft")?.getAttribute("href") || "")
     && fullBar.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
     "the calculator bar is the rendered chrome shaft and sleeves rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
-    && fullRendered.minimumLegibleWidth >= fullRendered.scene.width * 1.2 - 1e-6,
-  "a complete bar's face stamps require 12 CSS pixels after scaling");
+    && fullRendered.scene.width === 1672 && fullRendered.scene.height === 941,
+  "a complete bar shares the reference photograph's native framing");
   ok([...fullBar.querySelectorAll(".barbell-plate-body")].every((plate) =>
     plate.tabIndex === 0 && plate.dataset.plateDenomination && plate.getAttribute("aria-label")?.includes("plate")),
   "every visible plate exposes its exact denomination to keyboard and assistive technology");
   const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
   ok(plateBadge.getAttribute("aria-hidden") === "true" && !plateBadge.hasAttribute("aria-label")
     && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
-    && plateBadge.querySelectorAll("circle").length >= 2,
+    && plateBadge.querySelectorAll(".barbell-plate-face,.barbell-plate-hub").length === 2,
   "calculator badges keep visible denominations without duplicating the adjacent spoken label");
   ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
     "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
