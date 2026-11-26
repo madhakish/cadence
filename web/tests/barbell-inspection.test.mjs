@@ -29,19 +29,18 @@ const before = JSON.stringify(solution);
 const closed = barbellScene(solution, 'bumper', false);
 const open = barbellScene(solution, 'bumper', true);
 const compact = B.barbellSVG(solution, 'compact', 'bumper');
+const assembled = B.barbellSVG(solution, 'full', 'bumper');
+assert.deepEqual(compact.scene.discs, assembled.scene.discs, 'compact and full presentations share the photographed camera');
 for (const target of compact.svg.querySelectorAll('.barbell-plate-target')) {
-  assert.ok(Math.abs(Number(target.getAttribute('cy')) - Number(target.getAttribute('cx')) * closed.axisY / closed.axisX) < 1e-8,
-    'front-face bore remains on the sleeve axis on both sides');
+  const group = target.parentElement;
+  const disc = compact.scene.discs.find(d => d.centerX === Number(group.dataset.centerX));
+  assert.equal(Number(target.getAttribute('cx')), disc.x);
+  assert.equal(Number(target.getAttribute('cy')), disc.y);
+  assert.equal(Number(target.getAttribute('ry')), disc.ry);
+  const face = compact.svg.querySelector(`image.barbell-plate-face[data-center-x="${disc.centerX}"]`);
+  assert.equal(face.parentElement.parentElement.getAttribute('transform'), `translate(${disc.x} ${disc.y}) matrix(1 0 .04 1 0 0)`);
+  assert.equal(face.parentElement.getAttribute('transform'), `scale(${disc.rx} ${disc.ry})`);
 }
-for (const face of compact.svg.querySelectorAll('image.barbell-plate-face')) {
-  const x = Number(face.getAttribute('x')) + Number(face.getAttribute('width')) / 2;
-  const y = Number(face.getAttribute('y')) + Number(face.getAttribute('height')) / 2;
-  const disc = closed.discs.find(d => d.x === Number(face.dataset.centerX));
-  assert.ok(Math.abs(Number(face.getAttribute('height')) * 73 / 156 - disc.radius) < 1e-8);
-  assert.ok(Math.abs(y - x * closed.axisY / closed.axisX) < 1e-8,
-    'the photographed bore itself, not only its hit target, sits on the sleeve axis');
-}
-assert.deepEqual(compact.scene, closed, 'compact and full presentations use identical physical geometry');
 assert.equal(compact.svg.querySelectorAll('image.barbell-plate-face').length, closed.discs.length);
 assert.equal(compact.svg.querySelectorAll('.barbell-plate-body[data-side="left"]').length, counts.length);
 assert.equal(compact.svg.getAttribute('role'), 'group', 'the SVG does not hide its plate accessibility children');
@@ -115,19 +114,17 @@ assert.equal(calls,1);
 const inspector = B.barbellStage(B.barbellSVG(solution,'full','bumper'), {emphasis:'expanded'});
 // The inspection opens straight ahead, assembled; the tap explodes it.
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'false', 'the inspection opens assembled');
-assert.equal(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'), '0px');
+assert.equal(inspector.querySelector('.barbell-inspection-surface').style.minWidth, '0px');
 const toggle = inspector.querySelector('.barbell-explode');
 assert.equal(toggle.getAttribute('aria-pressed'),'false');
 assert.match(toggle.getAttribute('aria-label'), /Explode plates/);
 toggle.click();
 assert.equal(inspector.querySelector('svg.realistic').dataset.exploded,'true');
 assert.equal(toggle.getAttribute('aria-pressed'),'true');
-const inspectionWidth = parseFloat(inspector.querySelector('.barbell-stage-track').style.getPropertyValue('--barbell-natural-width'));
-assert.ok(inspectionWidth > 0 && inspectionWidth < open.width, 'inspection crops the mirrored bar to one sleeve');
-for (const label of inspector.querySelectorAll('.barbell-plate-label')) {
-  assert.equal(label.getAttribute('font-size'), '14');
-  assert.equal(label.hasAttribute('textLength'), false);
-}
+assert.equal(inspector.querySelectorAll('svg.realistic .barbell-plate-face').length, counts.length, 'exploded inspection isolates the near sleeve');
+assert.equal(inspector.querySelectorAll('.barbell-plate-body[data-side="right"]').length, 0);
+assert.deepEqual([...inspector.querySelectorAll('.barbell-disc-caption')].map(n => n.textContent),
+  counts.map(({plate}) => C.plateLabel(plate)), 'each photo has an exact, legible caption');
 assert.equal(inspector.querySelectorAll('.barbell-stack-list li').length,4);
 assert.equal(JSON.stringify(solution), before);
 // A focusable plate can be activated to hear its name without flipping the
@@ -156,7 +153,7 @@ const customInspector = B.barbellStage(B.barbellSVG(customSolution, 'full', 'bum
 customInspector.querySelector('.barbell-explode').click();
 assert.deepEqual([...customInspector.querySelectorAll('.barbell-disc-caption')].map(n => n.textContent),
   ['20 kg', '20 kg', '0.625 kg'], 'each disc has its own exact, unscaled caption');
-assert.equal(customInspector.querySelector('.barbell-inspection-surface').style.minWidth, '368px', 'fallback uses the same compact three-disc width as the solid');
+assert.equal(customInspector.querySelector('.barbell-inspection-surface').style.minWidth, '368px', 'three discs retain fixed-size, nonoverlapping captions');
 assert.match(customInspector.querySelector('.barbell-stack-list').textContent, /0\.625 kg × 1 per side/, 'inspection list retains exact custom precision');
 assert.equal(customInspector.querySelectorAll('.barbell-backdrop, .barbell-reset-view').length, 0);
 customInspector.querySelector('.barbell-explode').click();

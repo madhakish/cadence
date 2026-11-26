@@ -1,6 +1,4 @@
 import CadenceCore
-import Metal
-import SceneKit
 import SwiftUI
 import UIKit
 
@@ -73,80 +71,67 @@ enum RenderLab {
             item("18-hero-empty-bar", load(.bar20kg, []), .custom, .hero),
             item("19-blowup-fractional", load(.bar20kg, [kg(5), kg(0.625)]), .custom, .blowup),
             item("20-hero-long-stack", framingLoadout, .lbColourBumpers, .hero),
+            item("21-hero-135-lbColourBumpers", load(.bar45lb, [lb(45)]), .lbColourBumpers, .hero),
+            item("22-hero-136-lightweight-collars", load(.bar45lb, [lb(45)], collar: 1), .lbColourBumpers, .hero),
         ]
     }
 }
 
 extension RenderLab {
-    /// Check the production camera through SceneKit's projection, not a copy
-    /// of the fit formula. The wide, short case reproduced #374's clipping;
-    /// the taller case is the inspector's scaled Dynamic Type canvas.
-    @MainActor
-    static func checkFraming() async -> [String] {
-        guard let studio = await StudioRenderer.shared.studio(loadout: framingLoadout, style: .bumper, theme: .lbColourBumpers)
-        else { return ["studio build failed"] }
-        studio.explode(1)
+    /// A flat face can still produce a valid PNG. Probe the exposed middle
+    /// of the actual photographed tread on both the near and far plate.
+    static func checkReferencePlate() -> [String] {
+        let plate = Plate(value: 45, unit: .lb)
+        let loadout = Loadout(bar: .bar45lb, perSide: [PlateCount(plate: plate, count: 1)], collarLb: 0)
+        let scene = PhotographicBar(loadout: loadout, style: .bumper, theme: .lbColourBumpers,
+                                    size: CGSize(width: 1672, height: 941), shot: .hero, progress: 0)
         var failures: [String] = []
-        let cases: [(CGFloat, CGFloat, CGFloat)] = [(592, 300, 1), (1184, 300, 2), (1184, 600, 2)]
-        for (width, height, scale) in cases {
-            let captionHeight = UIFont.monospacedDigitSystemFont(ofSize: 14 * scale, weight: .semibold).lineHeight + 12
-            studio.frame(.blowup, aspect: Double(width / height), captionFraction: Double(captionHeight / height))
-            let view = SCNView(frame: CGRect(x: 0, y: 0, width: width, height: height))
-            view.scene = studio.scene
-            view.pointOfView = studio.cameraNode
-            _ = view.snapshot() // establish SceneKit's actual viewport before projecting
-            let viewport = CGRect(x: 0, y: 0, width: width, height: height - captionHeight)
-            for entry in studio.nearDiscs {
-                let (low, high) = entry.node.boundingBox
-                for corner in 0..<8 {
-                    let local = SCNVector3(corner & 1 == 0 ? low.x : high.x,
-                                          corner & 2 == 0 ? low.y : high.y,
-                                          corner & 4 == 0 ? low.z : high.z)
-                    let p = view.projectPoint(entry.node.convertPosition(local, to: nil))
-                    if p.z <= 0 || p.z >= 1 || !viewport.contains(CGPoint(x: CGFloat(p.x), y: CGFloat(p.y))) {
-                        failures.append("\(Int(width))x\(Int(height)): plate \(entry.disc.index + 1) clips at \(Int(p.x)),\(Int(p.y)); reserved bottom \(Int(viewport.maxY))")
-                        break
-                    }
-                }
+        for item in scene.projectedPlates {
+            let expected = item.disc.side < 0 ? CGPoint(x: 357, y: 446) : CGPoint(x: 1351, y: 332)
+            if hypot(item.centre.x - expected.x, item.centre.y - expected.y) > 1 {
+                failures.append("135 lb reference hub out of registration at \(item.centre)")
+            }
+            guard let cg = PhotoEquipment.disc(plate: plate, theme: .lbColourBumpers, style: .bumper, aspect: item.aspect)?.cgImage
+            else { failures.append("135 lb product missing"); continue }
+            let depth = PhotoEquipment.axialScale * item.disc.thickness / (2 * item.disc.radius)
+            let bounds = PhotoEquipment.bounds(depth: depth, aspect: item.aspect)
+            let x = Int(((item.aspect / 2 + depth / 2 - bounds.minX) * 512).rounded())
+            let y = Int(((-PhotoEquipment.axisRise * depth / 2 - bounds.minY) * 512).rounded())
+            guard let sample = cg.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)) else {
+                failures.append("135 lb tread lies outside its product art"); continue
+            }
+            var rgba = [UInt8](repeating: 0, count: 4)
+            rgba.withUnsafeMutableBytes { bytes in
+                let bitmap = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+                let context = CGContext(data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: bitmap)
+                context?.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            if rgba[3] < 245 || rgba[2] <= rgba[0] {
+                failures.append("135 lb tread missing its photographed blue rubber at \(x),\(y)")
             }
         }
         return failures
     }
 
-    /// The gym environment alone around a mirror ball and a grey ball:
-    /// proves the backdrop draws and the lighting environment reflects.
-    static func environmentProbe() async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let device = MTLCreateSystemDefaultDevice() else { return continuation.resume(returning: nil) }
-                let scene = SCNScene()
-                scene.background.contents = StudioTextures.environment
-                scene.lightingEnvironment.contents = StudioTextures.studioLight
-                scene.lightingEnvironment.intensity = StudioLighting.environmentIntensity
-                for (x, metal) in [(-260.0, 1.0), (260.0, 0.0)] {
-                    let ball = SCNSphere(radius: 220)
-                    ball.segmentCount = 96
-                    ball.firstMaterial = StudioMaterials.pbr(UIColor(white: metal > 0 ? 0.95 : 0.6, alpha: 1),
-                                                             metalness: metal, roughness: metal > 0 ? 0.02 : 0.6)
-                    let node = SCNNode(geometry: ball)
-                    node.position = SCNVector3(Float(x), 0, 0)
-                    scene.rootNode.addChildNode(node)
-                }
-                let camera = SCNNode()
-                camera.camera = SCNCamera()
-                camera.camera?.zNear = 10
-                camera.camera?.zFar = 50000
-                camera.camera?.fieldOfView = 70
-                camera.position = SCNVector3(0, 0, 1200)
-                scene.rootNode.addChildNode(camera)
-                let renderer = SCNRenderer(device: device, options: nil)
-                renderer.scene = scene
-                renderer.pointOfView = camera
-                continuation.resume(returning: renderer.snapshot(atTime: 0, with: CGSize(width: 1170, height: 660),
-                                                                 antialiasingMode: .multisampling4X))
+    /// Inspect the same projected rectangles that the compositor draws.
+    static func checkFraming() async -> [String] {
+        var failures: [String] = []
+        let cases: [(CGFloat, CGFloat, CGFloat)] = [(592, 300, 1), (1184, 300, 2), (1184, 600, 2)]
+        for (width, height, scale) in cases {
+            let captionSize = 14 * scale
+            let captionHeight = UIFont.monospacedDigitSystemFont(ofSize: captionSize, weight: .semibold).lineHeight + 12
+            let scene = PhotographicBar(loadout: framingLoadout, style: .bumper, theme: .lbColourBumpers,
+                                        size: CGSize(width: width, height: height), shot: .blowup,
+                                        progress: 1, captionSize: captionSize)
+            let viewport = CGRect(x: 0, y: 0, width: width, height: height - captionHeight)
+            for item in scene.projectedPlates where item.disc.side < 0 && !viewport.contains(item.bounds) {
+                failures.append("\(Int(width))x\(Int(height)): plate \(item.disc.index + 1) clips at \(item.bounds)")
             }
         }
+        return failures
     }
+
 }
 
 struct RenderLabView: View {
@@ -199,15 +184,12 @@ struct RenderLabView: View {
         var timings = ""
         // An asset-catalog omission would otherwise take the renderer's
         // recovery path and still yield a perfectly valid PNG.
-        for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraBlackRubberDetail",
-                     "AstraCalibratedCoatingDetail", "AstraCastIronDetail",
-                     "PlatformOak", "PlatformWalnut", "PlatformWhiteOak", "PlatformMaple", "PlatformOakNormal",
-                     "AstraStudioRoom", "AstraStudioFloor", "AstraChromeRoughness", "AstraSleeve", "PlatformMat", "PlatformMatNormal"] {
+        for name in PhotoEquipment.stageNames + PhotoEquipment.componentNames {
             if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
         }
-        let env = StudioTextures.environment
-        timings += "environment \(Int(env.size.width))x\(Int(env.size.height)) cg=\(env.cgImage != nil)\n"
-        if let diag = await RenderLab.environmentProbe() {
+        failed.append(contentsOf: RenderLab.checkReferencePlate())
+        if let diag = UIImage(named: PhotoEquipment.stage(.custom)) {
+            timings += "environment \(Int(diag.size.width))x\(Int(diag.size.height))\n"
             try? diag.pngData()?.write(to: dir.appendingPathComponent("00-diag-environment.png"))
             rendered.append(("00-diag-environment", diag))
         }

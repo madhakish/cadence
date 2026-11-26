@@ -117,10 +117,10 @@ ok(/\.flagbtn\.labeled \.microlabel/.test(css),
   "the grading micro-caption is styled inside the 44px tap target");
 
 // ---- Plate calculator / loadout graphics ----
-const barbell = read("app/js/barbell.js");
+const barbell = read("app/js/barbell-photo.js") + read("app/js/barbell.js");
 ok(/role: ['"]group['"]/.test(barbell) && /aria-label[^\n]*loaded bar/i.test(barbell),
   "the barbell graphic groups individually inspectable plates under its spoken load");
-const plateBadgeSource = barbell.slice(barbell.indexOf("export function plateBadgeSVG"), barbell.indexOf("return svg;"));
+const plateBadgeSource = barbell.slice(barbell.indexOf("export function plateBadgeSVG"), barbell.indexOf("return svg;", barbell.indexOf("export function plateBadgeSVG")));
 ok(/"aria-hidden": "true"/.test(plateBadgeSource) && !/"aria-label"/.test(plateBadgeSource),
   "decorative plate badges leave the adjacent denomination as the single spoken label");
 const nativeBarbell = read("../Cadence/Views/BarbellView.swift");
@@ -148,7 +148,7 @@ ok(/prefers-reduced-motion: reduce/.test(css), "motion can be reduced at the ope
   ok(views.length >= 5 && views.every((call) => /plateStyle/.test(call)),
     "every loadout summary names its plate family from the same style the bar was drawn with");
 }
-ok(/tabindex:\s*0[\s\S]*data-plate-denomination/.test(barbell),
+ok(/tabindex:\s*0/.test(barbell) && /"data-plate-denomination": plateLabel\(plate\)/.test(barbell),
   "every rendered plate denomination is keyboard inspectable");
 
 // ---- Session lifecycle: destructive discard is confirmed ----

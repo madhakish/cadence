@@ -1,5 +1,4 @@
 import SwiftUI
-import Metal
 import CadenceCore
 
 /// One rack-resolution path for native callers. The resulting `PlateSolution`
@@ -92,7 +91,7 @@ struct BarbellView: View {
 
     /// Every plate as its own element, each side from the collar outward, then
     /// the bar-only or collar note — the same order web's focusable plate
-    /// groups take. Shared with the 3D inspector.
+    /// groups take. Shared with the photographic inspector.
     @ViewBuilder
     static func plateChildren(scene: BarbellScene, loadout: Loadout, exactDenominations: Bool = false) -> some View {
         ForEach([-1, 1], id: \.self) { side in
@@ -201,29 +200,27 @@ struct BarbellInspectionView: View {
         let captionScale = max(1, captionSize / 14)
         // Grow both dimensions with the captions. Widening alone either clips
         // the plates or forces the camera back until enlarged captions overlap.
-        let height = exploded ? 300 * captionScale : 300
+        let reference = PhotographicBar.referenceSize
         VStack(alignment: .leading, spacing: 12) {
-            GeometryReader { proxy in
-                let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
-                let width = exploded ? max(proxy.size.width, CGFloat(minimum) * captionScale) : proxy.size.width
-                ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
-                    Group {
-                        if MTLCreateSystemDefaultDevice() != nil {
+            Color.clear
+                .aspectRatio(reference.width / reference.height, contentMode: .fit)
+                .frame(height: exploded ? 300 * captionScale : nil)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    GeometryReader { proxy in
+                        let minimum = BarbellInspector.minimumWidth(layout: layout, viewportWidth: Double(proxy.size.width), exploded: exploded)
+                        let width = exploded ? max(proxy.size.width, CGFloat(minimum) * captionScale) : proxy.size.width
+                        ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
                             BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
-                                             exploded: exploded, reduceMotion: reduceMotion)
-                        } else {
-                            StudioLoadoutFallback(loadout: solution.loadout, theme: plateTheme, style: plateStyle,
-                                                  exploded: exploded)
+                                             exploded: exploded)
+                                .frame(width: width, height: proxy.size.height)
+                                .contentShape(Rectangle())
+                                .onTapGesture { toggle() }
                         }
+                        .scrollDisabled(!exploded || width <= proxy.size.width)
                     }
-                    .frame(width: width, height: height)
-                    .contentShape(Rectangle())
-                    .onTapGesture { toggle() }
                 }
-                .scrollDisabled(!exploded || width <= proxy.size.width)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
-            }
-            .frame(height: height)
             .accessibilityIdentifier("barbell-inspection-artwork")
             .accessibilityLabel("\(exploded ? "Exploded" : "Assembled") bar, \(Weight.both(lb: solution.loadout.totalLb))")
             .accessibilityHint(exploded ? "The near sleeve's plates are slid out; both sides are mirrored. Tap to assemble." : "The whole loaded bar. Tap to slide the plates out and inspect each one.")

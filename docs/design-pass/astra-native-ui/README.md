@@ -29,7 +29,7 @@ captures before choosing or installing an icon.
 
 ## Runtime integration
 
-The live studio projects photographic materials onto the actual rack-selected bar and plates. Its cameras share the same scene for compact workouts, full-bar stages and the exploded inspector. The [material handoff](../astra-2026-11-01/README.md#native-studio-material-exports) lists source regions and outputs. The fixed-camera photographic composite is an earlier experiment.
+The current equipment compositor assembles the rack-selected bar from photographed faces, treads, steel and collars on a registered empty platform. See the [photographic equipment and native captures](../photographic-equipment/README.md).
 
 The calculator places the achieved total first, the inspectable bar directly
 below it, then the per-side breakdown and inventory cells, following the
@@ -38,14 +38,7 @@ The same order applies to the manually entered stack. The rack name remains
 visible above the mode picker. At accessibility text sizes the totals and
 deviation stack, and the plate cells occupy one column.
 
-The five 55, 45, 35, 25 and 10 lb colored-rubber photographs come directly
-from the reference screen. The calculator uses them for the pound reference
-and matching colored bumper equipment, including the individual plates in a
-loadout. Kilograms, fractional weights, steel, iron and black bumpers retain
-their theme-specific denomination keys. All visible weights and accessible
-labels continue to come from the actual plate. Reproduce the transparent
-156 px catalog assets with `python3 docs/design-pass/astra-native-ui/export_plate_reference.py`
-in the same Pillow environment.
+The calculator reference, inventory and workout views use the same equipment components and the plate record’s exact weight and unit. The CADENCE imprint and matching 45 lb, 20 kg and 15 kg stamps come from the original Astra studies.
 
 The [inspected calculator captures](proof/calculator-a6b1f09/README.md) record
 the exact source, original native screenshots and focused test results at
@@ -56,4 +49,4 @@ The [native splash frame](proof/integration-4f98f98/launch.png) was captured fro
 
 The [studio comparison](proof/integration-7c40b5a/studio-comparison.jpg) shows reference 03 beside three frames from the native renderer at `7c40b5a`. The simulator produced all 15 load, camera and finish combinations. The engraving, oak grain and actual plate order are visible. The rubber faces and floor contact still look flatter than the photographic reference. [Capture provenance](proof/integration-7c40b5a/provenance.json) records the original PNG hashes. [Cold-cache timings](proof/integration-7c40b5a/timings.txt) are simulator measurements.
 
-The [updated native equipment review](proof/studio-f3785401/README.md) compares Astra 03 with the assembled and exploded iPhone renders, covers all eleven equipment themes, and shows the production workout and calculator screens. The [plate-face matrix](proof/plate-faces/README.md) records the source for each finish. [Web equipment proof](WEB-EQUIPMENT.md) covers live rendering, offline use and loss of WebGL.
+The [earlier native equipment comparison](proof/studio-f3785401/README.md) records the SceneKit version. The [current native comparison](../photographic-equipment/README.md) and [web equipment notes](WEB-EQUIPMENT.md) cover the photographic implementation.

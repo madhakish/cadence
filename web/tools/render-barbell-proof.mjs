@@ -1,6 +1,6 @@
-// Render the production SVG with its actual sprite assets, not a mockup.
+// Render the production SVG with its actual photographic assets, not a mockup.
 // Usage: node tools/render-barbell-proof.mjs /absolute/output/directory [theme,theme,...]
-// The optional theme list adds one themed proof per theme (kg set, sprite path); the
+// The optional theme list adds one themed proof per theme (kg loadout); the
 // fixture output below never changes with it.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -29,13 +29,14 @@ for (const [style,solution] of profiles) for (const exploded of [false,true]) {
   svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
   for (const image of svg.querySelectorAll('image')) {
     const bytes=await readFile(fileURLToPath(image.getAttribute('href')));
-    image.setAttribute('href',`data:image/png;base64,${bytes.toString('base64')}`);
+    const mime = image.getAttribute('href').endsWith('.jpg') ? 'jpeg' : 'png';
+    image.setAttribute('href',`data:image/${mime};base64,${bytes.toString('base64')}`);
   }
   const source=Buffer.from(svg.outerHTML);
   for (const width of [390,1280]) await sharp(source).resize({width}).flatten({background:'#14161a'})
     .png().toFile(`${output}/${style}-${exploded?'exploded':'assembled'}-${width}.png`);
 }
-// Optional themed proofs of the sprite path (no fixture output).
+// Optional themed proofs from the production compositor (no fixture output).
 for (const theme of (process.argv[3] || '').split(',').filter(Boolean)) {
   const solution = C.enteredPlateSolution(C.BARS.bar20kg, [25, 20, 15, 10, 5, 2.5, 1.25].map((value) => ({ plate: { value, unit: 'kg' }, count: 1 })), 5.5);
   for (const exploded of [false, true]) {
@@ -45,7 +46,8 @@ for (const theme of (process.argv[3] || '').split(',').filter(Boolean)) {
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     for (const image of svg.querySelectorAll('image')) {
       const bytes = await readFile(fileURLToPath(image.getAttribute('href')));
-      image.setAttribute('href', `data:image/png;base64,${bytes.toString('base64')}`);
+      const mime = image.getAttribute('href').endsWith('.jpg') ? 'jpeg' : 'png';
+      image.setAttribute('href', `data:image/${mime};base64,${bytes.toString('base64')}`);
     }
     await sharp(Buffer.from(svg.outerHTML)).resize({ width: 1280 }).flatten({ background: '#14161a' })
       .png().toFile(`${output}/theme-${theme}-${exploded ? 'exploded' : 'assembled'}-1280.png`);
