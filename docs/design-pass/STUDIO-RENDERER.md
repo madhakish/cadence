@@ -59,6 +59,12 @@ that animates between `hero` and `blowup`, with screen-space captions under
 each slid-out plate. Accessibility labels, plate children, captions and
 identifiers are unchanged from the previous inspector.
 
+The exploded camera fits the actual plate bounds in both viewport dimensions
+and reserves the measured caption height below them. Its lens and viewing
+direction stay fixed; only an insufficient distance increases. At larger text
+sizes the inspector grows its canvas height as well as its scrollable width,
+so fitting the plates does not squeeze enlarged captions together.
+
 ## Assets and provenance
 
 All renderer assets are original. They are produced by the look-dev scripts in
@@ -88,3 +94,10 @@ with `CadenceVisualProofUITests/RenderLabUITests/testRenderLab`. During #316 a
 branch-scoped workflow ran it and published the PNGs to
 `render-proof/photoreal-316`. That workflow needed `contents: write` and a
 force-push, so it was removed before merge rather than kept on main.
+
+`VisualProofUITests/test04PlateCalculatorHero` also launches the focused
+`--render-lab --studio-framing-proof` mode. It checks five synthetic 45 lb
+bumpers through the production camera and SceneKit projection at 592×300,
+1184×300 and 1184×600 points, including space for captions, then captures the
+real inspector at maximum Dynamic Type. This runs in the existing iPhone
+visual-proof selection; it does not require another workflow selector.
