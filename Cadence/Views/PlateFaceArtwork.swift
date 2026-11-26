@@ -17,8 +17,13 @@ struct PlateFaceArtwork: View {
     }
 
     static func surface(plate: Plate, theme: PlateThemeID, style: PlateVisualStyle) -> String {
-        switch PlateTheme.material(plate, theme: theme, style: style).finish {
-        case .rubber: theme == .blackBumpersBand || theme == .cadenceHouse ? "AstraPlateBlackRubber" : "AstraPlateRubber"
+        surface(finish: PlateTheme.material(plate, theme: theme, style: style).finish,
+                blackRubber: theme == .blackBumpersBand || theme == .cadenceHouse)
+    }
+
+    static func surface(finish: PlateFinish, blackRubber: Bool) -> String {
+        switch finish {
+        case .rubber: blackRubber ? "AstraPlateBlackRubber" : "AstraPlateRubber"
         case .powder: "AstraPlatePowder"
         case .gloss: "AstraPlateGloss"
         case .castIron: "AstraPlateCastIron"

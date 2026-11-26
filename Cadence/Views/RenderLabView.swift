@@ -198,7 +198,7 @@ struct RenderLabView: View {
         for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraBlackRubberDetail",
                      "AstraCalibratedCoatingDetail", "AstraCastIronDetail",
                      "PlatformOak", "PlatformWalnut", "PlatformWhiteOak", "PlatformMaple", "PlatformOakNormal",
-                     "AstraStudioRoom", "AstraChromeRoughness", "AstraSleeve", "PlatformMat", "PlatformMatNormal"] {
+                     "AstraStudioRoom", "AstraStudioFloor", "AstraChromeRoughness", "AstraSleeve", "PlatformMat", "PlatformMatNormal"] {
             if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
         }
         let env = StudioTextures.environment

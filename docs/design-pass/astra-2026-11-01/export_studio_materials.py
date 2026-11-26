@@ -171,6 +171,8 @@ def main():
     iron = Image.open(SOURCES / "06-platform-oak-iron.png")
     maple = Image.open(SOURCES / "07-platform-maple-yellow.png")
     save(studio_room(blue), "AstraStudioRoom", "astra-room.jpg")
+    floor = blue.convert("RGB").crop((8, 206, 196, 306)).resize((256, 256), SAMPLE)
+    save(mirror_tile(floor), "AstraStudioFloor", "astra-floor.jpg")
     steel_surfaces(blue)
     for image, box, name in [(coated, (545, 291, 588, 302), "Walnut"),
                              (black, (575, 314, 630, 330), "WhiteOak"),

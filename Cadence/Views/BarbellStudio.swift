@@ -618,6 +618,9 @@ enum StudioFaces {
         // the lathed parts. Hammertone enamel has its own peened height field.
         case .machined, .hammertone: (nil, 0, 0)
         }
+        // The unlettered radial specimen supplies the moulded lip and face.
+        // Per-denomination paint and type remain independent of the source.
+        let specimen = StudioTextures.faceProfile(PlateFaceArtwork.surface(finish: s.finish, blackRubber: s.blackRubber))
         let turn = Double((s.denomination + s.unit).unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) } % 360) * .pi / 180
         let (cosT, sinT) = (cos(turn), sin(turn))
         for y in 0..<n {
@@ -631,7 +634,10 @@ enum StudioFaces {
                     d = photo.sample(u * cosT - v * sinT, u * sinT + v * cosT)
                 }
                 let tooth = pow(d, surface.albedo * (1 - 0.6 * k))
-                var r = fill.0 * mo, g = fill.1 * mo, b = fill.2 * mo
+                let specimenX = x * StudioTextures.profileSize / n
+                let specimenY = y * StudioTextures.profileSize / n
+                let profile = Double(specimen[specimenY * StudioTextures.profileSize + specimenX])
+                var r = fill.0 * mo * profile, g = fill.1 * mo * profile, b = fill.2 * mo * profile
                 if let ink {
                     r = r * (1 - k) + ink.0 * k; g = g * (1 - k) + ink.1 * k; b = b * (1 - k) + ink.2 * k
                 } else {
@@ -796,20 +802,26 @@ enum StudioLighting {
         key.intensity = keyIntensity
         key.color = UIColor(red: 1, green: 0.985, blue: 0.96, alpha: 1)
         key.castsShadow = true
-        key.shadowMode = .deferred
+        key.shadowMode = .forward
         key.shadowColor = UIColor.black.withAlphaComponent(0.85)
         key.shadowRadius = 14
         key.shadowSampleCount = 24
         key.shadowMapSize = CGSize(width: 4096, height: 4096)
-        key.automaticallyAdjustsShadowProjection = true
+        // The entire room is larger than the subject. Bound the shadow map
+        // to the platform so its texels resolve the gap between plates.
+        key.automaticallyAdjustsShadowProjection = false
+        key.orthographicScale = 1800
+        key.zNear = 100
+        key.zFar = 8500
         key.maximumShadowDistance = 9000
-        key.shadowBias = 2
+        key.shadowBias = 0.4
         let node = SCNNode()
         node.light = key
         // High front-left, as a catalogue key: the near faces take a
         // gradient, the tyres a highlight, and the shadow falls back across
         // the oak where it reads as contact.
-        node.eulerAngles = SCNVector3(-Float.pi * 0.3, -Float.pi * 0.2, 0)
+        node.position = SCNVector3(-1800, 3200, 1600)
+        node.look(at: SCNVector3(0, Float(floorY), 0))
         scene.rootNode.addChildNode(node)
     }
 }
@@ -1028,7 +1040,7 @@ enum StudioMaterials {
     }()
     static let gymFloor: SCNMaterial = {
         let m = pbr(UIColor(white: 0.06, alpha: 1), metalness: 0, roughness: 0.86)
-        tiled(m.diffuse, StudioTextures.decoded("PlatformMat"), 30, 30)
+        tiled(m.diffuse, StudioTextures.decoded("AstraStudioFloor"), 12, 12)
         tiled(m.normal, StudioTextures.decoded("PlatformMatNormal"), 30, 30)
         m.normal.intensity = 0.3
         m.isDoubleSided = false
@@ -1160,6 +1172,29 @@ enum StudioTextures {
         }
     }()
 
+    static let profileSize = 256
+    private static var profiles: [String: [Float]] = [:]
+    private static let profileLock = NSLock()
+
+    static func faceProfile(_ asset: String) -> [Float] {
+        profileLock.lock()
+        defer { profileLock.unlock() }
+        if let found = profiles[asset] { return found }
+        let n = profileSize
+        var pixels = [UInt8](repeating: 128, count: n * n)
+        if let source = UIImage(named: asset)?.cgImage,
+           let context = CGContext(data: &pixels, width: n, height: n, bitsPerComponent: 8,
+                                   bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(), bitmapInfo: 0) {
+            context.setFillColor(gray: 0.5, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: n, height: n))
+            context.interpolationQuality = .high
+            context.draw(source, in: CGRect(x: 0, y: 0, width: n, height: n))
+        }
+        let profile = pixels.map { Float(max(0.28, min(1.85, pow(Double($0) / 128, 2)))) }
+        profiles[asset] = profile
+        return profile
+    }
+
     /// Neutral photographed tooth from the Astra surface swatches. Dividing
     /// by the local mean leaves the theme and studio in control of the paint
     /// and light. A missing swatch leaves the bake's multiplier at one.
@@ -1239,7 +1274,9 @@ enum StudioTextures {
         let plane = SCNPlane(width: CGFloat(thickness + 70), height: CGFloat(radius * 1.1))
         let m = SCNMaterial()
         m.lightingModel = .constant
-        m.diffuse.contents = contactGradient
+        m.diffuse.contents = UIColor.black
+        m.transparent.contents = contactGradient
+        m.transparencyMode = .aOne
         m.blendMode = .alpha
         m.writesToDepthBuffer = false
         m.isDoubleSided = false
@@ -1405,7 +1442,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 6
+    static let version = 7
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
