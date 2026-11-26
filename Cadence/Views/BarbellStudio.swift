@@ -1516,7 +1516,7 @@ final class StudioRenderer: @unchecked Sendable {
             _ = StudioTextures.environment
             _ = StudioTextures.studioLight
             _ = StudioTextures.rubberDetail
-            _ = StudioTextures.steelDetail
+            _ = StudioTextures.calibratedCoatingDetail
             _ = StudioTextures.brandedOak
             _ = StudioMaterials.oakTop
             _ = StudioMaterials.knurl
