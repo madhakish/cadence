@@ -703,7 +703,9 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
-                        EngravedGorilla().frame(width: 40, height: 40)
+                        Image(decorative: "FocusTab")
+                            .renderingMode(.template)
+                            .foregroundStyle(HeroInk.steel)
                         Text("Today")
                             .font(.headline.weight(.black))
                             .fontWidth(.condensed)
@@ -1285,25 +1287,6 @@ private struct HeroLiftLine<Detail: View>: View {
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// The exact Vitruvian artwork as a small mark engraved into steel. The
-/// raster is untouched (DECISIONS: gorilla integration); its inverted
-/// luminance is only a mask, so the lines read as cut metal on any theme.
-private struct EngravedGorilla: View {
-    var body: some View {
-        HeroInk.steel
-            .mask {
-                Image("VitruvianFront")
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .colorInvert()
-                    .contrast(2.2)
-                    .luminanceToAlpha()
-            }
-            .accessibilityHidden(true)
     }
 }
 

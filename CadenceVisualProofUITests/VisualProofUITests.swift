@@ -118,6 +118,24 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(inspect.isHittable)
         XCTAssertTrue(visible.contains(inspect.frame))
         capture("after-03b-current-set-plates-iphone")
+
+        // The fixture's squat is still catalogued as a barbell, but the last
+        // working set snapshots 60 lb per implement. Its exercise pane must
+        // present that recorded meaning without offering a whole-bar inspection.
+        app.terminate()
+        app.launchArguments.append("--today-load-basis-proof")
+        app.launch()
+        let resume = app.buttons["resume-session"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 8))
+        resume.tap()
+        let next = app.buttons["done-set"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        next.tap()
+        XCTAssertTrue(app.staticTexts["SET 3 OF 3"].waitForExistence(timeout: 5))
+        app.buttons["exercise-info-Back Squat"].tap()
+        XCTAssertTrue(element("exercise-detail-screen").waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["60 lb each"].exists)
+        XCTAssertFalse(app.buttons["expand-loaded-bar"].exists)
     }
 
     func test03ExercisePaneAndPreservedAnatomy() {

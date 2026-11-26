@@ -7,9 +7,10 @@ struct EquipmentContextImage: View {
     var width: CGFloat = 96
 
     var body: some View {
-        Image("TrainingContext\(category.rawValue)")
+        Image(decorative: category == .main ? "AstraMainEquipmentContext" : "TrainingContext\(category.rawValue)")
             .resizable()
             .scaledToFit()
+            .clipShape(RoundedRectangle(cornerRadius: category == .main ? 5 : 0))
             .frame(width: width, height: width * 2 / 3)
             .accessibilityHidden(true)
     }
