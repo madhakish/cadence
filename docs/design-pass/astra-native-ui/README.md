@@ -46,13 +46,21 @@ captures before choosing or installing an icon.
    accessibility sizes, with themes, safe areas, VoiceOver and Reduce Motion
    respected. Debug stills and scale boards do not establish runtime quality.
 
-The first calculator presentation change puts the existing achieved-load
-summary before the equipment in target and reverse modes. Requested-target
-entry is quieter, and pinned headers have an opaque canvas. Solver results,
-reverse-mode stack order and all readout content remain unchanged.
-At accessibility text sizes, the shared load summary stacks its pound and
-kilogram totals, deviation and equipment details instead of squeezing them
-into horizontal rows. Plate-family cells use one column at those sizes.
+The calculator places the achieved total first, the inspectable bar directly
+below it, then the per-side breakdown and inventory cells, following the
+[Astra plate-loading screen](../astra-2026-11-01/01-screen-plate-loading.png).
+The same order applies to the manually entered stack. The rack name remains
+visible above the mode picker. At accessibility text sizes the totals and
+deviation stack, and the plate cells occupy one column.
+
+The five 55, 45, 35, 25 and 10 lb colored-rubber photographs come directly
+from the reference screen. The calculator uses them for the pound reference
+and matching colored bumper equipment, including the individual plates in a
+loadout. Kilograms, fractional weights, steel, iron and black bumpers retain
+their theme-specific denomination keys. All visible weights and accessible
+labels continue to come from the actual plate. Reproduce the transparent
+156 px catalog assets with `python3 docs/design-pass/astra-native-ui/export_plate_reference.py`
+in the same Pillow environment.
 
 The [inspected calculator captures](proof/calculator-a6b1f09/README.md) record
 the exact source, original native screenshots and focused test results at

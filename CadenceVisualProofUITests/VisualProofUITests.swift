@@ -99,7 +99,7 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let achieved = app.staticTexts["ACHIEVED WITH BAR"]
+        let achieved = element("loadout-achieved-total")
         XCTAssertTrue(achieved.isHittable,
                       "The achieved load must be readable before scrolling past the equipment stage")
         capture("after-07-plate-calculator-iphone")
@@ -143,6 +143,21 @@ final class VisualProofUITests: XCTestCase {
         toggle.tap()
         assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
+
+        app.navigationBars["Loaded bar"].buttons["Done"].tap()
+        let reference = app.buttons["Plate reference"]
+        for _ in 0..<10 where !reference.isHittable { app.swipeUp() }
+        XCTAssertTrue(reference.isHittable)
+        reference.tap()
+        let pounds = app.segmentedControls.buttons["Pounds"]
+        for _ in 0..<4 where !pounds.isHittable { app.swipeUp() }
+        XCTAssertTrue(pounds.isHittable)
+        pounds.tap()
+        let firstPlate = element("plate-reference-55-lb")
+        for _ in 0..<4 where !firstPlate.isHittable { app.swipeUp() }
+        XCTAssertTrue(firstPlate.isHittable)
+        XCTAssertTrue(firstPlate.label.contains("55 lb"))
+        capture("after-07b-astra-pound-plate-reference-iphone")
     }
 
     /// #196: the floating plate button must never sit on top of a control.

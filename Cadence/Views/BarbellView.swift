@@ -45,9 +45,32 @@ struct PlateFaceBadge: View {
 
     private var colour: PlateColour { PlateTheme.colour(plate, theme: plateTheme, style: style) }
 
+    // The master shows these five exact pound denominations in colored rubber.
+    // Other equipment keeps its own material, color convention and unit.
+    private var astraBumper: String? {
+        guard plate.unit == .lb,
+              plateTheme == .lbColourBumpers || (plateTheme == .custom && style == .bumper),
+              [55.0, 45, 35, 25, 10].contains(plate.value) else { return nil }
+        return "AstraBumper\(plate.denomination)lb"
+    }
+
     var body: some View {
+        Group {
+            if let astraBumper {
+                Image(decorative: astraBumper)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                denominationKey
+            }
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityHidden(true)
+    }
+
+    private var denominationKey: some View {
         let foreground = colour.inkColor
-        ZStack {
+        return ZStack {
             Circle()
                 .fill(colour.fillColor)
             Circle()
@@ -63,8 +86,6 @@ struct PlateFaceBadge: View {
             }
             .foregroundStyle(foreground)
         }
-        .frame(width: 52, height: 52)
-        .accessibilityHidden(true)
     }
 }
 
@@ -437,6 +458,19 @@ struct LoadoutSummaryView: View {
     let loadout: Loadout
     var plateStyle: PlateVisualStyle = .steel
     var plateTheme: PlateThemeID = .custom
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LoadoutTotalView(requestedLb: requestedLb, loadout: loadout)
+            Divider()
+            LoadoutContentsView(loadout: loadout, plateStyle: plateStyle, plateTheme: plateTheme)
+        }
+    }
+}
+
+struct LoadoutTotalView: View {
+    let requestedLb: Double?
+    let loadout: Loadout
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// The achieved total keeps its display proportion and follows Dynamic Type.
     @ScaledMetric(relativeTo: .body) private var totalSize: CGFloat = 40
@@ -444,6 +478,74 @@ struct LoadoutSummaryView: View {
     private var differenceLb: Double? {
         requestedLb.map { loadout.totalLb - $0 }
     }
+
+    var body: some View {
+        let summaryLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top))
+        summaryLayout {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ACHIEVED WITH BAR")
+                    .font(.caption.bold())
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                let totalsLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 10))
+                totalsLayout {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(Weight.trim(loadout.totalLb))
+                            .font(.figure(scaled: totalSize))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                        Text("lb")
+                            .font(.system(size: totalSize * 0.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
+                            .font(.figure(scaled: totalSize * 0.6))
+                            .foregroundStyle(.secondary)
+                        Text("kg")
+                            .font(.system(size: totalSize * 0.5))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+            if let requestedLb, let differenceLb {
+                let sign = differenceLb > 0.005 ? "+" : ""
+                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
+                    Text("\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb")
+                        .font(.callout.bold().monospacedDigit())
+                        .foregroundStyle(abs(differenceLb) > 0.01 ? Theme.warn : .secondary)
+                    Text("from \(Weight.trim(requestedLb)) lb")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityIdentifier("loadout-achieved-total")
+    }
+
+    private var accessibilitySummary: String {
+        var parts = ["Achieved total, bar included, \(Weight.both(lb: loadout.totalLb))"]
+        if let requestedLb, let differenceLb {
+            let sign = differenceLb > 0.005 ? "plus " : (differenceLb < -0.005 ? "minus " : "")
+            parts.append("from \(Weight.trim(requestedLb)) lb, \(sign)\(Weight.trim(abs(differenceLb), decimals: 2)) lb")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+struct LoadoutContentsView: View {
+    let loadout: Loadout
+    var plateStyle: PlateVisualStyle = .steel
+    var plateTheme: PlateThemeID = .custom
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var perSideText: String {
         loadout.perSide.isEmpty
@@ -474,58 +576,6 @@ struct LoadoutSummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            let summaryLayout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-                : AnyLayout(HStackLayout(alignment: .top))
-            summaryLayout {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("ACHIEVED WITH BAR")
-                        .font(.caption.bold())
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    let totalsLayout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 10))
-                    totalsLayout {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(Weight.trim(loadout.totalLb))
-                                .font(.figure(scaled: totalSize))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.65)
-                            Text("lb")
-                                .font(.system(size: totalSize * 0.5))
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(Weight.trim(Weight.kg(fromLb: loadout.totalLb)))
-                                .font(.figure(scaled: totalSize * 0.6))
-                                .foregroundStyle(.secondary)
-                            Text("kg")
-                                .font(.system(size: totalSize * 0.5))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-                if let requestedLb, let differenceLb {
-                    let sign = differenceLb > 0.005 ? "+" : ""
-                    VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
-                        Text("\(sign)\(Weight.trim(differenceLb, decimals: 2)) lb")
-                            .font(.callout.bold().monospacedDigit())
-                            .foregroundStyle(abs(differenceLb) > 0.01 ? Theme.warn : .secondary)
-                        Text("from \(Weight.trim(requestedLb)) lb")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
-            .accessibilityIdentifier("loadout-achieved-total")
-
-            Divider()
-
             let equipmentLayout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                 : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
@@ -550,15 +600,6 @@ struct LoadoutSummaryView: View {
                 }
             }
         }
-    }
-
-    private var accessibilitySummary: String {
-        var parts = ["Achieved total, bar included, \(Weight.both(lb: loadout.totalLb))"]
-        if let requestedLb, let differenceLb {
-            let sign = differenceLb > 0.005 ? "plus " : (differenceLb < -0.005 ? "minus " : "")
-            parts.append("from \(Weight.trim(requestedLb)) lb, \(sign)\(Weight.trim(abs(differenceLb), decimals: 2)) lb")
-        }
-        return parts.joined(separator: ", ")
     }
 
     private struct LoadoutCell: View {
