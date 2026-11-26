@@ -59,6 +59,9 @@ the exact source, original native screenshots and focused test results at
 standard and maximum accessibility text sizes. This is limited proof of the
 first hierarchy change; most of the stage remains below the initial viewport.
 
-This PR begins with reviewable brand exports and calculator hierarchy.
-Selected runtime assets, further screen presentation and broader native visual
-proof are still pending; the draft is not merge-ready.
+The calculator layout and the three review exports can ship together. The
+renderer in [#374](https://github.com/madhakish/cadence/pull/374) can use the
+same summary after integration. The owner’s icon selection, the photographic
+stage and the remaining screen work are tracked under
+[#177](https://github.com/madhakish/cadence/issues/177). The session, Watch
+and launch features have landed on `main` through #376, #373 and #379.
