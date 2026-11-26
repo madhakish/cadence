@@ -48,6 +48,28 @@ final class PlateMathTests: XCTestCase {
         }
     }
 
+    // Found by PlateMathOracleTests: the bare-bar shortcut skipped the exact
+    // reconstruction, so a "never over" gym warned about 44.09 lb on a 20 kg
+    // bar (0.002 lb heavy, i.e. exact) and an exact 45 reported its fallback
+    // policy. A bare bar that reconstructs the load is an exact solve.
+    func testBareBarThatReconstructsTheLoadIsAnExactSolve() {
+        let cases: [(Double, Bar, [Plate], LoadingPolicy)] = [
+            (44.09, .bar20kg, Plate.standardKg, .under),
+            (45, .bar45lb, Plate.standardLb, .closest),
+            (45.005, .bar45lb, [], .over),
+        ]
+        for (weight, bar, plates, policy) in cases {
+            let solution = PlateMath.solveLoad(weightLb: weight, bar: bar, plates: plates, policy: policy)
+            XCTAssertEqual(solution.loadout.perSide, [], "\(weight) lb is the bare bar")
+            XCTAssertEqual(solution.policy, .exact, "\(weight) lb on the bare bar is an exact reconstruction")
+            XCTAssertTrue(solution.satisfiesPolicy, "\(weight) lb on the bare bar raises no policy warning")
+        }
+        // Without preferExact nothing changes: the gym policy still judges.
+        let solved = PlateMath.solve(targetLb: 44.09, bar: .bar20kg, plates: Plate.standardKg, policy: .under)
+        XCTAssertEqual(solved.policy, .under)
+        XCTAssertFalse(solved.satisfiesPolicy)
+    }
+
     // A station preference filters the gym inventory to its own denomination,
     // falling back to that denomination's full standard set when the gym
     // stocks none of it; no preference is the gym inventory unchanged.
@@ -209,6 +231,24 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(s.loadout.perSide, [PlateCount(plate: Plate(value: 45, unit: .lb), count: 4)])
         XCTAssertEqual(s.deviationLb, 0, accuracy: 1e-9)
         XCTAssertEqual(Set(s.loadout.perSide.map(\.plate.unit)).count, 1)
+    }
+
+    func testDefaultMixedRackFindsTheCleanStackTheNodeCapUsedToHide() {
+        // Found by checking the default 13-denomination gym rack against
+        // every clean (greedy-fill) stack in the band: the search spent its
+        // 300k nodes in 25 kg-heavy branches and settled for worse stacks.
+        let lb = { (value: Double) in Plate(value: value, unit: .lb) }
+        // 363: 45×3+25 (four plates, two denominations) beats the
+        // 25 kg×2 + 20 kg + 2.5 kg it used to return (three denominations).
+        let closest = PlateMath.solve(targetLb: 363, bar: .bar45lb, plates: Plate.allStandard)
+        XCTAssertEqual(closest.loadout.perSide, [PlateCount(plate: lb(45), count: 3),
+                                                 PlateCount(plate: lb(25), count: 1)])
+        // Never under 348.5: a clean lb stack (350), not the old
+        // 25 kg + 25 lb×3 + 10 kg frankenstack.
+        let over = PlateMath.solve(targetLb: 348.5, bar: .bar45lb, plates: Plate.allStandard, policy: .over)
+        XCTAssertEqual(over.loadout.perSide, [PlateCount(plate: lb(45), count: 3), PlateCount(plate: lb(10), count: 1),
+                                              PlateCount(plate: lb(5), count: 1), PlateCount(plate: lb(2.5), count: 1)])
+        XCTAssertTrue(over.satisfiesPolicy)
     }
 
     // MARK: - Reverse mode

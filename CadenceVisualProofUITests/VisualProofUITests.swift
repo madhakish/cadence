@@ -30,7 +30,12 @@ final class VisualProofUITests: XCTestCase {
     func test02CurrentSessionAndExactPlateStack() {
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["CURRENT SET · NEXT ACTION"].waitForExistence(timeout: 3))
+        // The next action is the thumb-zone Done for the set the hero shows,
+        // not a mid-screen "CURRENT SET · NEXT ACTION" card (retired).
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertEqual(done.label, "Done, working set 2 of 3")
+        XCTAssertGreaterThanOrEqual(done.frame.height, 56, "Done is at least Theme.bigTap tall")
         capture("after-03-current-session-iphone")
         let inspect = app.buttons["expand-loaded-bar"].firstMatch
         let window = app.windows.firstMatch.frame
@@ -225,6 +230,7 @@ final class VisualProofUITests: XCTestCase {
         app.buttons["resume-session"].tap()
         let start = app.buttons["start-hold-timer"].firstMatch
         for _ in 0..<6 where !start.isHittable { app.swipeUp() }
+        capture("plank-start-accessibility-iphone")
         XCTAssertTrue(start.isHittable)
         start.tap()
         allowHoldNotificationsIfPrompted()
@@ -237,6 +243,71 @@ final class VisualProofUITests: XCTestCase {
         app.navigationBars["Hold timer"].buttons["Close"].tap()
         app.buttons["Discard attempt"].tap()
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Discard keeps the set planned")
+    }
+
+    /// The thumb-zone Done and the hero at the largest accessibility size:
+    /// Done stays reachable and labelled, and logging from it still works.
+    func test22SessionDoneAtAccessibilityTextSize() {
+        app.terminate()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+        app.buttons["resume-session"].tap()
+        XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+        capture("after-22-session-done-accessibility-iphone")
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertTrue(done.isHittable)
+        done.tap()
+        XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
+        capture("after-22-session-logged-accessibility-iphone")
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        XCTAssertEqual(done.label, "Done, working set 3 of 3")
+    }
+
+    /// One box per prescription: the fixture's squat (two warmups, then a
+    /// 3-set working prescription with set 1 done) plans each warmup in its
+    /// own box and the work as ONE box with three markers. A marker opens
+    /// that one set's editor; "Edit sets" lists every set, one row each.
+    /// The plan sits below the cockpit; on main the same capture shows the
+    /// old "Show full set plan" rows.
+    func test23GroupedSetPlanAndEditor() {
+        for (size, suffix) in [("UICTContentSizeCategoryAccessibilityXXXL", "-accessibility"), ("UICTContentSizeCategoryL", "")] {
+            app.terminate()
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", size]
+            app.launch()
+            XCTAssertTrue(app.buttons["resume-session"].waitForExistence(timeout: 20))
+            app.buttons["resume-session"].tap()
+            XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
+            let working = element("active-set-group")
+            for _ in 0..<8 where !working.isHittable { app.swipeUp() }
+            capture("after-23-set-plan-expanded\(suffix)-iphone")
+            if !suffix.isEmpty { continue }
+
+            XCTAssertTrue(working.waitForExistence(timeout: 3))
+            XCTAssertEqual(working.label, "Working sets, 3 by 6 at 138.7 lb, 1 of 3 done")
+            let markers = working.buttons.matching(identifier: "set-marker")
+            XCTAssertEqual(markers.count, 3, "one marker per working set, in one box")
+            XCTAssertEqual(markers.element(boundBy: 1).label, "Set 2 of 3, current")
+            // Two ramping warmups keep a box each (different loads).
+            XCTAssertTrue(app.buttons["Warmup 1 of 2, done"].firstMatch.exists)
+            XCTAssertTrue(app.buttons["Warmup 2 of 2, done"].firstMatch.exists)
+
+            markers.element(boundBy: 2).tap()
+            let editor = app.navigationBars["Set"]
+            XCTAssertTrue(editor.waitForExistence(timeout: 5), "a marker opens that one set's editor")
+            capture("after-23-set-editor-from-marker-iphone")
+            editor.buttons["Done"].tap()
+            XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+
+            let edit = working.buttons["Edit sets"]
+            XCTAssertTrue(edit.waitForExistence(timeout: 5))
+            edit.tap()
+            XCTAssertTrue(element("set-plan-editor").waitForExistence(timeout: 5))
+            XCTAssertEqual(app.buttons.matching(identifier: "Set status").count, 5,
+                           "the editor lists every set, warmups included, one row each")
+            capture("after-23-set-plan-editor-iphone")
+        }
     }
 
     private func allowHoldNotificationsIfPrompted() {
@@ -380,10 +451,12 @@ final class VisualProofUITests: XCTestCase {
 
         // The proof fixture starts on squat work set 2 of 3. Resolve both;
         // focus must move to the next authored lift without another tap.
-        for _ in 0..<2 {
-            let status = app.buttons["Set status"].firstMatch
-            XCTAssertTrue(status.waitForExistence(timeout: 3))
-            status.tap()
+        // Logged from the thumb-zone Done; a receipt briefly holds the slot.
+        for ordinal in 2...3 {
+            let done = app.buttons["done-set"]
+            XCTAssertTrue(done.waitForExistence(timeout: 5))
+            XCTAssertEqual(done.label, "Done, working set \(ordinal) of 3")
+            done.tap()
         }
         XCTAssertTrue(element("current-exercise-Romanian Deadlift").waitForExistence(timeout: 5))
         XCTAssertFalse(element("current-exercise-Back Squat").exists)
@@ -438,7 +511,19 @@ final class VisualProofUITests: XCTestCase {
         //   while the captures show them intact;
         // - Dynamic Type findings remain raw advisories, except plate-target;
         //   neither a passing audit nor screenshots establish full AA.
-        let chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        var chrome = [app.tabBars.firstMatch.frame, app.buttons["Plate calculator"].frame]
+        // The logger's bottom bar is the same kind of translucent chrome:
+        // rows scrolled under it measure the bar's material, not the page.
+        // Its own controls (Done, Skip, rest) are still audited in full.
+        let sessionBar = app.descendants(matching: .any)["session-bottom-bar"]
+        var barOwn: [CGRect] = []
+        if sessionBar.exists {
+            chrome.append(sessionBar.frame)
+            barOwn = sessionBar.descendants(matching: .any).allElementsBoundByIndex.map(\.frame)
+        }
+        let underChrome = { (frame: CGRect) in
+            !barOwn.contains(frame) && chrome.contains(where: { $0.intersects(frame) })
+        }
         let nonInteractive: [XCUIElement.ElementType] = [.staticText, .other, .progressIndicator, .image]
         let types: XCUIAccessibilityAuditType = [
             .sufficientElementDescription, .hitRegion, .contrast, .dynamicType,
@@ -448,10 +533,15 @@ final class VisualProofUITests: XCTestCase {
             let element = issue.element
             let identifier = element?.identifier ?? ""
             if issue.auditType == .contrast, let frame = element?.frame,
-               chrome.contains(where: { $0.intersects(frame) }) || identifier.hasPrefix("barbell-plate-") {
+               underChrome(frame) || identifier.hasPrefix("barbell-plate-") {
                 return true
             }
             if issue.auditType == .hitRegion, let element, nonInteractive.contains(element.elementType) {
+                return true
+            }
+            // A control half-scrolled under chrome is small only until the
+            // list moves; the audit measures the visible sliver.
+            if issue.auditType == .hitRegion, let frame = element?.frame, underChrome(frame) {
                 return true
             }
             let line = "\(issue.auditType): \(issue.detailedDescription) — \(element.map { "\($0)" } ?? "(no element)")"
@@ -484,20 +574,26 @@ final class VisualProofUITests: XCTestCase {
     func test13SetCompletionKeepsDominantBlockStill() {
         app.buttons["resume-session"].tap()
         XCTAssertTrue(element("active-session-screen").waitForExistence(timeout: 8))
-        let track = app.otherElements["Working sets"].firstMatch
+        // The set markers (circles above the hero) replaced the separate track.
+        let track = element("current-exercise-Back Squat")
         let hero = element("current-set-hero")
         XCTAssertTrue(track.waitForExistence(timeout: 3))
         XCTAssertTrue(hero.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["WORKING SET 2 OF 3"].exists)
+        XCTAssertTrue(app.staticTexts["SET 2 OF 3"].exists)
         let trackBefore = track.frame
         let heroBefore = hero.frame
         capture("after-13-session-before-set-iphone")
 
-        let status = app.buttons["Set status"].firstMatch
-        XCTAssertTrue(status.waitForExistence(timeout: 3))
-        status.tap()
-        XCTAssertTrue(app.staticTexts["WORKING SET 3 OF 3"].waitForExistence(timeout: 3))
+        // Logged from the primary path: the bottom bar's Done.
+        let done = app.buttons["done-set"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        done.tap()
+        // The receipt takes Done's slot briefly; the screenshot shows it.
+        XCTAssertTrue(element("set-logged-stamp").waitForExistence(timeout: 2))
         capture("after-13-session-after-set-iphone")
+        XCTAssertTrue(app.staticTexts["SET 3 OF 3"].waitForExistence(timeout: 3))
+        XCTAssertTrue(element("set-logged-stamp").waitForNonExistence(timeout: 5), "the receipt lapses on its own")
+        XCTAssertEqual(done.label, "Done, working set 3 of 3")
         XCTAssertEqual(track.frame.origin.y, trackBefore.origin.y, accuracy: 0.5, "set track moved on completion")
         XCTAssertEqual(track.frame.height, trackBefore.height, accuracy: 0.5, "set track resized on completion")
         XCTAssertEqual(hero.frame.origin.y, heroBefore.origin.y, accuracy: 0.5, "current-set hero moved on completion")

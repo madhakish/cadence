@@ -21,7 +21,7 @@ So the work splits where the load stops mattering:
 | --- | --- | --- |
 | Platform, mats, gym floor, gym backdrop | **Codex**: one generated photographic *plate* per shot, empty | No |
 | Camera, lights, tone, platform dimensions, landmarks | **Cadence side**: the hero calibration pack, already rendered from #374 | No |
-| Vitruvian gorilla burn on the oak | The app: the canonical `VitruvianFront` artwork, warped onto the oak with the solved camera, never redrawn | No |
+| Vitruvian gorilla burn on the oak | The app: the canonical brand artwork (the Astra Heritage master in `docs/design-pass/astra-2026-11-01/`, owner decision 2026-11-01), warped onto the oak with the solved camera | No |
 | Bar, plates, collars, their shadows | The app: #374's SceneKit scene, transparent background, shadow catcher | Yes |
 
 [COMPOSITOR.md](COMPOSITOR.md) is how the app puts these together. Two
@@ -106,8 +106,8 @@ of this public repository) and your concept pack
   matte to satin rubber with moulded edges, both stacks on rubber. The pack's
   `02-hero-loaded-135lb.png` shows the load in place.
 - **Clean oak.** No burn, logo or engraving. The app burns the canonical
-  gorilla in itself so the artwork is never redrawn, and the photo's grain
-  runs through the burn.
+  brand gorilla in itself, so the burn is exact and consistent across shots
+  and the photo's grain runs through it.
 
 ## 3. The calibration pack
 
@@ -406,6 +406,7 @@ through the renderer rule's side-by-side for no gain the plate needs.
    it. Say whether the full-size masters may also live in this public
    repository.
 3. **Wood.** Honey oak for every theme, or per-theme variants later.
-4. **Generated burn.** The default is the canonical artwork burned in by the
-   app. Accepting a generator's burn instead would break the "never redrawn"
-   rule and is the owner's call alone.
+4. **Generated burn.** Settled 2026-11-01: the owner made the Astra art the
+   canonical brand source (#177). The app still burns it in itself so every
+   shot carries the same artwork; a burn baked into a generated plate stays
+   out, because it can't be kept consistent across shots.

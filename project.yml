@@ -40,7 +40,11 @@ targets:
         # export-exempt. Declaring this clears the "Missing Compliance" hold on
         # every TestFlight/App Store upload (no per-build manual answer).
         ITSAppUsesNonExemptEncryption: false
-        UILaunchScreen: {}
+        # The gorilla on the Foundry canvas. LaunchSplashView draws the same
+        # two assets at the same spot, so the cold open starts on this frame.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchMark
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # No forced UIUserInterfaceStyle: the theme picker drives appearance via
@@ -151,6 +155,8 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Oxide red (#177): the watch's "now / act" color, Color.accentColor in code.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
   # Watch simulator smoke test (design #339 verification): start, log a set,
   # rest, end, against the debug-only `--watch-fixture` plan.

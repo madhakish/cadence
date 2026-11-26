@@ -331,6 +331,9 @@ struct BarbellStageView: View {
                             .labelStyle(.titleAndIcon)
                             .font(.callout.bold())
                             .frame(minHeight: 44)
+                            // A plain button hit-tests its glyphs only; the
+                            // 44 pt frame is the target only with a shape.
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)

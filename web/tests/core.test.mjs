@@ -2735,6 +2735,25 @@ eq(C.cardioFields("Jump Rope", null, 0.25, null).names.join(","), "distance,time
     eq(solution.policy,policy,"reconstruction fallback preserves the requested policy");
     eq(solution.satisfiesPolicy,satisfies,"reconstruction fallback reports feasibility");
   }
+  // Found by the CadenceCore plate-math oracle: a bare bar that reconstructs
+  // the load exactly is an exact solve, not a gym-policy fallback.
+  for (const [weight, bar, plates, policy] of [
+    [44.09, C.BARS.bar20kg, C.STANDARD_KG, "under"],
+    [45, C.BARS.bar45lb, C.STANDARD_LB, "closest"],
+    [45.005, C.BARS.bar45lb, [], "over"]]) {
+    const solution = C.solveLoad(weight, bar, plates, 10, 0, policy);
+    eq(solution.perSide.length, 0, `${weight} lb is the bare bar`);
+    eq(solution.policy, "exact", `${weight} lb on the bare bar is an exact reconstruction`);
+    eq(solution.satisfiesPolicy, true, `${weight} lb on the bare bar raises no policy warning`);
+  }
+  // The default 13-denomination rack used to exhaust the node budget in
+  // 25 kg-heavy branches; every clean in-band stack is now seeded directly.
+  const label = (s) => s.perSide.map((pc) => `${pc.plate.value}${pc.plate.unit}x${pc.count}`).join(" ");
+  eq(label(C.solve(363, C.BARS.bar45lb, C.ALL_STANDARD)), "45lbx3 25lbx1",
+    "363 on the default rack is 45x3+25, not 25 kg x2 + 20 kg + 2.5 kg");
+  const over = C.solve(348.5, C.BARS.bar45lb, C.ALL_STANDARD, 10, 0, "over");
+  eq(label(over), "45lbx3 10lbx1 5lbx1 2.5lbx1", "never-under 348.5 is a clean lb stack, not a frankenstack");
+  eq(over.satisfiesPolicy, true, "never-under 348.5 is satisfied");
   for (const bar of C.ALL_BARS) near(C.barLabelLb(bar),C.barLb(bar),1e-9,"bar labels retain actual mass");
   const stack = [{plate:{value:20,unit:"kg"},count:2}, {plate:{value:10,unit:"kg"},count:1}];
   const actual = C.totalOnBar(C.BARS.bar45lb, stack);
