@@ -32,3 +32,11 @@ export function equipmentArtKind(exercise, set = null) {
   if (exercise?.type === "dumbbell" && basis === "perImplement") return "dumbbell";
   return null;
 }
+
+
+// The lathed sides use millimetre-scale grain distinct from the face artwork.
+export const rimMaterial = {
+  rubber: ["grain-rubber.webp", .40], "black-rubber": ["grain-black-rubber.webp", .40],
+  powder: ["grain-coating.webp", .25], gloss: ["grain-coating.webp", .14],
+  "cast-iron": ["grain-iron.webp", .35],
+};

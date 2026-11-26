@@ -18,12 +18,13 @@ async function show(page, inspected) {
   }, inspected);
 }
 
-test('Astra platform, photographic faces and exact stack survive an offline inspection', async ({ page, browserName }, info) => {
+test('[WEB-ASTRA-EQUIPMENT] Astra platform, photographic faces and exact stack survive an offline inspection', async ({ page, browserName }, info) => {
   const server = await startServer();
   try {
     await openFirstInstall(page, server.url);
     server.disconnect();
     await page.reload();
+    await expect(page.getByRole('button', { name: 'Blank session', exact: true })).toBeVisible();
     await show(page, false);
     await expect(page.locator('.barbell-platform')).toHaveAttribute('href', /platform-walnut.webp$/);
     await expect(page.locator('.barbell-plate-face')).toHaveCount(6);

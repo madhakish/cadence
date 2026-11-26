@@ -42,6 +42,10 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for panel, finish in [("Oak", "oak"), ("Walnut", "walnut"), ("WhiteOak", "white-oak"), ("Maple", "maple")]:
         platform("Platform" + panel, f"platform-{finish}.webp")
+    for finish, asset in {"rubber": "Bumper", "black-rubber": "BlackRubber",
+                          "coating": "CalibratedCoating", "iron": "CastIron"}.items():
+        neutral = Image.open(source("Astra" + asset + "Detail")).convert("L").resize((256, 256), SAMPLE)
+        neutral.save(OUTPUT / f"grain-{finish}.webp", quality=88, method=6)
     room = Image.open(source("AstraStudioRoom"))
     room.crop((0, 343, room.width, 532)).save(OUTPUT / "room-band.webp", quality=88, method=6)
     for value in [10, 25, 35, 45, 55]:

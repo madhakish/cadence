@@ -23,8 +23,9 @@ for (const [file, name] of Object.entries(sources)) {
   assert.deepEqual(readFileSync(new URL(file, directory)), native, file + ' matches the shared native source');
 }
 const woods = ['oak', 'walnut', 'white-oak', 'maple'].map(name => 'platform-' + name + '.webp');
+const grains = ["rubber", "black-rubber", "coating", "iron"].map(name => "grain-" + name + ".webp");
 const files = readdirSync(directory);
-assert.deepEqual(files.sort(), [...Object.keys(sources), ...woods, 'room-band.webp'].sort());
+assert.deepEqual(files.sort(), [...Object.keys(sources), ...woods, ...grains, 'room-band.webp'].sort());
 assert.ok(!worker.includes('assets/plates/') && !worker.includes('plate-sprites.js'));
 for (const file of files) assert.equal(worker.split(`"assets/astra/${file}"`).length - 1, 1, file + ' precaches once');
 const floorBytes = await Promise.all(woods.map(async file => {
