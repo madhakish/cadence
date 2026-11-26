@@ -1119,11 +1119,12 @@ final class VisualProofUITests: XCTestCase {
                                   height: window.maxY - top - 34)
             let stage = app.cells.containing(.button, identifier: "expand-loaded-bar").firstMatch
             revealRootListRows([stage], viewport: viewport)
+            let calculator = element("plate-calculator-screen")
             for side in ["left", "right"] {
-                let disc = element("barbell-plate-\(side)-0")
+                let disc = calculator.staticTexts["barbell-plate-\(side)-0"]
                 XCTAssertTrue(disc.waitForExistence(timeout: 3))
                 XCTAssertTrue(disc.label.contains(plate), "The visible plate must match the solved denomination")
-                XCTAssertFalse(element("barbell-plate-\(side)-1").exists)
+                XCTAssertFalse(calculator.staticTexts["barbell-plate-\(side)-1"].exists)
             }
             capture("after-calculator-single-\(plate.replacingOccurrences(of: " ", with: "-"))-iphone")
         }
