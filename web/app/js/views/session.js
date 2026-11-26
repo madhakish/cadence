@@ -342,7 +342,9 @@ export async function openSession(id) {
   const synchronizeWarmups = (se, bar, overrideWorkingLb = null) => {
     const ex = exMap.get(se.exerciseName);
     const working = (se.sets || []).filter((set) => !set.isWarmup).sort((a, b) => a.order - b.order);
-    const workingLb = overrideWorkingLb ?? se.plannedWeightLb ?? working[0]?.weightLb;
+    const firstWorkingSet = working[0];
+    const preparationLb = firstWorkingSet?.prescriptionBlock === "ramp" ? firstWorkingSet.weightLb : se.plannedWeightLb;
+    const workingLb = overrideWorkingLb ?? preparationLb ?? firstWorkingSet?.weightLb;
     if (!ex || !(workingLb > 0)) return;
     const existing = (se.sets || []).filter((set) => set.isWarmup).sort((a, b) => a.order - b.order);
     // Work already COMPLETED earlier in the session on this movement with

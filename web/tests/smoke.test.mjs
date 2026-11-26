@@ -3285,8 +3285,22 @@ ok(csv.split("\n")[0].startsWith("date,exercise,set_index"), "csv header");
   const blocks = s531.exercises[0].sets.filter((set) => !set.isWarmup).map((set) => set.prescriptionBlock);
   ok(blocks.includes("amrap") && !blocks.includes("work"),
     `a 531 day carries an amrap top set and no ordinary work set (${blocks})`);
-  for (const set of s531.exercises[0].sets) set.status = "completed";
-  await session.completeSession(s531);
+  const prescribedLoads = s531.exercises[0].sets.filter(set => !set.isWarmup).map(set => set.weightLb);
+  await session.openSession(id); await tick();
+  const overlay = [...document.querySelectorAll("#overlays .overlay")].at(-1);
+  const barSelect = overlay.querySelector('select[aria-label="Bar for Back Squat"]');
+  barSelect.value = C.barId(C.BARS.bar35lb);
+  barSelect.dispatchEvent(new window.Event("change")); await tick();
+  overlay.querySelector("button").click(); await tick(); await tick();
+  const updated = await db.Sessions.get(id);
+  const rebuilt = updated.exercises[0].sets.filter(set => set.isWarmup);
+  ok(updated.exercises[0].barId === C.barId(C.BARS.bar35lb) && rebuilt.length > 0
+    && rebuilt.every(set => set.weightLb < firstRamp.weightLb),
+    `changing the bar keeps all 5/3/1 warmups below the ${firstRamp.weightLb} lb opener (got ${rebuilt.map(set => set.weightLb)})`);
+  ok(JSON.stringify(updated.exercises[0].sets.filter(set => !set.isWarmup).map(set => set.weightLb)) === JSON.stringify(prescribedLoads),
+    "changing the bar preserves the prescribed working weights");
+  for (const set of updated.exercises[0].sets) set.status = "completed";
+  await session.completeSession(updated);
   program = (await db.Programs.all()).find((candidate) => candidate.name === name);
   ok(program.currentWeek === 2, `banking a 531 day advances the rotation (got ${program.currentWeek})`);
 
