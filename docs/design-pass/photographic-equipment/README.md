@@ -18,6 +18,8 @@ The [dynamic load comparison](proof/dynamic-loads.jpg) shows an empty bar, a 225
 
 The PWA uses the same photographs in the actual [plate calculator](proof/web-calculator.png) and [exploded mixed-unit inspector](proof/web-mixed-exploded.png), including after an offline reload.
 
+The [six iPhone screens](proof/iphone-workout-flow.jpg) show Today, the current set, calculator, assembled inspector, exploded inspector and workout preview. Seven synthetic UI tests passed. After fitting the assembled inspector to the photographic frame, the calculator and preview tests passed again, including the maximum-text five-plate inspection.
+
 ## Reproducing the artwork
 
 From the repository root with Pillow and NumPy installed, run the exporter check. Copy the native assets to the PWA after changing the art.
