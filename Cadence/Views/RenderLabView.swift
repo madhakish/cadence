@@ -188,6 +188,12 @@ struct RenderLabView: View {
         // Stored renders would let the lab show an earlier build's output.
         await StudioRenderer.shared.purge()
         var timings = ""
+        // An asset-catalog omission would otherwise take the renderer's
+        // recovery path and still yield a perfectly valid PNG.
+        for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraCastIronDetail",
+                     "PlatformOak", "PlatformOakNormal", "PlatformMat", "PlatformMatNormal"] {
+            if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
+        }
         let env = StudioTextures.environment
         timings += "environment \(Int(env.size.width))x\(Int(env.size.height)) cg=\(env.cgImage != nil)\n"
         if let diag = await RenderLab.environmentProbe() {
