@@ -1,8 +1,9 @@
 {
   "images": [
     {
-      "filename": "plate-bumper.png",
-      "idiom": "universal"
+      "filename": "astra-room.jpg",
+      "idiom": "universal",
+      "scale": "1x"
     }
   ],
   "info": {

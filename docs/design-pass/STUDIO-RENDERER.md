@@ -4,8 +4,7 @@ Every native bar view renders one SceneKit scene, `BarbellStudio`
 (`Cadence/Views/BarbellStudio.swift`): the session row, the current-set stage,
 the plate calculator, the workout preview, the exercise library and the
 loaded-bar inspector. It replaces the September sprite compositor and the
-single-sleeve inspector (#316). Web keeps its sprite and WebGL renderers; it
-has no users and is out of scope for this change.
+single-sleeve inspector (#316). Web has separate SVG and WebGL renderers.
 
 ## What is in the scene
 
@@ -26,22 +25,18 @@ has no users and is out of scope for this change.
   the brand on the upper arc, and a normal map that raises the print (cast
   lettering for iron). Denominations come from `Plate.denomination` and are
   never rounded.
-- **Platform.** 8 × 8 ft: two plywood base layers with plies at the edge, a
-  4 ft oak centre and ¾" stall mats. The existing Vitruvian artwork
-  (`VitruvianFront`, read unchanged) is burned into the oak at runtime. Dark
-  engraving lines char the wood and the paper ground leaves it bare.
-- **Light.** The gym environment (`StudioGym`) is the visible background.
-  What the bar and plates reflect is a product-photography light tent
-  generated at launch (`StudioTextures.studioLight`): a dark neutral room
-  with an overhead softbox, a wide front key and two tall rear strips. The
-  gym alone made the chrome orange (it is mostly oak floor) and the plates
-  dull. A front-left key light casts the shadows, and each plate standing on
-  the platform gets a soft contact shadow.
-- **Surface tooth.** Plate faces borrow their micro-texture from the
-  September photographs the owner approved (`PlateBumper`, `PlateSteel`,
-  5d2b150): the high-passed luminance of the real rubber and cast steel
-  modulates the baked face colour and relief. Colour still comes only from
-  the theme tables.
+- **Platform.** The 8 × 8 ft platform has plywood edges, rubber wings and a
+  4 ft timber centre. The overhead Astra photograph supplies the grain and
+  mat. Calibrated plates use the walnut finish, black banded bumpers use
+  white oak, and IWF training uses maple. All other themes use oak. The
+  transparent Heritage engraving is burned into each panel at runtime.
+- **Light and steel.** An equipment-free strip from the oak/blue study wraps
+  around the studio. A neutral softbox environment supplies moving reflections.
+  The steel roughness map comes from the polished sleeve in that same study.
+  The key casts shadows. Each grounded plate adds a narrow contact shadow.
+- **Plate surfaces.** The four Astra equipment studies supply blue bumper,
+  black rubber, coating and cast-iron detail. The solver and theme select
+  plate dimensions, mass, colour and printed denomination for each load.
 
 ## Shots
 
@@ -67,21 +62,17 @@ so fitting the plates does not squeeze enlarged captions together.
 
 ## Assets and provenance
 
-All renderer assets are original. They are produced by the look-dev scripts in
-[`lookdev/`](lookdev/), which run in Blender 5.2 as a Python module
-(`pip install bpy`):
+The source artwork, deterministic Pillow/NumPy exporter and SHA-256 manifest
+live in [the Astra reference pack](astra-2026-11-01/). Image numbers refer to
+the filenames in that directory.
 
-| Asset | Source | Notes |
+| Runtime surface | Astra source | Use |
 | --- | --- | --- |
-| `StudioGym` | `bake.py env` (exposure −1) | 2048 × 1024 equirect, JPEG |
-| `PlatformOak` | `bake.py oak` | 1024 × 2048 albedo, JPEG; logo composited at runtime |
-| `PlatformMat` | `bake.py mat` | 512 × 2048 albedo, JPEG |
-| `PlatformOakNormal`, `PlatformMatNormal` | `maps.py` | grain and pebble relief |
-
-`studio.py` and `gym.py` are the owner-approved mockup scenes (pass 4, 10–11
-October 2026). Plate lettering, wear and noise maps are generated at runtime
-from deterministic seeds. No manufacturer marks are used. The brand line is
-the theme's own (`CADENCE` by default).
+| Gym and polished sleeve | 03 oak/blue | Equipment-free room strip, neutral sleeve strip and high-pass chrome roughness |
+| Platform wood and rubber | 08 overhead | Unmarked timber and mat samples, with corresponding normal maps |
+| Timber finishes | 04 walnut, 05 white oak, 07 maple | Photographed finish colour over the overhead grain |
+| Engraving | 09 Heritage | Alpha burned into the timber centre |
+| Bumper, coated, black rubber and cast surfaces | 03–06 | Neutral surface detail mapped to the live plate family |
 
 ## Visual QA
 

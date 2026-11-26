@@ -200,7 +200,7 @@ final class BarbellStudio {
             }
         }
 
-        StudioPlatform.add(to: root, floorY: -floorDrop)
+        StudioPlatform.add(to: root, floorY: -floorDrop, theme: theme)
         StudioLighting.apply(to: scene, floorY: -floorDrop)
 
         let camera = SCNCamera()
@@ -730,7 +730,7 @@ enum StudioFaces {
 enum StudioPlatform {
     static let size = 2438.4, centre = 1219.2, layer = 19.05
 
-    static func add(to root: SCNNode, floorY: Double) {
+    static func add(to root: SCNNode, floorY: Double, theme: PlateThemeID) {
         let h = size / 2
         let baseTop = floorY - layer
         let base = SCNBox(width: CGFloat(size), height: CGFloat(2 * layer), length: CGFloat(size), chamferRadius: 2)
@@ -744,7 +744,7 @@ enum StudioPlatform {
         let oakNode = SCNNode(geometry: oak)
         oakNode.position = SCNVector3(0, Float(baseTop + layer / 2 - 0.3), 0)
         root.addChildNode(oakNode)
-        root.addChildNode(plane(width: centre, length: size, x: 0, y: floorY + 0.05, material: StudioMaterials.oakTop))
+        root.addChildNode(plane(width: centre, length: size, x: 0, y: floorY + 0.05, material: StudioMaterials.platformTop(theme: theme)))
         for s in [-1.0, 1.0] {
             let w = h - centre / 2 - 1
             let x = s * (centre / 2 + 1 + w / 2)
@@ -756,26 +756,11 @@ enum StudioPlatform {
             root.addChildNode(plane(width: w, length: size, x: x, y: floorY - 0.35, material: StudioMaterials.matTop))
         }
         let floorY = baseTop - 2 * layer
-        let floor = SCNNode(geometry: SCNPlane(width: 24000, height: 24000))
+        let floor = SCNNode(geometry: SCNPlane(width: 12000, height: 12000))
         floor.geometry?.materials = [StudioMaterials.gymFloor]
         floor.eulerAngles.x = -.pi / 2
         floor.position = SCNVector3(0, Float(floorY - 0.5), 0)
         root.addChildNode(floor)
-        // The room behind the platform, as in the look-dev scene: a block
-        // wall and a power rack, out of focus in every shot.
-        func box(_ w: Double, _ h: Double, _ l: Double, _ x: Double, _ y: Double, _ z: Double, _ m: SCNMaterial) {
-            let b = SCNBox(width: CGFloat(w), height: CGFloat(h), length: CGFloat(l), chamferRadius: 2)
-            b.materials = [m]
-            let node = SCNNode(geometry: b)
-            node.position = SCNVector3(Float(x), Float(y), Float(z))
-            root.addChildNode(node)
-        }
-        box(24000, 5000, 200, 0, floorY + 2500, -4300, StudioMaterials.blockWall)
-        for x in [-620.0, 620.0] {
-            for z in [-2600.0, -3650.0] { box(76, 2300, 76, x, floorY + 1150, z, StudioMaterials.powderCoat) }
-            box(76, 80, 1126, x, floorY + 2300, -3125, StudioMaterials.powderCoat)
-        }
-        for z in [-2600.0, -3650.0] { box(1316, 80, 76, 0, floorY + 2300, z, StudioMaterials.powderCoat) }
     }
 
     /// A horizontal plane facing up whose texture's top edge points to −z
@@ -798,8 +783,8 @@ enum StudioLighting {
     static let exposure: CGFloat = -0.2
     /// The light tent is 8-bit, so its softboxes top out at 1.0; the
     /// intensity is what lets chrome see them brighter than the room.
-    static let environmentIntensity: CGFloat = 3.2
-    static let keyIntensity: CGFloat = 1100
+    static let environmentIntensity: CGFloat = 1.85
+    static let keyIntensity: CGFloat = 1000
 
     static func apply(to scene: SCNScene, floorY: Double) {
         scene.lightingEnvironment.contents = StudioTextures.studioLight
@@ -864,15 +849,19 @@ enum StudioMaterials {
 
     static let chrome: SCNMaterial = {
         let m = pbr(UIColor(white: 0.93, alpha: 1), metalness: 1, roughness: 0.06)
-        tiled(m.roughness, StudioTextures.smudgeRoughness, 3, 2)
+        tiled(m.roughness, StudioTextures.chromeRoughness, 3, 2)
         return m
     }()
     static let sleeve: SCNMaterial = {
         let m = pbr(UIColor(white: 0.94, alpha: 1), metalness: 1, roughness: 0.04)
-        tiled(m.roughness, StudioTextures.smudgeRoughness, 4, 3)
+        tiled(m.roughness, StudioTextures.chromeRoughness, 4, 3)
         return m
     }()
-    static let shaft: SCNMaterial = pbr(UIColor(white: 0.92, alpha: 1), metalness: 1, roughness: 0.13)
+    static let shaft: SCNMaterial = {
+        let m = pbr(UIColor(white: 0.92, alpha: 1), metalness: 1, roughness: 0.13)
+        tiled(m.roughness, StudioTextures.chromeRoughness, 1, 1)
+        return m
+    }()
     static let knurl: SCNMaterial = {
         let m = pbr(UIColor(white: 0.86, alpha: 1), metalness: 1, roughness: 0.34)
         tiled(m.normal, StudioTextures.knurlNormal, 1, 1)
@@ -1005,16 +994,24 @@ enum StudioMaterials {
         cached("band|\(colour)") { pbr(UIColor(rgb: colour), metalness: 0, roughness: 0.62) }
     }
 
-    static let oakTop: SCNMaterial = {
-        let m = pbr(.white, metalness: 0, roughness: 0.48)
-        m.diffuse.contents = StudioTextures.brandedOak
-        m.normal.contents = StudioTextures.decoded("PlatformOakNormal")
-        m.normal.intensity = 0.6
-        filtered(m.diffuse)
-        filtered(m.normal)
-        m.isDoubleSided = false
-        return m
-    }()
+    static func platformTop(theme: PlateThemeID) -> SCNMaterial {
+        let wood: String = switch theme {
+        case .ipfCalibrated, .ipfCalibratedGloss: "PlatformWalnut"
+        case .blackBumpersBand: "PlatformWhiteOak"
+        case .iwfTraining: "PlatformMaple"
+        default: "PlatformOak"
+        }
+        return cached(wood) {
+            let m = pbr(.white, metalness: 0, roughness: 0.48)
+            m.diffuse.contents = StudioTextures.brandedWood(wood)
+            m.normal.contents = StudioTextures.decoded("PlatformOakNormal")
+            m.normal.intensity = 0.6
+            filtered(m.diffuse)
+            filtered(m.normal)
+            m.isDoubleSided = false
+            return m
+        }
+    }
     static let matTop: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.84)
         tiled(m.diffuse, StudioTextures.decoded("PlatformMat"), 2, 8)
@@ -1024,16 +1021,6 @@ enum StudioMaterials {
         return m
     }()
     static let matSide: SCNMaterial = pbr(UIColor(white: 0.05, alpha: 1), metalness: 0, roughness: 0.85)
-    static let powderCoat: SCNMaterial = {
-        let m = pbr(UIColor(white: 0.03, alpha: 1), metalness: 0.1, roughness: 0.45)
-        m.clearCoat.contents = NSNumber(value: 0.2)
-        return m
-    }()
-    static let blockWall: SCNMaterial = {
-        let m = pbr(.white, metalness: 0, roughness: 0.92)
-        tiled(m.diffuse, StudioTextures.blocks, 60, 12.5)
-        return m
-    }()
     static let plywoodEdge: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.75)
         tiled(m.diffuse, StudioTextures.plies, 8, 1)
@@ -1041,6 +1028,7 @@ enum StudioMaterials {
     }()
     static let gymFloor: SCNMaterial = {
         let m = pbr(UIColor(white: 0.06, alpha: 1), metalness: 0, roughness: 0.86)
+        tiled(m.diffuse, StudioTextures.decoded("PlatformMat"), 30, 30)
         tiled(m.normal, StudioTextures.decoded("PlatformMatNormal"), 30, 30)
         m.normal.intensity = 0.3
         m.isDoubleSided = false
@@ -1053,7 +1041,7 @@ enum StudioMaterials {
 /// Deterministic textures: baked platform maps from the asset catalog, the
 /// runtime-branded oak, and tileable noise maps for wear and grain.
 enum StudioTextures {
-    static let environment: UIImage = decoded("StudioGym")
+    static let environment: UIImage = decoded("AstraStudioRoom")
 
     /// What the metal and rubber reflect: a product-photography light tent,
     /// not the gym. The baked gym is mostly oak floor and dark ceiling, so a
@@ -1121,8 +1109,8 @@ enum StudioTextures {
     /// The oak centre with the Astra Heritage engraving burned in: dark
     /// engraving lines char the wood; the paper ground leaves it untouched.
     /// The artwork asset is read as-is and never modified.
-    static let brandedOak: UIImage = {
-        guard let oak = decoded("PlatformOak").cgImage else { return UIImage() }
+    static func brandedWood(_ asset: String) -> UIImage {
+        guard let oak = decoded(asset).cgImage else { return UIImage() }
         let w = oak.width, h = oak.height
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         let space = CGColorSpaceCreateDeviceRGB()
@@ -1159,21 +1147,7 @@ enum StudioTextures {
         }
         guard let out = ctx.makeImage() else { return UIImage(cgImage: oak) }
         return UIImage(cgImage: out)
-    }()
-
-    /// Painted concrete block: 400 × 200 mm courses with recessed mortar.
-    static let blocks: UIImage = {
-        let size = CGSize(width: 200, height: 200)
-        return UIGraphicsImageRenderer(size: size).image { ctx in
-            UIColor(red: 0.105, green: 0.11, blue: 0.118, alpha: 1).setFill()
-            ctx.fill(CGRect(origin: .zero, size: size))
-            UIColor(red: 0.055, green: 0.058, blue: 0.062, alpha: 1).setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 8))
-            ctx.fill(CGRect(x: 0, y: 100, width: 200, height: 8))
-            ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 100))
-            ctx.fill(CGRect(x: 100, y: 100, width: 4, height: 100))
-        }
-    }()
+    }
 
     /// Plywood edge: alternating veneer plies.
     static let plies: UIImage = {
@@ -1251,10 +1225,9 @@ enum StudioTextures {
         for y in 0..<n {
             for x in 0..<n {
                 let u = (Double(x) + 0.5) / Double(n) * 2 - 1, v = (Double(y) + 0.5) / Double(n) * 2 - 1
-                let d = (u * u + v * v).squareRoot()
-                let a = max(0, 1 - d)
-                // Premultiplied black: only alpha matters.
-                px[(y * n + x) * 4 + 3] = UInt8(min(255, pow(a, 1.8) * 0.75 * 255))
+                let r2 = u * u + v * v
+                let contact = 0.63 * exp(-20 * r2) + 0.34 * exp(-3 * r2)
+                px[(y * n + x) * 4 + 3] = UInt8(255 * contact * max(0, 1 - r2))
             }
         }
         return image(px, n)
@@ -1292,7 +1265,7 @@ enum StudioTextures {
     }()
     // Roughness below about 0.1 speckles black on curved chrome in SceneKit's
     // PBR path; real hard chrome is not a mirror anyway.
-    static let smudgeRoughness = gray(Noise.field(size: 256, cells: 4, octaves: 3, seed: 5), lo: 0.11, hi: 0.2)
+    static let chromeRoughness = decoded("AstraChromeRoughness")
     static let grainNormal = normal(grainField, strength: 2.0)
     static let hammerField = Noise.field(size: 256, cells: 20, octaves: 3, seed: 9)
     static let hammerNormal = normal(hammerField, strength: 6.0)
@@ -1336,10 +1309,6 @@ enum StudioTextures {
     }
 
     // Helpers
-
-    private static func gray(_ field: [Double], lo: Double, hi: Double) -> UIImage {
-        rgb(field) { v in let g = lo + (hi - lo) * v; return (g, g, g) }
-    }
 
     private static func rgb(_ field: [Double], _ map: (Double) -> (Double, Double, Double)) -> UIImage {
         let n = Int(Double(field.count).squareRoot())
@@ -1436,7 +1405,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 5
+    static let version = 6
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
@@ -1517,8 +1486,7 @@ final class StudioRenderer: @unchecked Sendable {
             _ = StudioTextures.studioLight
             _ = StudioTextures.rubberDetail
             _ = StudioTextures.calibratedCoatingDetail
-            _ = StudioTextures.brandedOak
-            _ = StudioMaterials.oakTop
+            _ = StudioMaterials.platformTop(theme: .custom)
             _ = StudioMaterials.knurl
         }
     }

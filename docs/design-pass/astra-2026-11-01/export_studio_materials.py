@@ -114,6 +114,45 @@ def plate_detail(photo, crop):
     return Image.fromarray(np.rint(field).astype("uint8"))
 
 
+def studio_room(blue):
+    # This narrow band contains the gym behind the platform. Every photographed
+    # bar, disc and platform edge lies outside it. Reflect the ends for a closed
+    # equirectangular horizon and fade the poles away from the camera.
+    swatch = blue.convert("RGB").crop((0, 0, 1200, 222)).resize((1024, 190), SAMPLE)
+    band = Image.new("RGB", (2048, 190))
+    band.paste(swatch)
+    band.paste(ImageOps.mirror(swatch), (1024, 0))
+    pixels = np.asarray(band, dtype=float)
+    rows = np.arange(1024) - 343
+    panorama = pixels[np.clip(rows, 0, 189)].copy()
+    for distance, target in [(-rows, [13, 14, 16]), (rows - 189, [25, 26, 27])]:
+        fade = np.clip(distance / 160, 0, 1)[:, None, None]
+        fade = fade * fade * (3 - 2 * fade)
+        panorama = panorama * (1 - fade) + np.array(target) * fade
+    return Image.fromarray(panorama.round().astype("uint8"))
+
+
+def steel_surfaces(blue):
+    # Rectify the unobstructed near sleeve, staying inside its chrome edges.
+    sleeve = blue.transform((256, 56), Image.Transform.QUAD,
+                            (91, 455, 91, 494, 258, 468, 258, 431), Image.Resampling.BICUBIC).convert("L")
+    save(sleeve, "AstraSleeve", "astra-sleeve.png")
+    # Small-scale tooling marks affect roughness. Broad bands of reflected
+    # light belong to the live environment and must turn when the camera does.
+    residual = np.asarray(sleeve, dtype=float) - np.asarray(sleeve.filter(ImageFilter.GaussianBlur(4)), dtype=float)
+    roughness = Image.fromarray(np.rint(np.clip(40 + 0.85 * residual, 21, 68)).astype("uint8"))
+    save(mirror_tile(roughness), "AstraChromeRoughness", "astra-chrome.png")
+
+
+def timber_finish(panel, source, box):
+    # Use the colour of each photographed finish on the full overhead timber
+    # grain. The small finish swatches have no letters, plates or cast shadows.
+    grain = np.asarray(panel, dtype=float)
+    reference = np.median(np.asarray(source.convert("RGB").crop(box)), axis=(0, 1))
+    tint = reference / np.maximum(1, np.median(grain, axis=(0, 1)))
+    return Image.fromarray(np.rint(np.clip(grain * tint, 0, 255)).astype("uint8"))
+
+
 def main():
     overhead = Image.open(SOURCES / "08-platform-overhead.png").convert("RGB")
     oak = oak_panel(overhead)
@@ -130,6 +169,13 @@ def main():
     coated = Image.open(SOURCES / "04-platform-walnut-calibrated.png")
     black = Image.open(SOURCES / "05-platform-white-oak-black.png")
     iron = Image.open(SOURCES / "06-platform-oak-iron.png")
+    maple = Image.open(SOURCES / "07-platform-maple-yellow.png")
+    save(studio_room(blue), "AstraStudioRoom", "astra-room.jpg")
+    steel_surfaces(blue)
+    for image, box, name in [(coated, (545, 291, 588, 302), "Walnut"),
+                             (black, (575, 314, 630, 330), "WhiteOak"),
+                             (maple, (545, 301, 585, 310), "Maple")]:
+        save(timber_finish(oak, image, box), "Platform" + name, "platform-" + name.lower() + ".jpg")
     save(plate_detail(blue, (411, 390, 439, 505)), "AstraBumperDetail", "bumper-detail.png")
     save(plate_detail(coated, (267, 464, 294, 496)), "AstraCalibratedCoatingDetail", "calibrated-coating.png")
     save(plate_detail(black, (329, 461, 354, 516)), "AstraBlackRubberDetail", "black-rubber.png")

@@ -1,8 +1,9 @@
 {
   "images": [
     {
-      "filename": "plate-steel.png",
-      "idiom": "universal"
+      "filename": "platform-maple.jpg",
+      "idiom": "universal",
+      "scale": "1x"
     }
   ],
   "info": {

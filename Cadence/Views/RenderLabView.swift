@@ -68,6 +68,11 @@ enum RenderLab {
             item("13-hero-mockup-custom", mockup, .custom, .hero, style: .bumper),
             item("14-blowup-mockup-custom", mockup, .custom, .blowup, style: .bumper),
             item("15-hero-kg-iwfTraining", kgs, .iwfTraining, .hero, style: .bumper),
+            item("16-hero-machined-steel", mixed, .lbMachinedSteel, .hero),
+            item("17-blowup-calibrated-gloss", kgs, .ipfCalibratedGloss, .blowup),
+            item("18-hero-empty-bar", load(.bar20kg, []), .custom, .hero),
+            item("19-blowup-fractional", load(.bar20kg, [kg(5), kg(0.625)]), .custom, .blowup),
+            item("20-hero-long-stack", framingLoadout, .lbColourBumpers, .hero),
         ]
     }
 }
@@ -192,7 +197,8 @@ struct RenderLabView: View {
         // recovery path and still yield a perfectly valid PNG.
         for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraBlackRubberDetail",
                      "AstraCalibratedCoatingDetail", "AstraCastIronDetail",
-                     "PlatformOak", "PlatformOakNormal", "PlatformMat", "PlatformMatNormal"] {
+                     "PlatformOak", "PlatformWalnut", "PlatformWhiteOak", "PlatformMaple", "PlatformOakNormal",
+                     "AstraStudioRoom", "AstraChromeRoughness", "AstraSleeve", "PlatformMat", "PlatformMatNormal"] {
             if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
         }
         let env = StudioTextures.environment
@@ -213,6 +219,7 @@ struct RenderLabView: View {
             timings += "\(item.name) \(ms) ms\n"
             rendered.append((item.name, image))
         }
+        for failure in failed { timings += "FAILED " + failure + "\n" }
         try? timings.write(to: dir.appendingPathComponent("timings.txt"), atomically: true, encoding: .utf8)
         done = true
     }
