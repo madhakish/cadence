@@ -118,6 +118,8 @@ jobs:
           for image in 01-row-squat115-custom 03-hero-225-lbColourBumpers 08-blowup-mixed-lbColourBumpers; do
             test -s "dist/visual-proof/studio-renders/$image.png"
           done
+      - name: Compare the captured blue bumpers to the Astra reference
+        run: node web/tools/check-native-bumper-capture.mjs dist/visual-proof/studio-renders
       - name: Export screenshot attachments
         if: always()
         run: |
