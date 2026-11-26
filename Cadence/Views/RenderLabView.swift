@@ -35,7 +35,7 @@ enum RenderLab {
         }
         let squat115 = load(.bar45lb, [lb(35)])
         let press100 = load(.bar45lb, [lb(25), lb(2.5)])
-        let lb225 = load(.bar45lb, [lb(45)])
+        let lb225 = load(.bar45lb, [lb(45), lb(45)])
         let lb315 = load(.bar45lb, [lb(45), lb(45), lb(45)])
         let mixed = load(.bar45lb, [lb(45), lb(25), lb(10), lb(5), lb(2.5)])
         let kgs = load(.bar20kg, [kg(25), kg(20), kg(10), kg(2.5), kg(1.25)])
@@ -53,13 +53,13 @@ enum RenderLab {
                                                    width: w, height: h, scale: 3))
         }
         return [
-            item("01-row-squat115-custom", squat115, .custom, .row),
-            item("02-row-press100-custom", press100, .custom, .row),
-            item("03-hero-225-lbColourBumpers", lb225, .lbColourBumpers, .hero),
-            item("04-hero-squat115-custom", squat115, .custom, .hero),
+            item("01-row-squat\(Weight.trim(squat115.totalLb))-custom", squat115, .custom, .row),
+            item("02-row-press\(Weight.trim(press100.totalLb))-custom", press100, .custom, .row),
+            item("03-hero-\(Weight.trim(lb225.totalLb))-lbColourBumpers", lb225, .lbColourBumpers, .hero),
+            item("04-hero-squat\(Weight.trim(squat115.totalLb))-custom", squat115, .custom, .hero),
             item("05-hero-mixed-lbBlackIron", mixed, .lbBlackIron, .hero),
             item("06-hero-kg-iwfCompetition", kgs, .iwfCompetition, .hero, style: .bumper),
-            item("07-hero-315-ipfCalibrated", lb315, .ipfCalibrated, .hero),
+            item("07-hero-\(Weight.trim(lb315.totalLb))-ipfCalibrated", lb315, .ipfCalibrated, .hero),
             item("08-blowup-mixed-lbColourBumpers", mixed, .lbColourBumpers, .blowup),
             item("09-blowup-kg-iwfCompetition", kgs, .iwfCompetition, .blowup, style: .bumper),
             item("10-hero-collars-cadenceHouse", collared, .cadenceHouse, .hero),
@@ -190,7 +190,8 @@ struct RenderLabView: View {
         var timings = ""
         // An asset-catalog omission would otherwise take the renderer's
         // recovery path and still yield a perfectly valid PNG.
-        for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraCastIronDetail",
+        for name in ["AstraHeritageBurn", "AstraBumperDetail", "AstraBlackRubberDetail",
+                     "AstraCalibratedCoatingDetail", "AstraCastIronDetail",
                      "PlatformOak", "PlatformOakNormal", "PlatformMat", "PlatformMatNormal"] {
             if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
         }
