@@ -17,8 +17,15 @@ final class PlateFaceProofTests: XCTestCase {
             reverse.tap()
             for unit in ["lb", "kg"] {
                 let plate = app.steppers.matching(NSPredicate(format: "label CONTAINS %@", "1.125 " + unit)).firstMatch
-                for _ in 0..<12 where !plate.isHittable { app.swipeUp() }
-                XCTAssertTrue(plate.isHittable, "The custom denomination and its unit are reachable in the reverse rack")
+                // SwiftUI exposes the Stepper as a group. Its Increment
+                // button receives taps, including when the group is not hittable.
+                let increment = plate.buttons["Increment"]
+                for _ in 0..<16 where !increment.isHittable {
+                    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.70))
+                    let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.45))
+                    start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+                }
+                XCTAssertTrue(increment.isHittable, "The custom denomination’s adjustment is reachable in the reverse rack")
                 XCTAssertGreaterThanOrEqual(plate.frame.minX, app.windows.firstMatch.frame.minX)
                 XCTAssertLessThanOrEqual(plate.frame.maxX, app.windows.firstMatch.frame.maxX)
                 let shot = XCTAttachment(screenshot: app.screenshot())
