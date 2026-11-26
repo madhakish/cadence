@@ -337,7 +337,7 @@ final class VisualProofUITests: XCTestCase {
 
     func test09WorkoutPreviewInspection() {
         let preview = app.buttons["preview-program-day"]
-        for _ in 0..<10 where !preview.isHittable { app.swipeUp() }
+        revealRootListRows([preview])
         XCTAssertTrue(preview.isHittable)
         preview.tap()
         XCTAssertTrue(element("workout-preview-screen").waitForExistence(timeout: 5))
