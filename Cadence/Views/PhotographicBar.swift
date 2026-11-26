@@ -17,7 +17,7 @@ struct PhotographicBar {
     private let explosionScale: CGFloat
     private let explosionAxisScale: CGFloat
     private let explosionOrigin: CGPoint
-    private let room = CGSize(width: 1672, height: 941)
+    static let referenceSize = CGSize(width: 1672, height: 941)
 
     private struct Pose {
         var centre: CGPoint
@@ -49,7 +49,7 @@ struct PhotographicBar {
         let scale = min(size.width / (frameRight - frameLeft), size.height / (shot == .row ? 538 : 790))
         let centreY: CGFloat = shot == .row ? 442 + (225 - restingRadius) * 0.65 : 470.5
         heroStage = CGRect(x: size.width / 2 - (frameLeft + frameRight) / 2 * scale,
-                           y: size.height / 2 - centreY * scale, width: room.width * scale, height: room.height * scale)
+                           y: size.height / 2 - centreY * scale, width: Self.referenceSize.width * scale, height: Self.referenceSize.height * scale)
 
         let availableHeight = max(1, size.height - Self.captionHeight(captionSize))
         let slot = max(1, (size.width - 24) / CGFloat(max(1, near.count)))
@@ -64,8 +64,8 @@ struct PhotographicBar {
         explosionAxisScale = spacing
         let anchorX = size.width / 2 - (first + last) / 2 * spacing
         explosionOrigin = CGPoint(x: anchorX, y: availableHeight * 0.50)
-        let focusScale = max(size.width / room.width, size.height / room.height, diameter / 409)
-        let focusWidth = room.width * focusScale, focusHeight = room.height * focusScale
+        let focusScale = max(size.width / Self.referenceSize.width, size.height / Self.referenceSize.height, diameter / 409)
+        let focusWidth = Self.referenceSize.width * focusScale, focusHeight = Self.referenceSize.height * focusScale
         let focusX = min(0, max(size.width - focusWidth, size.width * 0.60 - 357 * focusScale))
         let focusY = min(0, max(size.height - focusHeight, availableHeight * 0.50 + diameter * 0.50 - 650 * focusScale))
         stage = Self.interpolate(heroStage, CGRect(x: focusX, y: focusY, width: focusWidth, height: focusHeight), self.progress)
@@ -148,21 +148,12 @@ struct PhotographicBar {
 
     private func drawStage() {
         guard let background = UIImage(named: PhotoEquipment.stage(theme)) else { return }
-        // Portrait inspectors can see slightly above or below the wide master.
-        // Extend its boundary colours outside the photographed camera aperture.
         let frame = CGRect(origin: .zero, size: size)
-        if !stage.contains(frame), let cg = background.cgImage {
-            let cover = CGRect(x: min(0, stage.minX), y: min(0, stage.minY), width: max(stage.maxX, size.width) - min(0, stage.minX),
-                               height: max(stage.maxY, size.height) - min(0, stage.minY))
-            func extend(_ source: CGRect, _ destination: CGRect) {
-                guard destination.width > 0, destination.height > 0, let edge = cg.cropping(to: source) else { return }
-                UIImage(cgImage: edge).draw(in: destination)
-            }
-            let w = CGFloat(cg.width), h = CGFloat(cg.height)
-            extend(CGRect(x: 0, y: 0, width: w, height: 1), CGRect(x: cover.minX, y: 0, width: cover.width, height: stage.minY + 1))
-            extend(CGRect(x: 0, y: h - 1, width: w, height: 1), CGRect(x: cover.minX, y: stage.maxY - 1, width: cover.width, height: size.height - stage.maxY + 1))
-            extend(CGRect(x: 0, y: 0, width: 1, height: h), CGRect(x: 0, y: stage.minY, width: stage.minX + 1, height: stage.height))
-            extend(CGRect(x: w - 1, y: 0, width: 1, height: h), CGRect(x: stage.maxX - 1, y: stage.minY, width: size.width - stage.maxX + 1, height: stage.height))
+        if !stage.contains(frame) {
+            // Very wide rows and intermediate inspector poses can extend beyond
+            // the photographed aperture. Keep those margins optically neutral.
+            UIColor(white: 0.055, alpha: 1).setFill()
+            UIRectFill(frame)
         }
         background.draw(in: stage)
     }
