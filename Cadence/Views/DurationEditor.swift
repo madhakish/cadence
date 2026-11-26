@@ -27,7 +27,7 @@ struct DurationEditorButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(title)
         .accessibilityValue(seconds == 0 ? zeroLabel : DurationEditor.spoken(seconds))
-        .accessibilityHint("Opens presets and fine adjustment")
+        .accessibilityHint("Opens presets, fine adjustment, and exact duration entry")
         .sheet(isPresented: $showingEditor) {
             DurationEditor(title: title, seconds: seconds, zeroLabel: zeroLabel) { seconds = $0 }
         }
@@ -47,10 +47,11 @@ struct DurationEditorButton: View {
     }
 }
 
-/// Rest is chosen, not typed: the value big, the usual rests one tap away,
-/// ±15 s for the odd ones, and the caller's zero state (Off, End rest, Use
-/// default) as its own button. Nothing is written until Save.
+/// Presets and ±15 s handle common rests; exact entry keeps every second
+/// editable. The caller's zero state (Off, End rest, Use default) has its
+/// own button. Nothing is written until Save.
 struct DurationEditor: View {
+    private enum Component: String, Hashable { case hours = "Hours", minutes = "Minutes", seconds = "Seconds" }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -58,16 +59,23 @@ struct DurationEditor: View {
     let title: String
     let zeroLabel: String
     let onSave: (Int) -> Void
-    @State private var draft: Int
+    @State private var hours: String
+    @State private var minutes: String
+    @State private var seconds: String
+    @FocusState private var focusedComponent: Component?
 
     init(title: String, seconds: Int, zeroLabel: String, onSave: @escaping (Int) -> Void) {
         self.title = title
         self.zeroLabel = zeroLabel
         self.onSave = onSave
-        _draft = State(initialValue: seconds)
+        _hours = State(initialValue: String(seconds / 3600))
+        _minutes = State(initialValue: String(seconds / 60 % 60))
+        _seconds = State(initialValue: String(seconds % 60))
     }
 
-    private var isValid: Bool { (0...RestDuration.maximumSeconds).contains(draft) }
+    /// The same staged fields feed both controls and Save. Invalid typed
+    /// input must never fall back to a previously valid duration.
+    private var draft: Int? { RestDuration.parse(hours: hours, minutes: minutes, seconds: seconds) }
 
     var body: some View {
         NavigationStack {
@@ -78,6 +86,13 @@ struct DurationEditor: View {
                     presets
                     choice(zeroLabel, selected: draft == 0, font: .headline) { set(0) }
                         .accessibilityIdentifier("duration-zero")
+                    exactEntry
+                    if draft == nil {
+                        Text("Enter whole numbers totaling no more than 60:00.")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.hardStop)
+                            .accessibilityIdentifier("duration-entry-error")
+                    }
                     Text("Up to 60:00. Nothing changes until you tap Save.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -87,6 +102,7 @@ struct DurationEditor: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
+            .scrollDismissesKeyboard(.interactively)
             .background(Theme.background)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -94,11 +110,17 @@ struct DurationEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        guard let draft else { return }
                         onSave(draft)
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .disabled(!isValid)
+                    .disabled(draft == nil)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedComponent = nil }
+                        .accessibilityIdentifier("duration-keyboard-done")
                 }
             }
         }
@@ -108,13 +130,13 @@ struct DurationEditor: View {
     // phone at accessibility sizes before the scale factor has to step in.
     private var readout: some View {
         VStack(spacing: 2) {
-            Text(mmss(max(0, draft)))
+            Text(draft.map { mmss($0) } ?? "—")
                 .font(.system(size: figureSize, weight: .heavy).width(.condensed))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
                 .foregroundStyle(draft == 0 ? .secondary : .primary)
-                .contentTransition(reduceMotion ? .identity : .numericText(value: Double(draft)))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: Double(draft ?? 0)))
             // Always laid out so the figure does not hop when zero toggles.
             Text(zeroLabel)
                 .font(.headline)
@@ -124,7 +146,7 @@ struct DurationEditor: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue(draft == 0 ? zeroLabel : Self.spoken(draft))
+        .accessibilityValue(draft.map { $0 == 0 ? zeroLabel : Self.spoken($0) } ?? "Invalid duration")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: step(up: true)
@@ -143,7 +165,7 @@ struct DurationEditor: View {
     }
 
     private func stepButton(up: Bool) -> some View {
-        let atLimit = up ? draft >= RestDuration.maximumSeconds : draft <= 0
+        let atLimit = draft.map { up ? $0 >= RestDuration.maximumSeconds : $0 <= 0 } ?? true
         return Button { step(up: up) } label: {
             Label {
                 Text("\(RestDuration.stepSeconds) s")
@@ -172,6 +194,41 @@ struct DurationEditor: View {
         }
     }
 
+    private var exactEntry: some View {
+        DisclosureGroup("Enter exact duration") {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 12),
+                                count: dynamicTypeSize.isAccessibilitySize ? 1 : 3)
+            LazyVGrid(columns: columns, spacing: 12) {
+                durationField(.hours, text: $hours)
+                durationField(.minutes, text: $minutes)
+                durationField(.seconds, text: $seconds)
+            }
+            .padding(.top, 12)
+        }
+        .font(.body.weight(.semibold))
+        .tint(Color.primary)
+    }
+
+    private func durationField(_ component: Component, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(component.rawValue)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField(component.rawValue, text: text)
+                .font(.title3.monospacedDigit())
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .focused($focusedComponent, equals: component)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Theme.hairline))
+                .accessibilityLabel(component.rawValue)
+                .accessibilityIdentifier("duration-\(component.rawValue.lowercased())")
+        }
+    }
+
     private func choice(_ label: String, selected: Bool, font: Font,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -188,10 +245,18 @@ struct DurationEditor: View {
     }
 
     private func set(_ seconds: Int) {
-        withAnimation(reduceMotion ? nil : .snappy(duration: Theme.shortMotion)) { draft = seconds }
+        focusedComponent = nil
+        withAnimation(reduceMotion ? nil : .snappy(duration: Theme.shortMotion)) {
+            hours = String(seconds / 3600)
+            minutes = String(seconds / 60 % 60)
+            self.seconds = String(seconds % 60)
+        }
     }
 
-    private func step(up: Bool) { set(RestDuration.stepped(draft, up: up)) }
+    private func step(up: Bool) {
+        guard let draft else { return }
+        set(RestDuration.stepped(draft, up: up))
+    }
 
     /// "1 minute, 30 seconds" — what VoiceOver should say instead of "1:30".
     static func spoken(_ seconds: Int) -> String {

@@ -35,16 +35,19 @@ For the exercise you're resting from, the first rule that applies wins:
 All five appear under **Settings → Rest & training behavior**, from **0:00
 to 60:00** (the existing native/web backup range). On iPhone, tap a value to
 open the duration editor: the value shown big, presets for 1:00, 1:30, 2:00,
-3:00, 4:00 and 5:00 (the current one is lit), **−15 s / +15 s** for anything
-else (hold to repeat; an off-grid value such as 1:37 steps to the next
-quarter-minute mark), and **Off**. The web editor still takes hours, minutes
-and seconds directly and accepts pasted HH:MM:SS; extra seconds carry into
-minutes and invalid entry cannot be saved. Exact seconds such as 1:37 survive
-export and restore, and opening and saving the editor without touching it
-keeps them. They are *defaults*: turning one changes every exercise that
-falls through to it, and never touches an exercise that has a rest of its
-own. **Save** applies the draft; **Cancel** or dismissal leaves the stored
-value untouched. Setting a timer to 0:00 (Off) disables the countdown for
+3:00, 4:00 and 5:00 (the current one is lit), **−15 s / +15 s** for quick
+adjustments (hold to repeat; an off-grid value such as 1:37 steps to the next
+quarter-minute mark), and **Off**. **Enter exact duration** opens hours,
+minutes and seconds when you need a value such as 1:37, including after using
+a preset or stepper. The fields stack at accessibility text sizes. Extra
+seconds carry into minutes in the readout, and invalid entry cannot be saved.
+The web editor takes hours, minutes and seconds directly and also accepts
+pasted HH:MM:SS. Both editors retain exact seconds through export, restore,
+and opening and saving without changes. They are *defaults*: turning one
+changes every exercise that falls through to it, and never touches an
+exercise that has a rest of its own. **Save** applies the draft; **Cancel**
+or dismissal leaves the stored value untouched. Setting a timer to 0:00
+(Off) disables the countdown for
 that bucket. The per-exercise **Rest override** and the running timer's
 **Remaining rest** use the same editor, with **Use default from Settings**
 and **End rest** in place of Off.
