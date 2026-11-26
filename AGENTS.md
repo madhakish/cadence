@@ -35,6 +35,9 @@ Foundation-only deterministic logic; `web/app/js/core.js` mirrors it.
   browser screenshots and web tests cannot establish native quality. Without
   local Xcode, pursue available native CI/captures within the authorized scope
   and report pending native checks rather than shifting the main effort to web.
+- The barbell/plate renderer is owner-approved. Changing its technique or look
+  needs a side-by-side capture against `docs/design-pass/approved/` and the
+  current renderer, and owner sign-off in the PR. Different is not better.
 
 ## Rules that always apply
 
