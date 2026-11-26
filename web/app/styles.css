@@ -351,7 +351,8 @@ input.big-num { font-size: 38px; font-weight: 800; text-align: center; }
 .barbell-wrap .plate-detail { flex-basis: 100%; }
 svg.barbell { height: 46px; max-width: 100%; }
 svg.barbell.emphasis-muted { opacity: .85; }
-svg.dumbbell { height: 36px; max-width: 100%; }
+.dumbbell { display: inline-flex; align-items: center; gap: .4rem; font-variant-numeric: tabular-nums; }
+.dumbbell img { object-fit: contain; }
 .barbell-shadow { fill: #000; opacity: .14; }
 .barbell-plate, .barbell-plate-face, .barbell-plate-rim, .barbell-plate-recess,
 .barbell-plate-hub { vector-effect: non-scaling-stroke; }

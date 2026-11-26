@@ -1,3 +1,4 @@
+import { equipmentArtKind } from "../plate-art.js";
 // Today — resume/open session, next-up suggestions, gym tag.
 import * as ui from "../ui.js";
 import * as C from "../core.js";
@@ -387,14 +388,15 @@ function workoutPreview(program, day, { exMap, gym, barLb, completed = [] }) {
           ui.h("div", { style: { textAlign: "right" } },
             ui.h("div", { class: "wt-big mono", text: ui.fmtWeight(plan.weightLb) + C.loadBasisSuffix(C.resolvedLoadBasis(ex)) }),
             ui.h("div", { class: "sub mono", text: `${plan.sets}×${plan.reps}` }))));
-        if (ex && ex.type === "barbell" && plan.weightLb > 0) {
+        const equipment = equipmentArtKind(ex);
+        if (equipment === "barbell" && plan.weightLb > 0) {
           liftCard.append(barbellPrescriptionView(
             plan.weightLb, targetWeightLb, C.primaryUnit(ui.prefs.unitDisplay), gym,
             ex.stationDenomination ?? null, ex.movementGroup,
           ));
-        } else if (ex && ex.type === "dumbbell" && plan.weightLb > 0) {
+        } else if (equipment === "dumbbell" && plan.weightLb > 0) {
           liftCard.append(ui.h("div", { class: "barbell-wrap", style: { paddingLeft: "0" } },
-            dumbbellSVG(plan.weightLb, C.primaryUnit(ui.prefs.unitDisplay)), ui.h("span", { class: "sub", text: C.primaryUnit(ui.prefs.unitDisplay) })));
+            dumbbellSVG(plan.weightLb, C.primaryUnit(ui.prefs.unitDisplay))));
         }
       }
       body.append(liftCard);

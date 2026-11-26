@@ -1,10 +1,11 @@
 # Equipment imagery inventory — 1 October 2026
 
-> **iOS update (#316, October 2026).** iOS no longer ships the sprite family
-> or the two face-detail textures. Every native bar view now renders the
-> SceneKit studio, whose assets are listed in
-> [STUDIO-RENDERER.md](STUDIO-RENDERER.md). The tables below describe the
-> web client, which keeps them.
+> **November 2026.** The PWA now projects Astra equipment over the solved bar
+> geometry in Today previews, session rows, exercise details and the calculator.
+> The WebGL inspector uses the same registered plate faces and physical platform.
+> Read [Astra equipment for the PWA](astra-native-ui/WEB-EQUIPMENT.md) for current
+> source files, verification and browser captures. The October inventory below
+> describes the previous renderer at commit `20058600`.
 
 This records the equipment artwork already shipped on main at `20058600` and
 consumed by the #177 candidate. PR #271 also adds the three original category

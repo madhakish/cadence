@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { PLATE_SPRITES } from '../app/js/plate-sprites.js';
 import { plateGeometry, barbellScene, plateTintMatrix, plateTintApply, plateTintLift, PLATE_TINT_GREY_MIX, plateTintTarget, plateTintMatrixForFill, PLATE_TINT_IDENTITY } from '../app/js/barbell-scene.js';
 const dom = new JSDOM('<html><body></body></html>', { url:'http://localhost/' });
 global.document = dom.window.document;
@@ -35,10 +34,10 @@ for (const target of compact.svg.querySelectorAll('.barbell-plate-target')) {
     'front-face bore remains on the sleeve axis on both sides');
 }
 for (const face of compact.svg.querySelectorAll('image.barbell-plate-face')) {
-  const meta = PLATE_SPRITES.sprites[face.dataset.sprite];
-  const k = Number(face.getAttribute('width')) / meta.size[0];
-  const x = Number(face.getAttribute('x')) + meta.faceCenter[0] * k;
-  const y = Number(face.getAttribute('y')) + meta.faceCenter[1] * k;
+  const x = Number(face.getAttribute('x')) + Number(face.getAttribute('width')) / 2;
+  const y = Number(face.getAttribute('y')) + Number(face.getAttribute('height')) / 2;
+  const disc = closed.discs.find(d => d.x === Number(face.dataset.centerX));
+  assert.ok(Math.abs(Number(face.getAttribute('height')) * 73 / 156 - disc.radius) < 1e-8);
   assert.ok(Math.abs(y - x * closed.axisY / closed.axisX) < 1e-8,
     'the photographed bore itself, not only its hit target, sits on the sleeve axis');
 }
@@ -56,10 +55,14 @@ for (const plate of compact.svg.querySelectorAll('.barbell-plate-body')) {
 const tints = JSON.parse(readFileSync(new URL('./fixtures/plate-tints.json', import.meta.url), 'utf8'));
 assert.equal(tints.length, 12, 'every token in both styles');
 for (const {token, style, matrix} of tints) assert.deepEqual(plateTintMatrix(token, style), matrix);
-for (const matrix of compact.svg.querySelectorAll('feColorMatrix')) {
-  const token = matrix.parentNode.id.split('-').at(-1);
-  const values = matrix.getAttribute('values').split(' ').map(Number);
-  assert.deepEqual(values, plateTintMatrix(token, 'bumper'), 'the face filter is the style-specific colourisation');
+const filters = compact.svg.querySelectorAll('feComponentTransfer');
+assert.ok(filters.length > 0);
+for (const transform of filters) {
+  const fill = transform.parentNode.id.split('-').at(-1);
+  for (const [index, channel] of ['R', 'G', 'B'].entries()) {
+    const stops = transform.querySelector('feFunc' + channel).getAttribute('tableValues').split(' ').map(Number);
+    assert.deepEqual(stops, [0, parseInt(fill.slice(index * 2, index * 2 + 2), 16) / 255, 1], 'neutral 50% grey maps to the exact equipment pigment');
+  }
 }
 // Luminance-driven: shading survives, the median lands on the pigment's target
 // share of the fill, and black iron is a dark tint rather than the raw texture.
@@ -167,11 +170,8 @@ assert.equal(customInspector.querySelector('.barbell-explode').getAttribute('ari
   'tapping artwork inside the focusable app dialog still opens inspection');
 assert.equal(JSON.stringify(customSolution), customBefore, 'inspection never edits the loadout');
 const worker=readFileSync(new URL('../app/sw.js',import.meta.url),'utf8');
-for (const asset of ['js/barbell-scene.js','js/plate-sprites.js']) assert.ok(worker.includes(`"${asset}"`));
-{
-  // Every installed sprite is precached, so the loaded bar draws offline.
-  const sprites = readdirSync(new URL('../app/assets/plates/', import.meta.url)).filter((f) => f.endsWith('.png'));
-  assert.ok(sprites.length >= 16);
-  for (const file of sprites) assert.ok(worker.includes(`"assets/plates/${file}"`), `${file} precached`);
+for (const asset of ['js/barbell-scene.js','js/plate-art.js']) assert.ok(worker.includes(`"${asset}"`));
+for (const file of readdirSync(new URL('../app/assets/astra/', import.meta.url))) {
+  assert.ok(worker.includes(`"assets/astra/${file}"`), `${file} precached`);
 }
 console.log('Barbell inspection geometry, identity, controls, and offline assets passed');

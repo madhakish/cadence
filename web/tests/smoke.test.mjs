@@ -328,7 +328,7 @@ for (const track of [
     .slice(0, 6).map((label) => Number(label.getAttribute("y")));
   ok(new Set(mixedLabelYs).size > 1,
     "adjacent denominations use staggered label rails instead of printing on top of one another");
-  ok(/bar-shaft-/.test(fullBar.querySelector("image.barbell-shaft")?.getAttribute("href") || "")
+  ok(/astra\/sleeve\.png$/.test(fullBar.querySelector("image.barbell-shaft")?.getAttribute("href") || "")
     && fullBar.querySelectorAll("image.barbell-sleeve, image.barbell-sleeve-near").length === 2,
     "the calculator bar is the rendered chrome shaft and sleeves rather than flat blocks");
   ok(fullBar.getAttribute("viewBox") === `0 0 ${fullRendered.scene.width} ${fullRendered.scene.height}`
@@ -340,7 +340,7 @@ for (const track of [
   const plateBadge = barbell.plateBadgeSVG({ value: 20, unit: "kg" }, "steel");
   ok(plateBadge.getAttribute("aria-hidden") === "true" && !plateBadge.hasAttribute("aria-label")
     && plateBadge.textContent.includes("20") && plateBadge.textContent.includes("kg")
-    && plateBadge.querySelectorAll("circle").length >= 2,
+    && plateBadge.querySelectorAll("image").length === 2,
   "calculator badges keep visible denominations without duplicating the adjacent spoken label");
   ok(barbell.plateBadgeSVG({ value: 1.25, unit: "kg" }, "steel").textContent.includes("1.25"),
     "fractional plate badges preserve the exact denomination instead of rounding to one decimal");
