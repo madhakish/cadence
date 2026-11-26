@@ -82,21 +82,6 @@ struct ActivityQuickLogView: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("AD-HOC WORK")
-                            .font(.caption.bold())
-                            .tracking(0.9)
-                            .foregroundStyle(Theme.accent)
-                        Text("Physical work, not a training session")
-                            .font(.title2.bold())
-                        Text("Banks immediately on the same history timeline. It never advances a cycle, changes a PR, or counts as lifting tonnage.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section {
                     Picker("Activity", selection: $kind) {
                         ForEach(ActivityKind.allCases, id: \.self) { option in
                             Text(option.exerciseName).tag(option)
@@ -115,6 +100,9 @@ struct ActivityQuickLogView: View {
                     }
                 } header: {
                     Text("Work performed")
+                } footer: {
+                    // The rule in one line; the title already says what this is.
+                    Text("Banks to History. Never advances a cycle, sets a PR or counts as tonnage.")
                 }
 
                 Section {
