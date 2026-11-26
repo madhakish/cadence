@@ -73,8 +73,10 @@ jobs:
           -scheme CadenceVisualProof
           -configuration Debug
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device-id }}'
+          -parallel-testing-enabled NO
           -derivedDataPath build/visual-proof
           -resultBundlePath build/VisualProof.xcresult
+          -only-testing:CadenceVisualProofUITests/RenderLabUITests/testRenderLab
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test01HomeAndAdHocWork
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test02CurrentSessionAndExactPlateStack
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test03ExercisePaneAndPreservedAnatomy
@@ -107,6 +109,15 @@ jobs:
           npm ci --prefix web
           (cd web && npx --no-install playwright install chromium)
           node web/tools/capture-design-pass.mjs dist/visual-proof/native-fixture.json dist/visual-proof/web '${{ needs.gate.outputs.sha }}'
+      - name: Export native studio renders
+        if: always() && steps.simulator.outputs.device-id != ''
+        run: |
+          app_data="$(xcrun simctl get_app_container '${{ steps.simulator.outputs.device-id }}' com.madhakish.Cadence data)"
+          mkdir -p dist/visual-proof
+          cp -R "$app_data/tmp/render-lab" dist/visual-proof/studio-renders
+          for image in 01-row-squat115-custom 03-hero-225-lbColourBumpers 08-blowup-mixed-lbColourBumpers; do
+            test -s "dist/visual-proof/studio-renders/$image.png"
+          done
       - name: Export screenshot attachments
         if: always()
         run: |

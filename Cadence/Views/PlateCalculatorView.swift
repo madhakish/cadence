@@ -136,7 +136,7 @@ struct PlateCalculatorView: View {
 
     @ViewBuilder
     private var targetSections: some View {
-        Section("Requested target") {
+        Section {
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                 : AnyLayout(HStackLayout())
@@ -155,6 +155,8 @@ struct PlateCalculatorView: View {
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 120)
                 .accessibilityIdentifier("plate-target-unit")
             }
+        } header: {
+            pinnedHeader("Requested target")
         }
 
         if let solution {
@@ -167,7 +169,7 @@ struct PlateCalculatorView: View {
                     onExpand: { showExpandedBar = true }
                 )
             } header: {
-                Text("Load on the bar")
+                pinnedHeader("Load on the bar")
             }
 
             Section {
@@ -195,7 +197,7 @@ struct PlateCalculatorView: View {
                     .foregroundStyle(Theme.warn)
                 }
             } header: {
-                Text("Load summary")
+                pinnedHeader("Load summary")
             }
 
         }
@@ -215,7 +217,7 @@ struct PlateCalculatorView: View {
                 onExpand: { showExpandedBar = true }
             )
         } header: {
-            Text("On the bar")
+            pinnedHeader("On the bar")
         }
 
         Section {
@@ -226,10 +228,10 @@ struct PlateCalculatorView: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Load summary")
+            pinnedHeader("Load summary")
         }
 
-        Section("Plates on one side") {
+        Section {
             ForEach(availablePlates.sorted(by: >).reversed(), id: \.id) { plate in
                 Stepper(value: Binding(
                     get: { reverseCounts[plate.id] ?? 0 },
@@ -254,10 +256,12 @@ struct PlateCalculatorView: View {
                 reverseOrder = []
             }
                 .frame(minHeight: 44)
+        } header: {
+            pinnedHeader("Plates on one side")
         }
 
         if !reversePerSide.isEmpty {
-            Section("Sleeve order · inside to outside") {
+            Section {
                 ForEach(Array(reversePerSide.enumerated()), id: \.element.id) { index, plateCount in
                     HStack {
                         Text(plateCount.label)
@@ -278,8 +282,23 @@ struct PlateCalculatorView: View {
                     }
                     .accessibilityElement(children: .contain)
                 }
+            } header: {
+                pinnedHeader("Sleeve order · inside to outside")
             }
         }
+    }
+
+    /// A plain list pins its section headers, and with the list background
+    /// hidden they are see-through, so the bar render scrolled up under
+    /// "Load on the bar" and the label read as a caption on the photo. The
+    /// header carries the canvas colour edge to edge instead.
+    private func pinnedHeader(_ title: String) -> some View {
+        Text(title)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(Theme.background)
+            .listRowInsets(EdgeInsets())
     }
 
     /// Reference-only plate families — colour, denomination, other-unit
