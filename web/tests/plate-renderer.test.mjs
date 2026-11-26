@@ -106,8 +106,8 @@ ok(B.barbellSVG(fixtures.F8, "full").svg.querySelectorAll("image.barbell-collar,
   const svg = B.barbellSVG(fixtures.F1, "full", "bumper").svg;
   const faces = [...svg.querySelectorAll("image.barbell-plate-face")];
   ok(faces.length === svg.querySelectorAll(".barbell-plate-body").length && faces.length > 0
-    && faces.every((face) => /^plate-bumper-/.test(face.dataset.sprite) && face.dataset.sprite.endsWith("-assembled")),
-    "F1: each disc is a bumper sprite at the assembled angle");
+    && faces.every((face) => /\/astra\/rubber\.png$/.test(face.getAttribute("href")) && face.dataset.finish === "rubber"),
+    "F1: each assembled bumper loads the registered photographic rubber face");
   const order = faces.map((face) => Number(face.dataset.centerX));
   ok(order.every((x, i) => i === 0 || x <= order[i - 1]), "discs paint from the far (+x) end to the near end");
   ok(svg.querySelectorAll("image.barbell-shaft").length === 1
@@ -151,7 +151,7 @@ ok(S.plateFamily({ value: 5, unit: "kg" }, "bumper") === "bumper" && S.plateFami
 for (const value of [1.125, 1.25, 2.5, 45]) {
   ok(C.plateLabel({ value, unit: "kg" }) === `${value} kg`,
     `formatter preserves exact denomination ${value}`);
-  ok(B.plateBadgeSVG({ value, unit: "kg" }).querySelector('text').textContent === String(value),
+  ok(B.plateBadgeSVG({ value, unit: "kg" }).querySelector('text').textContent === `${value} kg`,
     `face badge preserves stored denomination ${value}`);
 }
 

@@ -1,3 +1,4 @@
+import { equipmentArtKind } from "../plate-art.js";
 // Settings — units, rest, year of birth, gyms, progression, exercise library,
 // and data export/import (the safety net against Safari storage eviction).
 import * as ui from "../ui.js";
@@ -1502,7 +1503,7 @@ export function exerciseDetail(e, { onClose, sessionEntry = null, sessionGym = n
               ? [`Set ${currentNumber} of ${working.length}`, effortCue,
                 Number.isFinite(restSeconds) ? `${ui.mmss(restSeconds)} rest` : null].filter(Boolean).join(" · ")
               : "All work resolved" }));
-          if (current && e.type === "barbell" && current.weightLb > 0) {
+          if (current && equipmentArtKind(e, current) === "barbell" && current.weightLb > 0) {
             const selectedBar = sessionEntry.barId ? C.barById(sessionEntry.barId)
               : C.barById(sessionGym?.defaultBarId || C.barId(C.BARS.bar45lb));
             const style = e.movementGroup === "olympic" ? "bumper" : "steel";

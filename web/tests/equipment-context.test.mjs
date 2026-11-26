@@ -8,7 +8,7 @@ test('original equipment assets retain transparent native/web twins within the o
   const root = new URL('../../', import.meta.url);
   const directory = new URL('web/app/assets/equipment-context/', root);
   const manifest = JSON.parse(await readFile(new URL('manifest.json', directory), 'utf8'));
-  assert.deepEqual(manifest.assets.map((a) => a.category), ['Main', 'Accessory', 'Conditioning']);
+  assert.deepEqual(manifest.assets.map((a) => a.category), ['Accessory', 'Conditioning']);
   const worker = await readFile(new URL('web/app/sw.js', root), 'utf8');
   let total = 0;
   for (const asset of manifest.assets) {

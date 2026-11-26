@@ -7,6 +7,7 @@
 // Where WebGL2 is unavailable (jsdom, old browsers) `supported` is false and
 // barbell.js keeps the sprite SVG.
 import * as C from './core.js';
+import { artURL, faceFinish, platformPhoto } from './plate-art.js';
 import { plateThemeColour, plateThemeDescription, plateThemeMaterial, plateThemeRatios } from './plate-theme.js';
 import { barbellLayout, plateProfile, cameraOrbitPosition, inspectorCamera, inspectorFrame, BORE_RADIUS }
   from './barbell-inspector.js';
@@ -101,34 +102,33 @@ const norm3 = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0]
 const VERT = `#version 300 es
 in vec3 aPos; in vec3 aNormal; in vec2 aUV;
 uniform mat4 uProj, uView, uModel, uLightVP;
+uniform int uMode;
 out vec3 vWorld; out vec3 vLocal; out vec3 vNormal; out vec2 vUV; out vec4 vLight;
 void main() {
   vec4 world = uModel * vec4(aPos, 1.0);
   vWorld = world.xyz; vLocal = aPos; vNormal = mat3(uModel) * aNormal; vUV = aUV; vLight = uLightVP * world;
-  gl_Position = uProj * uView * world;
+  gl_Position = uMode == 5 ? vec4(aPos.xy, 0.999, 1.0) : uProj * uView * world;
 }`;
 
 const FRAG = `#version 300 es
-precision highp float; precision highp sampler2DShadow;
+precision highp float; precision highp int; precision highp sampler2DShadow;
 in vec3 vWorld; in vec3 vLocal; in vec3 vNormal; in vec2 vUV; in vec4 vLight;
 uniform vec3 uColor; uniform float uMetal, uRough, uEnv, uShadowAlpha;
 uniform int uFinish; // 0 smooth, 1 rubber, 2 powder coat, 3 brushed steel
 uniform float uHubRatio, uBoreRatio;
-uniform vec3 uEye, uLightDir;
+uniform vec3 uEye, uLightDir; uniform mat4 uView, uProj;
 uniform int uMode;            // 0 lit, 1 shadow catcher, 2 stamp, 3 knurl, 4 photographic face
-uniform sampler2DShadow uShadow; uniform sampler2D uTex; uniform vec2 uKnurlTile;
+uniform sampler2DShadow uShadow; uniform sampler2D uTex; uniform sampler2D uChromeRoughness; uniform sampler2D uRoom; uniform bool uChrome; uniform vec2 uKnurlTile;
 out vec4 fragColor;
 const float PI = 3.14159265;
-// The studio: dark floor, mid horizon, bright ceiling with an overhead
-// softbox band and two side softboxes, the rig the sprites were lit with.
-float studio(vec3 d, float rough) {
-  float base = mix(0.07, 0.30, smoothstep(-0.35, 0.9, d.y));
-  float blur = 0.035 + rough * 0.25;
-  float roof = smoothstep(0.53 - blur, 0.53 + blur, d.y)
-    * (1.0 - smoothstep(0.84 - blur, 0.84 + blur, d.y));
-  float strip = 1.0 - smoothstep(0.08, 0.17 + blur, abs(d.z - 0.62));
-  float rim = pow(max(dot(d, normalize(vec3(0.8, 0.35, -0.6))), 0.0), mix(180.0, 8.0, rough));
-  return base + roof * 1.9 + strip * 0.65 + rim * 1.6;
+vec2 roomUV(vec3 d) {
+  return vec2(0.5 + atan(d.x, -d.z) / (2.0 * PI), acos(clamp(d.y, -1.0, 1.0)) / PI);
+}
+vec3 studio(vec3 d, float rough) {
+  // The same photographed room lights polished steel as surrounds it.
+  vec3 room = textureLod(uRoom, roomUV(d), rough * 8.0).rgb;
+  float ceiling = smoothstep(.44, .6, d.y) * (1.0 - smoothstep(.78, .97, d.y));
+  return pow(room, vec3(2.2)) * 1.65 + vec3(.12 + ceiling * 1.65);
 }
 float grain(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float shadowAt(vec4 lightPos) {
@@ -140,20 +140,29 @@ float shadowAt(vec4 lightPos) {
   return sum / 9.0;
 }
 void main() {
-  if (uMode == 1) { fragColor = vec4(0.0, 0.0, 0.0, (1.0 - shadowAt(vLight)) * uShadowAlpha); return; }
+  if (uMode == 5) {
+    vec2 ray = (vUV * 2.0 - 1.0) / vec2(uProj[0][0], uProj[1][1]);
+    vec3 worldRay = normalize(transpose(mat3(uView)) * vec3(ray, -1.0));
+    vec2 uv = roomUV(worldRay);
+    fragColor = vec4(texture(uTex, uv).rgb, 1.0); return;
+  }
+  if (uMode == 1) {
+    vec2 uv = vWorld.xz / 2438.4 + 0.5;
+    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) discard;
+    vec3 oakOrRubber = texture(uTex, uv).rgb;
+    fragColor = vec4(oakOrRubber * mix(0.60, 1.0, shadowAt(vLight)), 1.0); return;
+  }
   if (uMode == 2) { vec4 t = texture(uTex, vUV); fragColor = vec4(uColor * t.a, t.a); return; }
   if (uMode == 4) {
     vec4 t = texture(uTex, vUV);
-    float radius = length(vUV - 0.5) / 0.485;
-    if (radius < uBoreRatio || t.a < 0.02) discard;
-    float luminance = dot(t.rgb, vec3(0.2126, 0.7152, 0.0722));
-    vec3 tinted = mix(uColor * luminance / 0.50, t.rgb, 0.07);
-    vec3 colour = mix(t.rgb, tinted, smoothstep(uHubRatio - 0.008, uHubRatio + 0.008, radius));
-    fragColor = vec4(clamp(colour, 0.0, 1.0) * t.a, t.a);
+    float radius = length(vUV - 0.5) / (73.0 / 156.0);
+    if (radius < max(uBoreRatio, uHubRatio) || t.a < 0.02) discard;
+    vec3 paint = mix(2.0 * t.rgb * uColor, 1.0 - 2.0 * (1.0 - t.rgb) * (1.0 - uColor), step(vec3(0.5), t.rgb));
+    fragColor = vec4(paint * mix(0.76, 1.0, shadowAt(vLight)) * t.a, t.a);
     return;
   }
   vec3 N = normalize(vNormal);
-  float rough = uRough;
+  float rough = uChrome ? clamp(uRough + (texture(uChromeRoughness, vUV).r - 0.5) * 0.18, 0.11, 0.95) : uRough;
   vec3 baseColor = uColor;
   float fine = grain(floor(vLocal * 2.4));
   if (uFinish == 1 || uFinish == 2) {
@@ -239,7 +248,7 @@ function labelTexture(plate) {
 
 // ---------------------------------------------------------------- renderer
 
-export function barbellGL(solution, style = 'steel', { exploded = false, onProject = () => {}, plateTheme = 'custom' } = {}) {
+export function barbellGL(solution, style = 'steel', { exploded = false, onProject = () => {}, plateTheme = 'custom', onUnavailable = () => {} } = {}) {
   const canvas = document.createElement('canvas');
   canvas.className = 'barbell-gl';
   // jsdom and old browsers have no WebGL2 at all; asking would only log.
@@ -247,7 +256,14 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     ? canvas.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: true }) : null;
   if (!gl) return { canvas, supported: false };
 
-  const program = link(gl, VERT, FRAG), depthProgram = link(gl, DEPTH_VERT, DEPTH_FRAG);
+  let program, depthProgram;
+  try {
+    program = link(gl, VERT, FRAG);
+    depthProgram = link(gl, DEPTH_VERT, DEPTH_FRAG);
+  } catch {
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return { canvas, supported: false };
+  }
   const U = (name) => gl.getUniformLocation(program, name);
   const meshes = [];      // { vao, model, parts: [{ offset, count, material }] }
   const layouts = { closed: barbellLayout(solution, style, 0, {}, plateTheme), open: barbellLayout(solution, style, 1, {}, plateTheme) };
@@ -259,10 +275,10 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
   const FINISH = { rubber: 1, powder: 2, gloss: 0, castIron: 1, hammertone: 2, machined: 3 };
   const blackOxide = theme.barFinish === 'blackOxide';
   const M = {
-    chrome: { colour: [0.72, 0.76, 0.80], metal: 1, rough: 0.23, finish: 3 },
+    chrome: { chrome: true, colour: [0.72, 0.76, 0.80], metal: 1, rough: 0.23, finish: 3 },
     blackSteel: { colour: [0.11, 0.11, 0.12], metal: 0.6, rough: 0.5, finish: 2 },
-    shaft: blackOxide ? { colour: [0.2, 0.21, 0.23], metal: 1, rough: 0.42, finish: 3 } : { colour: [0.52, 0.56, 0.60], metal: 1, rough: 0.31, finish: 3 },
-    knurl: blackOxide ? { colour: [0.19, 0.2, 0.22], metal: 1, rough: 0.5, knurl: true } : { colour: [0.50, 0.54, 0.58], metal: 1, rough: 0.44, knurl: true },
+    shaft: blackOxide ? { colour: [0.2, 0.21, 0.23], metal: 1, rough: 0.42, finish: 3 } : { chrome: true, colour: [0.52, 0.56, 0.60], metal: 1, rough: 0.31, finish: 3 },
+    knurl: blackOxide ? { colour: [0.19, 0.2, 0.22], metal: 1, rough: 0.5, knurl: true } : { chrome: true, colour: [0.50, 0.54, 0.58], metal: 1, rough: 0.44, knurl: true },
     collar: { colour: [0.16, 0.16, 0.16], metal: 0.4, rough: 0.55 },
     plate: (plate, fill) => {
       const m = plateThemeMaterial(plate, plateTheme, style);
@@ -322,7 +338,6 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     const profile = plateProfile(disc.family, disc.radius * 2, disc.thickness);
     const mesh = latheMesh(profile, 96, 2);
     const colour = plateColour(disc.plate);
-    const material = plateThemeMaterial(disc.plate, plateTheme, style);
     const ratios = plateThemeRatios(disc.plate, plateTheme, style);
     const entry = add(mesh, disc.centerX, null, [
       { offset: 0, count: mesh.hubCount, material: hubMaterial(disc.plate, colour.fill) },
@@ -330,13 +345,13 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     ]);
     discEntries.push({ disc, entry });
     const R = disc.radius;
-    const faceX = -disc.thickness / 2 - 1.2, extent = R / .97;
+    const faceX = -disc.thickness / 2 - 1.2, extent = R * 78 / 73;
     const photo = add({
       positions: new Float32Array([faceX, -extent, -extent, faceX, -extent, extent, faceX, extent, extent, faceX, extent, -extent]),
       normals: new Float32Array([-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0]),
       uvs: new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]), indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
-    }, disc.centerX, { colour: hexToRGB(colour.fill), photo: true, family: disc.family, photoFamily: material.photoFamily,
-      hubRatio: ratios.photoHub, boreRatio: BORE_RADIUS / R });
+    }, disc.centerX, { colour: hexToRGB(colour.fill), photo: true, asset: faceFinish(disc.plate, plateTheme, style) + ".png",
+      hubRatio: ratios.hub, boreRatio: BORE_RADIUS / R });
     photoEntries.push({ disc, entry: photo });
     const hub = Math.max(BORE_RADIUS + 8, ratios.hub * R);
     const rim = ratios.rim * R;
@@ -381,12 +396,18 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
       collarEntries.push(add(latheMesh(profile, 72), x, M.chrome));
     }
   }
-  // The floor catches the shadow only.
+  const room = add({
+    positions: new Float32Array([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0]),
+    normals: new Float32Array(12), uvs: new Float32Array([0,0, 1,0, 1,1, 0,1]),
+    indices: new Uint32Array([0,1,2, 0,2,3]),
+  }, 0, { room: true, asset: "room.jpg" });
+  // Single physical platform. World coordinates keep the wood and engraving
+  // anchored as the plate count, shot and viewport change.
   const floorY = -layouts.closed.maxRadius - 2;
   const floor = add({
     positions: new Float32Array([-9000, floorY, -9000, 9000, floorY, -9000, 9000, floorY, 9000, -9000, floorY, 9000]),
     normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]), uvs: new Float32Array(8), indices: new Uint32Array([0, 2, 1, 0, 3, 2]),
-  }, 0, { floor: true });
+  }, 0, { floor: true, asset: platformPhoto(plateTheme) });
 
   // Textures: knurl normal map and per-label alpha textures.
   const knurl = knurlNormalMap();
@@ -403,29 +424,27 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     material.texture = tex;
   }
-  // Two original photographic face details, reused for every denomination.
-  // Counts, silhouette, tint and exact stamps remain renderer-owned. The
-  // procedural solid stays visible while an image loads or if it fails.
-  for (const family of ['bumper', 'steel']) {
-    const source = new Image();
-    source.onload = () => {
+  const chromeSurface = { asset: 'chrome-roughness.png' };
+  const materials = [room.parts[0].material, floor.parts[0].material, chromeSurface,
+    ...photoEntries.map(({ entry }) => entry.parts[0].material)];
+  for (const name of new Set(materials.map(material => material.asset))) {
+    const image = new Image();
+    image.onload = () => {
       if (state.disposed) return;
-      const texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
       gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, name === 'room.jpg' ? gl.REPEAT : gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      for (const { entry } of photoEntries) {
-        const material = entry.parts[0].material;
-        const wanted = material.photoFamily === null ? null : (material.photoFamily || (material.family === 'bumper' ? 'bumper' : 'steel'));
-        if (wanted === family) material.texture = texture;
-      }
+      for (const material of materials) if (material.asset === name) material.texture = texture;
       request();
     };
-    source.src = new URL(`../assets/plates/${family}-face-detail.png`, import.meta.url).href;
+    image.onerror = () => { if (!state.disposed) onUnavailable(); };
+    image.src = artURL(name);
   }
   // Shadow map.
   const SHADOW = 2048;
@@ -498,7 +517,7 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     gl.useProgram(depthProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(depthProgram, 'uLightVP'), false, lightVP);
     for (const m of meshes) {
-      if (m === floor || m.parts[0].material.unlit || m.parts[0].material.photo) continue;
+      if (m === room || m === floor || m.parts[0].material.unlit || m.parts[0].material.photo) continue;
       gl.uniformMatrix4fv(gl.getUniformLocation(depthProgram, 'uModel'), false, m.model);
       gl.bindVertexArray(m.vao);
       for (const part of m.parts) gl.drawElements(gl.TRIANGLES, part.count, gl.UNSIGNED_INT, part.offset * 4);
@@ -515,23 +534,30 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     gl.uniform3fv(U('uEye'), eyeV); gl.uniform3fv(U('uLightDir'), lightDir);
     gl.uniform1f(U('uEnv'), 0.9); gl.uniform1f(U('uShadowAlpha'), 0.22);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shadowTex); gl.uniform1i(U('uShadow'), 0);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, chromeSurface.texture || knurlTex);
+    gl.uniform1i(U('uChromeRoughness'), 2);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, room.parts[0].material.texture || knurlTex); gl.uniform1i(U('uRoom'), 3);
     gl.uniform1i(U('uTex'), 1); gl.uniform2f(U('uKnurlTile'), 28, 3);
     const draw = (m) => {
       gl.uniformMatrix4fv(U('uModel'), false, m.model);
       gl.bindVertexArray(m.vao);
       for (const part of m.parts) {
         const mat = part.material;
-        if (mat.photo && !mat.texture) continue;
+        if (mat.asset && !mat.texture) continue;
         gl.uniform3fv(U('uColor'), mat.colour || [0, 0, 0]);
         gl.uniform1f(U('uMetal'), mat.metal || 0); gl.uniform1f(U('uRough'), mat.rough || 0.5);
         gl.uniform1i(U('uFinish'), mat.finish || 0);
-        gl.uniform1i(U('uMode'), mat.floor ? 1 : mat.unlit ? 2 : mat.photo ? 4 : mat.knurl ? 3 : 0);
+        gl.uniform1i(U('uChrome'), mat.chrome && chromeSurface.texture ? 1 : 0);
+        gl.uniform1i(U('uMode'), mat.room ? 5 : mat.floor ? 1 : mat.unlit ? 2 : mat.photo ? 4 : mat.knurl ? 3 : 0);
         gl.uniform1f(U('uHubRatio'), mat.hubRatio || 0); gl.uniform1f(U('uBoreRatio'), mat.boreRatio || 0);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mat.knurl ? knurlTex : mat.texture || knurlTex);
         gl.drawElements(gl.TRIANGLES, part.count, gl.UNSIGNED_INT, part.offset * 4);
       }
     };
-    for (const m of meshes) if (m !== floor && !m.parts[0].material.unlit && !m.parts[0].material.photo) draw(m);
+    gl.depthMask(false); gl.disable(gl.DEPTH_TEST);
+    draw(room);
+    gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+    for (const m of meshes) if (m !== room && m !== floor && !m.parts[0].material.unlit && !m.parts[0].material.photo) draw(m);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     draw(floor);
     for (const { entry } of photoEntries) draw(entry);
@@ -582,7 +608,10 @@ export function barbellGL(solution, style = 'steel', { exploded = false, onProje
     requestAnimationFrame(step);
   }
 
+  const restoreProjection = () => { if (!state.disposed) onUnavailable(); };
+  canvas.addEventListener('webglcontextlost', restoreProjection);
   function dispose() {
+    canvas.removeEventListener('webglcontextlost', restoreProjection);
     state.disposed = true; observer?.disconnect();
     gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
