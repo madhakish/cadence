@@ -172,9 +172,9 @@ final class VisualProofUITests: XCTestCase {
         XCTAssertTrue(keyboardDone.waitForExistence(timeout: 3))
         keyboardDone.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
-        let achieved = app.staticTexts["ACHIEVED WITH BAR"]
-        for _ in 0..<3 where !achieved.isHittable { app.swipeUp() }
-        XCTAssertTrue(achieved.isHittable)
+        let achieved = element("loadout-achieved-total")
+        XCTAssertTrue(achieved.isHittable,
+                      "The achieved load must be readable before scrolling past the equipment stage")
         capture("after-07-plate-calculator-iphone")
 
         let inspect = element("expand-loaded-bar")
@@ -216,6 +216,21 @@ final class VisualProofUITests: XCTestCase {
         toggle.tap()
         assertInspectorState("Exploded", button: toggle)
         capture("barbell-bumper-exploded-iphone")
+
+        app.navigationBars["Loaded bar"].buttons["Done"].tap()
+        let reference = app.buttons["Plate reference"]
+        for _ in 0..<10 where !reference.isHittable { app.swipeUp() }
+        XCTAssertTrue(reference.isHittable)
+        reference.tap()
+        let pounds = app.segmentedControls.buttons["Pounds"]
+        for _ in 0..<4 where !pounds.isHittable { app.swipeUp() }
+        XCTAssertTrue(pounds.isHittable)
+        pounds.tap()
+        let firstPlate = element("plate-reference-55-lb")
+        for _ in 0..<4 where !firstPlate.isHittable { app.swipeUp() }
+        XCTAssertTrue(firstPlate.isHittable)
+        XCTAssertTrue(firstPlate.label.contains("55 lb"))
+        capture("after-07b-astra-pound-plate-reference-iphone")
     }
 
     /// #196: the floating plate button must never sit on top of a control.
@@ -713,12 +728,14 @@ final class VisualProofUITests: XCTestCase {
                                        height: window.maxY - top - 34)
             let inputRow = app.cells.containing(.textField, identifier: "plate-target").firstMatch
             revealRootListRows([inputRow], viewport: inputViewport)
-            // The plain List pins the scrolled section's header over the top
-            // of this row at accessibility sizes, and the frame check above
-            // cannot see that. Nudge the row back below the header, then wait.
-            for _ in 0..<2 where !target.isHittable {
+            // A partly covered field can still be hittable. Measure the
+            // pinned header too, so the capture shows the whole input.
+            let requestedHeader = app.staticTexts["Requested target"].firstMatch
+            XCTAssertTrue(requestedHeader.exists)
+            for _ in 0..<6 where target.frame.minY < max(top, requestedHeader.frame.maxY + 8) {
                 scrollRootList(by: 80, viewport: inputViewport)
             }
+            XCTAssertGreaterThanOrEqual(target.frame.minY, requestedHeader.frame.maxY + 8)
             let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: target)
             XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed,
                            "the target must be tappable once the keyboard has closed; field \(target.frame), row \(inputRow.frame), viewport \(inputViewport)")
@@ -738,6 +755,12 @@ final class VisualProofUITests: XCTestCase {
             units.buttons["kg"].tap()
             XCTAssertTrue(units.buttons["kg"].isSelected)
             XCTAssertEqual(target.value as? String, "139", "switching units preserves the entered number")
+            if name == "accessibility" {
+                let achieved = element("loadout-achieved-total")
+                revealRootListRows([achieved], viewport: inputViewport)
+                XCTAssertTrue(achieved.label.contains("Achieved total, bar included"))
+                capture("after-14-calculator-achieved-accessibility-iphone")
+            }
         }
     }
 
