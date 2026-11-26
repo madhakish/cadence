@@ -97,14 +97,16 @@ icon pipeline and verify the system masks and small sizes before installation.
 The renderer uses the photographed grain from the unmarked wood and rubber
 regions of the overhead platform (08). The export assembles the wood along
 its grain, removes broad lighting from the mat, and derives matching normals.
-Neutral swatches of unlettered blue rubber (03) and cast iron (06) supply
-plate surface detail. The theme supplies the paint and denomination. The
+Neutral swatches of unlettered coloured bumper rubber (03), calibrated steel coating
+(04), black bumper rubber (05), and cast iron (06) supply plate surface detail.
+The same coating takes less relief beneath the glossy clear coat. Bare machined
+steel keeps its brushed metal response, while peened enamel uses its own normal. The theme supplies the paint and denomination. The
 Heritage master (09) supplies an alpha mask, which the renderer burns into
 the oak once, in world coordinates. These materials follow the modeled scene
 through an inline hero, a compact row and the live assembled/exploded inspector.
 
 To reproduce the maps, run `python3 docs/design-pass/astra-2026-11-01/export_studio_materials.py`
 with Pillow and NumPy. The crop coordinates and source transforms live in that
-script. The pinned SHA-256s cover the four originals and seven exported maps.
+script. The pinned SHA-256s cover the six originals and nine exported maps.
 The iPhone visual-proof artifact includes cold-cache studio renders under
 `studio-renders/` and app captures of the assembled and exploded inspector.

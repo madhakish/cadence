@@ -127,8 +127,12 @@ def main():
     save(surface_normal(mat, mat.size, 1.8), "PlatformMatNormal", "platform-mat-normal.png")
 
     blue = Image.open(SOURCES / "03-platform-oak-blue.png")
+    coated = Image.open(SOURCES / "04-platform-walnut-calibrated.png")
+    black = Image.open(SOURCES / "05-platform-white-oak-black.png")
     iron = Image.open(SOURCES / "06-platform-oak-iron.png")
     save(plate_detail(blue, (411, 390, 439, 505)), "AstraBumperDetail", "bumper-detail.png")
+    save(plate_detail(coated, (267, 464, 294, 496)), "AstraCalibratedCoatingDetail", "calibrated-coating.png")
+    save(plate_detail(black, (329, 461, 354, 516)), "AstraBlackRubberDetail", "black-rubber.png")
     save(plate_detail(iron, (402, 369, 424, 451)), "AstraCastIronDetail", "iron-detail.png")
 
     master = Image.open(SOURCES / "09-icon-heritage-master.png").convert("RGB")

@@ -422,7 +422,8 @@ enum StudioPlates {
         /// Both flat faces, printed or cast, from `inner` to `outer` at ±x.
         func addFaces(inner: Double, outer: Double, x: Double, print: StudioFaces.Print) {
             let material = StudioMaterials.face(StudioFaces.Spec(
-                fill: colour.fill, ink: print.cast ? nil : colour.ink, finish: finish.finish, roughness: finish.roughness,
+                fill: colour.fill, ink: print.cast ? nil : colour.ink, finish: finish.finish,
+                blackRubber: theme == .blackBumpersBand || theme == .cadenceHouse, roughness: finish.roughness,
                 metal: finish.metal, radius: R, small: small, textInner: print.inner, textOuter: print.outer,
                 denomination: plate.denomination, unit: unit, brand: print.brand, relief: print.relief))
             for face in [-1.0, 1.0] {
@@ -521,6 +522,7 @@ enum StudioFaces {
         /// Paint colour; nil for cast lettering in the body material.
         let ink: UInt32?
         let finish: PlateFinish
+        let blackRubber: Bool
         let roughness: Double
         let metal: Double
         let radius: Double
@@ -591,24 +593,31 @@ enum StudioFaces {
         let n = size(small: s.small)
         let pxPerMM = Double(n) / (2 * s.radius)
         let mask = lettering(s, size: n, pxPerMM: pxPerMM)
-        let mottle = StudioTextures.mottleField, grain = StudioTextures.grainField
+        let mottle = StudioTextures.mottleField
+        let grain = s.finish == .hammertone ? StudioTextures.hammerField : StudioTextures.grainField
         let m = 256
         func linear(_ c: UInt32, _ shift: UInt32) -> Double { pow(Double((c >> shift) & 255) / 255, 2.2) }
         let fill = (linear(s.fill, 16), linear(s.fill, 8), linear(s.fill, 0))
         let ink = s.ink.map { (linear($0, 16), linear($0, 8), linear($0, 0)) }
-        let mottleAmount = s.finish == .rubber ? 0.08 : 0.04
+        let mottleAmount: Double = switch s.finish {
+        case .machined: 0
+        case .rubber: 0.08
+        default: 0.04
+        }
         var colour = [UInt8](repeating: 255, count: n * n * 4)
         var height = [Double](repeating: 0, count: n * n)
         let grainAmount = s.finish == .rubber ? 0.06 : s.finish == .castIron || s.finish == .hammertone ? 0.25 : 0.02
         // Measured surface detail is neutral. The theme owns the paint and
         // each denomination turns the sample by its own angle.
-        let photo: StudioTextures.PhotoDetail? = switch s.finish {
-        case .rubber: StudioTextures.rubberDetail
-        case .castIron: StudioTextures.castIronDetail
-        default: StudioTextures.steelDetail
+        let surface: (detail: StudioTextures.PhotoDetail?, albedo: Double, relief: Double) = switch s.finish {
+        case .rubber: (s.blackRubber ? StudioTextures.blackRubberDetail : StudioTextures.rubberDetail, 0.4, 0.12)
+        case .castIron: (StudioTextures.castIronDetail, 0.35, 0.22)
+        case .powder: (StudioTextures.calibratedCoatingDetail, 0.25, 0.055)
+        case .gloss: (StudioTextures.calibratedCoatingDetail, 0.14, 0.025)
+        // Bare turned metal gets its brushed rim and metallic response from
+        // the lathed parts. Hammertone enamel has its own peened height field.
+        case .machined, .hammertone: (nil, 0, 0)
         }
-        let photoAlbedo = s.finish == .rubber ? 0.4 : 0.35
-        let photoRelief = s.finish == .rubber ? 0.12 : 0.22
         let turn = Double((s.denomination + s.unit).unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) } % 360) * .pi / 180
         let (cosT, sinT) = (cos(turn), sin(turn))
         for y in 0..<n {
@@ -617,11 +626,11 @@ enum StudioFaces {
                 let k = Double(mask[i]) / 255
                 let mo = 1 - mottleAmount + mottleAmount * 2 * mottle[(y % m) * m + x % m]
                 var d = 1.0
-                if let photo {
+                if let photo = surface.detail {
                     let u = (Double(x) + 0.5) / Double(n) - 0.5, v = (Double(y) + 0.5) / Double(n) - 0.5
                     d = photo.sample(u * cosT - v * sinT, u * sinT + v * cosT)
                 }
-                let tooth = pow(d, photoAlbedo * (1 - 0.6 * k))
+                let tooth = pow(d, surface.albedo * (1 - 0.6 * k))
                 var r = fill.0 * mo, g = fill.1 * mo, b = fill.2 * mo
                 if let ink {
                     r = r * (1 - k) + ink.0 * k; g = g * (1 - k) + ink.1 * k; b = b * (1 - k) + ink.2 * k
@@ -632,7 +641,7 @@ enum StudioFaces {
                 colour[i * 4] = toSRGB(r * tooth)
                 colour[i * 4 + 1] = toSRGB(g * tooth)
                 colour[i * 4 + 2] = toSRGB(b * tooth)
-                height[i] = k * s.relief + grain[(y * 3 % m) * m + (x * 3) % m] * grainAmount + (d - 1) * photoRelief
+                height[i] = k * s.relief + grain[(y * 3 % m) * m + (x * 3) % m] * grainAmount + (d - 1) * surface.relief
             }
         }
         // Height in mm → normal. Rows run down the image; tangent-space y is up.
@@ -1177,10 +1186,9 @@ enum StudioTextures {
         }
     }()
 
-    /// High-passed luminance of an owner-approved September plate photograph
-    /// (`PlateBumper`, `PlateSteel`, 5d2b150): the real rubber speckle and
-    /// cast-steel tooth, as a multiplier around 1 with the studio lighting
-    /// divided out. Sampled by position relative to the plate's diameter.
+    /// Neutral photographed tooth from the Astra surface swatches. Dividing
+    /// by the local mean leaves the theme and studio in control of the paint
+    /// and light. A missing swatch leaves the bake's multiplier at one.
     final class PhotoDetail: @unchecked Sendable {
         let n: Int
         let ratio: [Float]
@@ -1194,9 +1202,10 @@ enum StudioTextures {
         }
     }
 
-    static let rubberDetail = photoDetail("AstraBumperDetail") ?? photoDetail("PlateBumper")
-    static let castIronDetail = photoDetail("AstraCastIronDetail") ?? steelDetail
-    static let steelDetail = photoDetail("PlateSteel")
+    static let rubberDetail = photoDetail("AstraBumperDetail")
+    static let blackRubberDetail = photoDetail("AstraBlackRubberDetail")
+    static let castIronDetail = photoDetail("AstraCastIronDetail")
+    static let calibratedCoatingDetail = photoDetail("AstraCalibratedCoatingDetail")
 
     static func photoDetail(_ name: String) -> PhotoDetail? {
         guard let source = UIImage(named: name)?.cgImage else { return nil }
@@ -1285,7 +1294,8 @@ enum StudioTextures {
     // PBR path; real hard chrome is not a mirror anyway.
     static let smudgeRoughness = gray(Noise.field(size: 256, cells: 4, octaves: 3, seed: 5), lo: 0.11, hi: 0.2)
     static let grainNormal = normal(grainField, strength: 2.0)
-    static let hammerNormal = normal(Noise.field(size: 256, cells: 20, octaves: 3, seed: 9), strength: 6.0)
+    static let hammerField = Noise.field(size: 256, cells: 20, octaves: 3, seed: 9)
+    static let hammerNormal = normal(hammerField, strength: 6.0)
     static let brushedNormal: UIImage = {
         let n = 256
         var field = [Double](repeating: 0, count: n * n)
@@ -1426,7 +1436,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 4
+    static let version = 5
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
