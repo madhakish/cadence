@@ -112,7 +112,10 @@ final class BarbellStudio {
         let up = simd_cross(away, right)
         let tanHorizontal = tan(fieldOfView * .pi / 360)
         let tanVertical = tanHorizontal / max(0.01, aspect)
-        let bottom = max(0.1, 0.92 - 2 * captionFraction)
+        // At accessibility sizes the projected outer rim needs extra room
+        // above its caption. At 1184 × 600 the fifth 45 lb disc otherwise
+        // crossed into the reserved label area even with the box fitted.
+        let bottom = max(0.1, 0.85 - 2 * captionFraction)
         for entry in nearDiscs {
             let (low, high) = entry.node.boundingBox
             for corner in 0..<8 {
@@ -1442,7 +1445,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 7
+    static let version = 8
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
