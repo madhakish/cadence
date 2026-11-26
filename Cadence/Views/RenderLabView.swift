@@ -98,14 +98,16 @@ extension RenderLab {
             let viewport = CGRect(x: 0, y: 0, width: width, height: height - captionHeight)
             for entry in studio.nearDiscs {
                 let (low, high) = entry.node.boundingBox
-                let fits = (0..<8).allSatisfy { corner in
+                for corner in 0..<8 {
                     let local = SCNVector3(corner & 1 == 0 ? low.x : high.x,
                                           corner & 2 == 0 ? low.y : high.y,
                                           corner & 4 == 0 ? low.z : high.z)
                     let p = view.projectPoint(entry.node.convertPosition(local, to: nil))
-                    return p.z > 0 && p.z < 1 && viewport.contains(CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)))
+                    if p.z <= 0 || p.z >= 1 || !viewport.contains(CGPoint(x: CGFloat(p.x), y: CGFloat(p.y))) {
+                        failures.append("\(Int(width))x\(Int(height)): plate \(entry.disc.index + 1) clips at \(Int(p.x)),\(Int(p.y)); reserved bottom \(Int(viewport.maxY))")
+                        break
+                    }
                 }
-                if !fits { failures.append("\(Int(width))x\(Int(height)): plate \(entry.disc.index + 1) clips") }
             }
         }
         return failures
@@ -184,6 +186,8 @@ struct RenderLabView: View {
     private func run() async {
         if RenderLab.framingOnly {
             failed = await RenderLab.checkFraming()
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("studio-framing-proof.txt")
+            try? (failed.isEmpty ? "PASS" : failed.joined(separator: "\n")).write(to: url, atomically: true, encoding: .utf8)
             done = true
             return
         }
