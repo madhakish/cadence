@@ -22,6 +22,7 @@ for (const explode of [false, true]) {
     assert.equal(svg.querySelectorAll(selector).length, explode ? 3 : 6);
   assert.equal(svg.querySelectorAll('.barbell-endcap').length, 1);
   assert.equal(svg.querySelectorAll('.barbell-collar-near').length, 1);
+  assert.ok(svg.querySelector('.barbell-collar-near').getAttribute('href').endsWith(explode ? '/PhotoCollar.png' : '/PhotoLock.png'));
   assert.equal(svg.querySelectorAll('.barbell-collar').length, explode ? 0 : 1);
   assert.ok([...svg.querySelectorAll('image')].every(n => n.getAttribute('href').includes('/assets/photo/')));
   const near = scene.discs.filter(d => d.side < 0);
@@ -33,7 +34,11 @@ for (const explode of [false, true]) {
     const art = [...svg.querySelectorAll('image')];
     const order = selector => art.findIndex(n => n.matches(selector));
     assert.ok(order('.barbell-sleeve') < order('.barbell-plate-face'));
+    const sleeve = svg.querySelector('.barbell-exposed-sleeve');
+    assert.ok(order('.barbell-exposed-sleeve') > order('.barbell-collar-near'), 'chrome passes through the lock opening');
     assert.ok(order('.barbell-exposed-sleeve') > art.findLastIndex(n => n.matches('.barbell-plate-face')));
+    assert.equal(sleeve.getAttribute('transform'), svg.querySelector('.barbell-sleeve-near').getAttribute('transform'), 'reflections remain continuous');
+    assert.ok(sleeve.parentElement.hasAttribute('clip-path'));
   }
 }
 const bare = C.enteredPlateSolution(C.BARS.bar15kg, []);

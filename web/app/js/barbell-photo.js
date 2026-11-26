@@ -4,7 +4,7 @@ import { both, perSideLabel, plateLabel } from "./core.js";
 import { barbellLayout, BORE_RADIUS } from "./barbell-inspector.js";
 import { discAccessibilityLabel } from "./barbell-scene.js";
 import { faceFinish } from "./plate-art.js";
-import { plateThemeColour, plateThemeDescription, plateThemeGeometry } from "./plate-theme.js";
+import { plateThemeColour, plateThemeDescription, plateThemeFamily, plateThemeGeometry } from "./plate-theme.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1672, HEIGHT = 941;
@@ -128,11 +128,21 @@ function registerFace(defs, group, { plate, radius, rx, ry }, theme, style, fill
   const finish = faceFinish(plate, theme, style);
   layer.append(photo(facePhoto(finish), { x: -1, y: -1, width: 2, height: 2 }, {
     class: "barbell-plate-face", filter: fillFilter, "data-finish": finish, ...attributes }));
-  const hub = Math.min(75 / radius, .54);
+  const { band, ink, fill } = plateThemeColour(plate, theme, style);
+  const [red, green, blue] = fill.slice(1).match(/../g).map(channel => parseInt(channel, 16));
+  const warm = finish === "rubber" && radius >= 150 && blue > red * 1.3 && blue > green * 1.2;
+  const family = plateThemeFamily(plate, theme, style);
+  const ratio = { bumper: .40, steel: .20, ipf: .20, iron: .24, machined: .22, change: .25 }[family];
+  const hub = Math.min(.55, Math.max(33 / radius, Math.min(ratio, 90 / radius)));
   const dark = ["castIron", "hammertone", "blackSteel"].includes(plateThemeDescription(theme).hubFinish);
-  layer.append(photo("PhotoHub", { x: -hub, y: -hub, width: 2 * hub, height: 2 * hub },
+  if (warm && hub * radius > 75) {
+    // The warm 180 mm insert has a 60 mm recess. Its steel bore liner
+    // continues down to the 50 mm sleeve through the recessed lip.
+    const liner = 75 / radius;
+    layer.append(photo("PhotoHub", { x: -liner, y: -liner, width: 2 * liner, height: 2 * liner }, { class: "barbell-bore-liner" }));
+  }
+  layer.append(photo(warm ? "PhotoHubWarm" : "PhotoHub", { x: -hub, y: -hub, width: 2 * hub, height: 2 * hub },
     { class: "barbell-plate-hub", ...(dark ? { style: "filter:brightness(.58)" } : {}) }));
-  const { band, ink } = plateThemeColour(plate, theme, style);
   if (band) layer.append(svgElement("circle", { r: .91, fill: "none", stroke: band, "stroke-width": .027 }));
   if (plateThemeDescription(theme).details?.includes("hubRing")) {
     layer.append(svgElement("circle", { r: hub * 1.02, fill: "none", stroke: ink, "stroke-width": .016 }));
@@ -194,6 +204,42 @@ function cylinder(root, name, part, from, to, radius, dark = false) {
     class: `barbell-${part}`, transform: `translate(${from.x} ${from.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`,
     ...(dark ? { style: "filter:brightness(.45)" } : {}),
   }));
+}
+
+// Study 03's lock has a closed lever and a punched-through aperture. Its
+// near opening and the plate-side end of the lock are independently registered.
+function fittedLock(art, rear, side, onSleeve) {
+  const width = 450 * rear.scale * .2574, height = 450 * rear.scale * .2475;
+  const group = svgElement("g", { transform: `translate(${rear.x} ${rear.y}) matrix(${-side} ${side > 0 ? .23 : 0} 0 1 0 0)` });
+  if (onSleeve) {
+    // The inside wall under the closed lock is in shadow; the continuous
+    // chrome is overlaid up to the front lip after the clamp is seated.
+    group.append(svgElement("ellipse", { cx: -.66 * width, cy: .109 * height,
+      rx: .124 * width, ry: .257 * height, fill: "#171512" }));
+  }
+  group.append(photo(onSleeve ? "PhotoLock" : "PhotoCollar", { x: -.781 * width, y: -.416 * height, width, height },
+    { class: side < 0 ? "barbell-collar-near" : "barbell-collar" }));
+  art.append(group);
+  return { x: rear.x + side * .662 * width, y: rear.y + .109 * height, scale: rear.scale };
+}
+
+// Repaint the same uninterrupted sleeve photo as far as the foreground bore.
+// The ellipse ends inside the opening; the steel has no square cut across it.
+function exposeSleeve(art, defs, sleeve, tip, entry, id, radius, part = "exposed-sleeve") {
+  if (entry.x <= tip.x) return;
+  const dx = entry.x - tip.x, dy = entry.y - tip.y, length = Math.hypot(dx, dy);
+  const r = radius * entry.scale;
+  const clip = svgElement("clipPath", { id: id + "-entry" });
+  clip.append(svgElement("path", {
+    transform: `translate(${tip.x} ${tip.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`,
+    d: `M -30 ${-r * 1.25} L ${length} ${-r} A ${r * FACE_RATIO} ${r} 0 0 1 ${length} ${r} L -30 ${r * 1.25} Z`,
+  }));
+  defs.append(clip);
+  const foreground = svgElement("g", { "clip-path": `url(#${clip.id})` });
+  const continuation = sleeve.cloneNode(false);
+  continuation.setAttribute("class", "barbell-" + part);
+  foreground.append(continuation);
+  art.append(foreground);
 }
 
 function drawPlate(art, defs, d, style, theme, filter, id) {
@@ -277,7 +323,7 @@ export function photographicBar(solution, style, explode = false, theme = "custo
   };
   if (!exploded) {
     hardware("PhotoSleeve", "sleeve", bar.shoulderEnd, end, bar.sleeveRadius);
-    if (collar.length) hardware("PhotoCollar", "collar", collar.right, collar.right + collar.length, collar.radius);
+    if (collar.length) fittedLock(art, point(collar.right), 1, collar.right < end);
     paintSide(1);
     hardware("PhotoShoulder", "shoulder", bar.shaftHalfLength, bar.shoulderEnd, bar.shoulderRadius);
   }
@@ -290,13 +336,21 @@ export function photographicBar(solution, style, explode = false, theme = "custo
   // must never sprout an extension made out of an SVG cylinder.
   const outer = discs.filter(d => d.side < 0).at(-1);
   const tip = point(-end);
-  if (outer && !exploded) cylinder(art, "PhotoSleeve", "exposed-sleeve", tip, point(outer.worldFront), bar.sleeveRadius);
+  let entry = outer && !exploded ? point(outer.worldFront) : null;
+  const sleeve = art.querySelector(".barbell-sleeve-near");
+  if (entry && collar.length) {
+    exposeSleeve(art, defs, sleeve, tip, entry, id + "-under-lock", bar.sleeveRadius, "sleeve-under-lock");
+  }
   if (collar.length) {
     if (exploded) {
-      const anchor = outer.x - outer.rx - 24, y = outer.y + (outer.x - anchor) * scene.slope;
-      cylinder(art, "PhotoCollar", "collar-near", { x: anchor - 44, y: y + 44 * scene.slope, scale: 1 }, { x: anchor, y, scale: 1 }, collar.radius);
-    } else hardware("PhotoCollar", "collar-near", collar.left - collar.length, collar.left, collar.radius);
+      const right = outer.x - outer.rx - 24, y = outer.y + (outer.x - right) * scene.slope;
+      const h = collar.radius * 2.4, w = h * 375 / 384;
+      art.append(photo("PhotoCollar", { x: right - w, y: y - h / 2, width: w, height: h }, { class: "barbell-collar-near" }));
+    } else {
+      entry = fittedLock(art, point(collar.left), -1, collar.left > -end);
+    }
   }
+  if (entry) exposeSleeve(art, defs, sleeve, tip, entry, id, bar.sleeveRadius);
   const r = bar.sleeveRadius * tip.scale;
   // When an exploded plate floats in front of the sleeve tip, its own bore
   // and photographed face must occlude that cap.

@@ -15,7 +15,7 @@ const matchesNative = (bytes, name) => {
   const { images } = JSON.parse(bytesAt(folder, 'Contents.json'));
   assert.deepEqual(bytes, bytesAt(folder, images.find(i => i.filename).filename), name + ' shares native original');
 };
-const required = new Set(['PhotoBrand.png', 'PhotoMark45lb.png', 'PhotoMark15kg.png', 'PhotoMark20kg.png', 'PhotoHub.png', 'PhotoShaft.png', 'PhotoSleeve.png', 'PhotoShoulder.png', 'PhotoCollar.png', 'PhotoEndcap.png']);
+const required = new Set(['PhotoLock.png', 'PhotoHubWarm.png', 'PhotoBrand.png', 'PhotoMark45lb.png', 'PhotoMark15kg.png', 'PhotoMark20kg.png', 'PhotoHub.png', 'PhotoShaft.png', 'PhotoSleeve.png', 'PhotoShoulder.png', 'PhotoCollar.png', 'PhotoEndcap.png']);
 for (const theme of PLATE_THEME_IDS) {
   required.add(stageForTheme(theme) + '.jpg');
   for (const style of ['bumper', 'steel']) for (const unit of ['lb', 'kg'])

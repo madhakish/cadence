@@ -25,7 +25,7 @@ def main():
     parts = ["PhotoFace" + finish for finish in
              ("Rubber", "BlackRubber", "Gloss", "Coated", "Iron", "Hammertone", "Machined")]
     parts += ["PhotoEdge" + finish for finish in ("Rubber", "Coated", "Iron")]
-    parts += ["Photo" + part for part in ("Brand", "Mark45lb", "Mark20kg", "Mark15kg", "Hub", "Shaft", "Sleeve", "Shoulder", "Collar", "Endcap")]
+    parts += ["Photo" + part for part in ("Lock", "HubWarm", "Brand", "Mark45lb", "Mark20kg", "Mark15kg", "Hub", "Shaft", "Sleeve", "Shoulder", "Collar", "Endcap")]
     for part in parts:
         export(part, OUTPUT / "photo" / (part + ".png"))
 

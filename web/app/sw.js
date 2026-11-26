@@ -42,6 +42,8 @@ const ASSETS = [
   "assets/photo/PhotoEdgeIron.png",
   "assets/photo/PhotoHub.png",
   "assets/photo/PhotoBrand.png",
+  "assets/photo/PhotoHubWarm.png",
+  "assets/photo/PhotoLock.png",
   "assets/photo/PhotoMark45lb.png",
   "assets/photo/PhotoMark20kg.png",
   "assets/photo/PhotoMark15kg.png",
