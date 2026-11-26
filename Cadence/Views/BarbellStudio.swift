@@ -1558,6 +1558,42 @@ final class StudioRenderer: @unchecked Sendable {
     }
 }
 
+/// The non-3D presentation uses the same per-side order, finishes and
+/// denominations as the calculator. It can also draw an unloaded sleeve.
+struct StudioLoadoutFallback: View {
+    let loadout: Loadout
+    let theme: PlateThemeID
+    let style: PlateVisualStyle
+    var exploded = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if exploded && !loadout.perSide.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack {
+                        ForEach(Array(loadout.perSide.enumerated()), id: \.offset) { _, group in
+                            VStack {
+                                PlateFaceBadge(plateTheme: theme, plate: group.plate, style: style)
+                                Text("\(group.plate.label) × \(group.count)")
+                                    .font(.caption.monospacedDigit())
+                            }
+                        }
+                    }
+                }
+            } else {
+                PlateStackMini(loadout: loadout, theme: theme, style: style)
+                Text(loadout.perSide.isEmpty
+                     ? (loadout.collarLb > 0 ? "Bar + collars" : "Bar only")
+                     : "Plates per side")
+                    .font(.caption)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.sceneStudio)
+    }
+}
+
 /// A cached studio render sized to its container.
 struct StudioImage: View {
     @Environment(\.displayScale) private var displayScale
@@ -1568,6 +1604,7 @@ struct StudioImage: View {
     let shot: StudioShot
     /// The last render and the request it answers; never shown for another request.
     @State private var rendered: (request: StudioRenderer.Request, image: UIImage)?
+    @State private var failedRequest: StudioRenderer.Request?
 
     private struct Render: Equatable {
         let request: StudioRenderer.Request
@@ -1588,6 +1625,8 @@ struct StudioImage: View {
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
+                } else if failedRequest == request {
+                    StudioLoadoutFallback(loadout: loadout, theme: theme, style: style, exploded: shot == .blowup)
                 }
             }
             .task(id: Render(request: request, active: scenePhase == .active)) {
@@ -1597,6 +1636,7 @@ struct StudioImage: View {
                 // A superseded request finishes late; it must not replace the current one.
                 guard !Task.isCancelled else { return }
                 rendered = image.map { (request: request, image: $0) }
+                failedRequest = image == nil ? request : nil
             }
         }
     }
