@@ -1,4 +1,6 @@
-# Barbell studio renderer (iOS)
+# SceneKit barbell studio (historical)
+
+The current native and web implementations are documented in [Photographic equipment](photographic-equipment/README.md). This page records the earlier SceneKit implementation.
 
 Every native bar view renders one SceneKit scene, `BarbellStudio`
 (`Cadence/Views/BarbellStudio.swift`): the session row, the current-set stage,

@@ -1,0 +1,32 @@
+{
+  "capturedSource": "23ee2c16",
+  "device": "iPhone 18 Pro",
+  "runtime": "iOS 27.2",
+  "scheme": "CadenceVisualProof",
+  "sourceReference": "docs/design-pass/astra-2026-11-01/03-platform-oak-blue.png",
+  "originalScreenshotSHA256": {
+    "00-diag-environment.png": "60d391e5b4bf5ab73bf7a1dd8a2dea85690c3733b103a583833036edc7741816",
+    "01-row-squat115-custom.png": "4bae95321e415f072566afb27290c170b1ae45be0caa532917bd978c7e961671",
+    "02-row-press100-custom.png": "43e483042ac78dec77a7d6d39ae6fe7483629d4d3aea5c08987e20458ffe4265",
+    "03-hero-225-lbColourBumpers.png": "718ef676b0b478f750be06be57bdc0e80f4fef21ed38fd585c21740d3853bb4a",
+    "04-hero-squat115-custom.png": "6347be2e549a44a7610029653b05e4782772b67bed2664a4553b518977d445dc",
+    "05-hero-mixed-lbBlackIron.png": "f76955048f05288bac61fe26d8a730c0dc6b9905d6581e36aa1a3840f2b73c91",
+    "06-hero-kg-iwfCompetition.png": "4b1a79e2c5186f1424d535d9e70e177eb0539a3bee31db3b1476856f8742a41f",
+    "07-hero-315-ipfCalibrated.png": "0a664749acdd7afc6d8e8f9d00ab63b94ec90cb18d177900c1e55f70583fe40a",
+    "08-blowup-mixed-lbColourBumpers.png": "a2b8ba91dbf35c643b358f21ed160a61917d4545a729ae657b87f4aba6882f8e",
+    "09-blowup-kg-iwfCompetition.png": "b1777f3a59a32060ad4e4f6945f01fb7cfb463aeff2767639a176e074a81142e",
+    "10-hero-collars-cadenceHouse.png": "92b1814a319b3cbcc05823c791713b4c87d8bfc3830da46fa33ec9296ad56684",
+    "11-row-mixed-lbGreyHammertone.png": "fa8b4061e6f4b79dcf9cdf49fdcd0d7c0f89b69c8fbb4ea122a6f7ecce2670a5",
+    "12-hero-mixed-blackBumpersBand.png": "bcbed5ffca4065924233f9b658322ef2c7fae5395566f977497c188325e9774d",
+    "13-hero-mockup-custom.png": "b46c4241d1704be094a89f5b4434630e99b0e83a9fa90fcb36cbd689d8c9a249",
+    "14-blowup-mockup-custom.png": "1f59f13f9b3c695474f7ca88ec14df919fdd97802dfd0c58e9f1f00726205d9f",
+    "15-hero-kg-iwfTraining.png": "28512a9ab91ce69ca8044b534b535a155c479b9a2f3df6df860be78641c1c0b5",
+    "16-hero-machined-steel.png": "05e4cf796ad4cf8fe44304bd6ebf49ba52964527f152a05d5adcec38001df678",
+    "17-blowup-calibrated-gloss.png": "27594a40b215d856388abaae27b0d5a15a72cc1773017ee09671a12fecad8ea4",
+    "18-hero-empty-bar.png": "4373f0d62f8f1d7b3eb0715ea59d56665ebc3cb80a6fc92023ab540588a22ed2",
+    "19-blowup-fractional.png": "94dbd8dc28efebe2af48eedbe21d62709598ecaaa15bce1b2d7aa4b3b1cb89c8",
+    "20-hero-long-stack.png": "fec51a93444345be95055f0a1aed3b890abfcb15123ba67915f429adb648d3a2",
+    "21-hero-135-lbColourBumpers.png": "48bed9d1afb5fadcae9967ff53df5ff744f8c0eb05585c76489023e346285572",
+    "22-hero-136-lightweight-collars.png": "f359786e88b26449c800e60c569baac12076b357c4e3c52f272d4ade849472a2"
+  }
+}
