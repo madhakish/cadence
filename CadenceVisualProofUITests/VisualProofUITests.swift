@@ -206,6 +206,9 @@ final class VisualProofUITests: XCTestCase {
         // The calculator beneath this sheet has its own accessible bar.
         // Both photographic poses expose those same physical plate children.
         let artwork = element("barbell-inspection-artwork")
+        let frame = artwork.frame
+        XCTAssertEqual(frame.width / frame.height, 1672.0 / 941.0, accuracy: 0.03,
+                       "The assembled camera must fit the photograph without stretching its border.")
         let firstLeft = artwork.staticTexts["barbell-plate-left-0"]
         XCTAssertTrue(firstLeft.waitForExistence(timeout: 3))
         XCTAssertTrue(firstLeft.label.contains("plate, 1 from inside, left side"), firstLeft.label)

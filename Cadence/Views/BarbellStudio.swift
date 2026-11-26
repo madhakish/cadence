@@ -23,7 +23,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 10
+    static let version = 11
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()

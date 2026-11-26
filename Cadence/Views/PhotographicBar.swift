@@ -103,7 +103,7 @@ struct PhotographicBar {
 
     private func pose(_ x: CGFloat, expandedX: CGFloat) -> Pose {
         let original = Self.reference(x)
-        let scale = heroStage.width / room.width
+        let scale = heroStage.width / Self.referenceSize.width
         let hero = CGPoint(x: heroStage.minX + original.centre.x * scale,
                            y: heroStage.minY + (original.centre.y + (225 - restingRadius) * original.scale) * scale)
         let focusX = explosionOrigin.x + expandedX * explosionAxisScale
