@@ -18,6 +18,8 @@ final class VisualProofUITests: XCTestCase {
 
     func test01HomeAndAdHocWork() {
         capture("after-01-home-iphone")
+        let heroPlate = element("barbell-plate-left-0")
+        XCTAssertTrue(heroPlate.exists, "The default fixture's bar-total set should show a loaded bar")
         // The primary action is on the first screen, above the tab bar.
         assertOnFirstScreen(app.buttons["resume-session"])
         // The membership tag stays one tap from launch (product rule), as a
@@ -79,8 +81,23 @@ final class VisualProofUITests: XCTestCase {
             let row = app.buttons["today-session-lift-\(name)"]
             XCTAssertTrue(row.waitForExistence(timeout: 5))
             XCTAssertTrue(row.label.contains(load), row.label)
+            XCTAssertFalse(row.label.contains("Each side:"), row.label)
         }
+        XCTAssertFalse(heroPlate.exists, "Neither displayed load is a total on the bar")
         capture("after-01e-home-captured-load-basis-iphone")
+
+        // The next workout follows the library as it stands now. Only the
+        // squat is back to a bar total once the captured session is gone.
+        app.buttons["session-actions"].tap()
+        app.buttons["Discard session"].firstMatch.tap()
+        app.sheets.buttons["Discard session"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["start-today"].waitForExistence(timeout: 5))
+        let plannedSquat = app.buttons["today-plan-lift-Back Squat"]
+        let plannedDeadlift = app.buttons["today-plan-lift-Romanian Deadlift"]
+        XCTAssertTrue(plannedSquat.exists && plannedDeadlift.exists)
+        XCTAssertTrue(plannedSquat.label.contains("Each side:"), plannedSquat.label)
+        XCTAssertFalse(plannedDeadlift.label.contains("Each side:"), plannedDeadlift.label)
+        XCTAssertTrue(heroPlate.exists, "The squat's planned total should show its loaded bar")
     }
 
     func test02CurrentSessionAndExactPlateStack() {

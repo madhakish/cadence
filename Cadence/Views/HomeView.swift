@@ -233,7 +233,8 @@ struct HomeView: View {
     }
 
     private func planLoadedBar(_ program: Program, _ lift: ProgramLift) -> LoadedBar? {
-        let exercise = exercises.first { $0.name == lift.exerciseName }
+        guard let exercise = exercises.first(where: { $0.name == lift.exerciseName }),
+              exercise.loadBasis == .totalBar else { return nil }
         return loadedBar(exercise, weightLb: previewPlans(program, lift).snapped.weightLb,
                          bar: defaultGym?.defaultBar ?? .bar45lb, gym: defaultGym, unit: entryUnit)
     }
@@ -241,7 +242,8 @@ struct HomeView: View {
     /// The heaviest prescribed set as it stands, on the bar the session
     /// exercise actually uses (its stored override, else the gym's default).
     private func sessionLoadedBar(_ entry: SessionExercise, gym: Gym?) -> LoadedBar? {
-        guard let top = entry.prescribedSets.max(by: { $0.weightLb < $1.weightLb }) else { return nil }
+        guard let top = entry.prescribedSets.max(by: { $0.weightLb < $1.weightLb }),
+              top.loadBasis == .totalBar else { return nil }
         let bar = entry.barID.map { Bar.by(id: $0) } ?? gym?.defaultBar ?? .bar45lb
         return loadedBar(entry.exercise, weightLb: top.weightLb, bar: bar, gym: gym, unit: top.enteredUnit)
     }
@@ -406,6 +408,7 @@ struct HomeView: View {
                         )
                     }
                 }
+                .accessibilityIdentifier("today-plan-lift-\(lift.exerciseName)")
                 .accessibilityHint("Shows exercise history, program cycle, and settings")
                 .heroBand(.rule)
             }

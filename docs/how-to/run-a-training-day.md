@@ -18,6 +18,10 @@ it** — you can't accidentally create a duplicate, and a duplicate
 smuggled in some other way banks as history without advancing the
 program twice.
 
+Today shows the plate stack when the displayed weight is the total on a
+barbell. An open session uses the load meaning saved with its heaviest
+prescribed set, including per-hand weights and assistance.
+
 Off-program work: **Blank session** logs anything; standalone tracked
 lifts appear under "Next up" with their own suggestions.
 
