@@ -72,6 +72,7 @@ enum RenderLab {
             item("19-blowup-fractional", load(.bar20kg, [kg(5), kg(0.625)]), .custom, .blowup),
             item("20-hero-long-stack", framingLoadout, .lbColourBumpers, .hero),
             item("21-hero-135-lbColourBumpers", load(.bar45lb, [lb(45)]), .lbColourBumpers, .hero),
+            item("22-hero-136-lightweight-collars", load(.bar45lb, [lb(45)], collar: 1), .lbColourBumpers, .hero),
         ]
     }
 }

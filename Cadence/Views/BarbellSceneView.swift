@@ -44,4 +44,3 @@ func inspectionPlateValue(_ plate: Plate) -> String {
 func inspectionPlateLabel(_ plate: Plate) -> String {
     "\(inspectionPlateValue(plate)) \(plate.unit.rawValue)"
 }
-

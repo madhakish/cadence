@@ -118,6 +118,7 @@ struct PhotographicBar {
         let disc: BarbellInspector.Disc
         let centre: CGPoint
         let diameter: CGFloat
+        let aspect: CGFloat
         let bounds: CGRect
     }
 
@@ -126,10 +127,13 @@ struct PhotographicBar {
         zip(layout.discs, expanded.discs).map { disc, loose in
             let position = pose(disc.centerX - disc.thickness / 2, expandedX: loose.centerX - loose.thickness / 2)
             let diameter = 2 * disc.radius * position.scale
-            let unit = PhotoEquipment.bounds(depth: PhotoEquipment.axialScale * disc.thickness / (2 * disc.radius))
+            // The far near-facing ellipse opens up as the sight line moves
+            // along the bar (measured 0.55 and 0.72 in the source photograph).
+            let aspect = (100 * (0.55 + 0.17 * min(1, max(0, (disc.centerX + 765) / 1470)))).rounded() / 100
+            let unit = PhotoEquipment.bounds(depth: PhotoEquipment.axialScale * disc.thickness / (2 * disc.radius), aspect: aspect)
             let rect = CGRect(x: position.centre.x + unit.minX * diameter, y: position.centre.y + unit.minY * diameter,
                               width: unit.width * diameter, height: unit.height * diameter)
-            return ProjectedPlate(disc: disc, centre: position.centre, diameter: diameter, bounds: rect)
+            return ProjectedPlate(disc: disc, centre: position.centre, diameter: diameter, aspect: aspect, bounds: rect)
         }
     }
 
@@ -285,6 +289,11 @@ struct PhotographicBar {
             }
         }
 
+        // The photographed metal is continuous behind every perforated hub.
+        // Repaint only the visible spans during the depth pass below. This
+        // underlay is what shows through a bore on a plate still on a sleeve.
+        drawBar(context, from: -tip, to: tip)
+
         // Paint back-to-front along the axis. A plate occupies a physical
         // interval; the sleeve resumes in front of its bore, and its shaft can
         // never appear painted across a closer disc. Separated plates can
@@ -312,7 +321,7 @@ struct PhotographicBar {
         for layer in layers.sorted(by: { $0.front > $1.front }) {
             drawBar(context, from: layer.back, to: cursor)
             if let item = layer.plate {
-                if canvas.intersects(item.bounds), let product = PhotoEquipment.disc(plate: item.disc.plate, theme: theme, style: style) {
+                if canvas.intersects(item.bounds), let product = PhotoEquipment.disc(plate: item.disc.plate, theme: theme, style: style, aspect: item.aspect) {
                     product.draw(in: item.bounds)
                 }
             } else {

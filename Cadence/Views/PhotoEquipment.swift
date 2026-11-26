@@ -6,11 +6,11 @@ import UIKit
 enum PhotoEquipment {
     static let stageNames = ["AstraPhotoStage", "AstraPhotoStageWalnut", "AstraPhotoStageWhiteOak", "AstraPhotoStageMaple"]
     static let componentNames = ["PhotoFaceRubber", "PhotoFaceBlackRubber", "PhotoFaceCoated", "PhotoFaceGloss",
-                                 "PhotoFaceIron", "PhotoFaceHammertone", "PhotoFaceMachined", "PhotoHub",
+                                 "PhotoFaceIron", "PhotoFaceHammertone", "PhotoFaceMachined", "PhotoHub", "PhotoBrand",
                                  "PhotoEdgeRubber", "PhotoEdgeCoated", "PhotoEdgeIron",
-                                 "PhotoShaft", "PhotoSleeve", "PhotoShoulder", "PhotoCollar", "PhotoEndcap"]
+                                 "PhotoShaft", "PhotoSleeve", "PhotoShoulder", "PhotoCollar", "PhotoEndcap", "PhotoMark45lb", "PhotoMark20kg", "PhotoMark15kg"]
     // In the reference, a 450 mm circular face is seen as an ellipse.
-    static let faceAspect: CGFloat = 0.51
+    static let faceAspect: CGFloat = 0.55
     static let axisRise: CGFloat = 0.115
     static let axialScale: CGFloat = 0.85
     static let shear: CGFloat = -0.047
@@ -133,14 +133,26 @@ enum PhotoEquipment {
             context.fillEllipse(in: CGRect(x: centre - hole / 2, y: centre - hole / 2, width: hole, height: hole))
             context.restoreGState()
             if lettered {
-                let pale = colour.ink == 0xFFFFFF
+                let pale = ((colour.ink >> 16) & 255) > 180
                 let ink = pale ? UIColor(red: 0.89, green: 0.83, blue: 0.70, alpha: 0.95) : UIColor(rgb: colour.ink)
                 let radius = centre * 0.70
                 context.setShadow(offset: CGSize(width: 0, height: 1.4), blur: 1.1, color: UIColor.black.withAlphaComponent(0.64).cgColor)
-                lettering("CADENCE", top: true, radius: radius, centre: centre, size: 39, colour: ink, context: context)
-                let text = inspectionPlateLabel(plate).uppercased()
-                lettering(text, top: false, radius: radius, centre: centre,
-                          size: min(47, 266 / CGFloat(text.count)), colour: ink, context: context)
+                if let brand = UIImage(named: "PhotoBrand") {
+                    brand.draw(in: rect)
+                }
+                let sourceMark: String? = switch (plate.value, plate.unit) {
+                case (45, .lb) where material.finish == .rubber: "PhotoMark45lb"
+                case (20, .kg) where pale: "PhotoMark20kg"
+                case (15, .kg) where !pale: "PhotoMark15kg"
+                default: nil
+                }
+                if let sourceMark, let mark = UIImage(named: sourceMark) {
+                    mark.draw(in: rect)
+                } else {
+                    let text = inspectionPlateLabel(plate).uppercased()
+                    lettering(text, top: false, radius: radius, centre: centre,
+                              size: min(47, 266 / CGFloat(text.count)), colour: ink, context: context)
+                }
             }
         }
         return remember(image, key: key)
@@ -148,14 +160,66 @@ enum PhotoEquipment {
 
     /// Local projected bounds relative to the centre of the forward face (in
     /// units of one face diameter). The sidewall physically extends away, to the right.
-    static func bounds(depth: CGFloat) -> CGRect {
-        let halfWidth = hypot(faceAspect, shear) / 2
+    static func bounds(depth: CGFloat, aspect: CGFloat = faceAspect) -> CGRect {
+        let halfWidth = hypot(aspect, shear) / 2
         return CGRect(x: -halfWidth, y: -0.5 - axisRise * depth,
                       width: 2 * halfWidth + depth, height: 1 + axisRise * depth)
     }
 
-    static func disc(plate: Plate, theme: PlateThemeID, style: PlateVisualStyle, lettered: Bool = true) -> UIImage? {
-        let key = "disc-\(plate.exactKey)-\(theme.rawValue)-\(style.rawValue)-\(lettered)"
+    /// Reproject the sidewall photograph, one source texel lookup for each
+    /// covered destination pixel. In this projection a cylindrical tread is
+    /// an ellipse swept along (depth, -axisRise * depth).
+    private static func wrappedEdge(_ raw: CGImage, bounds: CGRect, depth: CGFloat, aspect: CGFloat,
+                                    diameter: CGFloat) -> UIImage? {
+        let sourceWidth = raw.width, sourceHeight = raw.height
+        let width = Int(ceil(bounds.width * diameter)), height = Int(ceil(bounds.height * diameter))
+        guard depth > 0, width > 0, height > 0 else { return nil }
+        let colourSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmap = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        var source = [UInt8](repeating: 0, count: sourceWidth * sourceHeight * 4)
+        guard source.withUnsafeMutableBytes({ buffer in
+            guard let cg = CGContext(data: buffer.baseAddress, width: sourceWidth, height: sourceHeight,
+                                     bitsPerComponent: 8, bytesPerRow: sourceWidth * 4, space: colourSpace,
+                                     bitmapInfo: bitmap) else { return false }
+            cg.draw(raw, in: CGRect(x: 0, y: 0, width: sourceWidth, height: sourceHeight))
+            return true
+        }) else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let horizontal = 1 + shear * axisRise
+        let aspect2 = aspect * aspect
+        let a = horizontal * horizontal / aspect2 + axisRise * axisRise
+        for row in 0..<height {
+            let y = bounds.minY + (CGFloat(row) + 0.5) / diameter
+            for col in 0..<width {
+                let x = bounds.minX + (CGFloat(col) + 0.5) / diameter
+                let z = x - shear * y
+                let b = y * axisRise - z * horizontal / aspect2
+                let c = z * z / aspect2 + y * y - 0.25
+                let discriminant = b * b - a * c
+                guard discriminant >= 0 else { continue }
+                let along = (-b - sqrt(discriminant)) / a
+                guard along >= 0, along <= depth else { continue }
+                let v = y + axisRise * along + 0.5
+                let sx = min(sourceWidth - 1, max(0, Int(along / depth * CGFloat(sourceWidth))))
+                let sy = min(sourceHeight - 1, max(0, Int(v * CGFloat(sourceHeight))))
+                let origin = (sy * sourceWidth + sx) * 4
+                let destination = (row * width + col) * 4
+                pixels[destination] = source[origin]
+                pixels[destination + 1] = source[origin + 1]
+                pixels[destination + 2] = source[origin + 2]
+                pixels[destination + 3] = source[origin + 3]
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let cg = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                               space: colourSpace, bitmapInfo: CGBitmapInfo(rawValue: bitmap), provider: provider,
+                               decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    static func disc(plate: Plate, theme: PlateThemeID, style: PlateVisualStyle, lettered: Bool = true,
+                     aspect: CGFloat = faceAspect) -> UIImage? {
+        let key = "disc-\(Int((aspect * 100).rounded()))-\(plate.exactKey)-\(theme.rawValue)-\(style.rawValue)-\(lettered)"
         if let cached = cache.object(forKey: key as NSString) { return cached }
         let geo = PlateTheme.geometry(plate, theme: theme, style: style)
         let depth = CGFloat(geo.thickness / geo.diameter) * axialScale
@@ -163,32 +227,16 @@ enum PhotoEquipment {
         let colour = PlateTheme.colour(plate, theme: theme, style: style)
         guard let face = face(plate: plate, theme: theme, style: style, lettered: lettered),
               let edge = painted(surface.edge, rgb: colour.fill), let rawEdge = edge.cgImage else { return nil }
-        let unit = bounds(depth: depth)
+        let unit = bounds(depth: depth, aspect: aspect)
         let diameter: CGFloat = 512
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: ceil(unit.width * diameter), height: ceil(unit.height * diameter)), format: format())
+        guard let tread = wrappedEdge(rawEdge, bounds: unit, depth: depth, aspect: aspect, diameter: diameter) else { return nil }
         let image = renderer.image { output in
             let context = output.cgContext
+            tread.draw(at: .zero)
             context.translateBy(x: -unit.minX * diameter, y: -unit.minY * diameter)
             context.scaleBy(x: diameter, y: diameter)
-            // Wrap the photographed sidewall around the outline, keeping its
-            // axial wear and its light-to-shadow sweep. Only the exposed crescent
-            // is visible from this camera. Use overlapping strips to avoid seams.
-            let rows = min(256, rawEdge.height)
-            for row in 0..<rows {
-                let t = (CGFloat(row) + 0.5) / CGFloat(rows)
-                let y = t - 0.5
-                let x = faceAspect * sqrt(max(0, 0.25 - y * y)) + shear * y
-                let crop = CGRect(x: 0, y: CGFloat(row * rawEdge.height / rows), width: CGFloat(rawEdge.width),
-                                  height: CGFloat(max(1, rawEdge.height / rows)))
-                guard let strip = rawEdge.cropping(to: crop) else { continue }
-                context.saveGState()
-                context.translateBy(x: x, y: y)
-                context.concatenate(CGAffineTransform(a: 1, b: -axisRise, c: 0, d: 1, tx: 0, ty: 0))
-                UIImage(cgImage: strip).draw(in: CGRect(x: -0.002, y: -0.6 / CGFloat(rows),
-                                                       width: depth + 0.002, height: 1.35 / CGFloat(rows)))
-                context.restoreGState()
-            }
-            context.concatenate(CGAffineTransform(a: faceAspect, b: 0, c: shear, d: 1, tx: 0, ty: 0))
+            context.concatenate(CGAffineTransform(a: aspect, b: 0, c: shear, d: 1, tx: 0, ty: 0))
             face.draw(in: CGRect(x: -0.5, y: -0.5, width: 1, height: 1))
         }
         return remember(image, key: key)
