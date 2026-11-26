@@ -102,19 +102,17 @@ struct WorkoutPreviewView: View {
                                 Text("\(p.sets)×\(p.reps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                             }
                         }
-                        if p.weightLb > 0 {
-                            let previewExercise = exercises.first(where: { $0.name == lift.exerciseName })
-                            let type = previewExercise?.type
-                            if type == .barbell {
+                        if let exercise, p.weightLb > 0 {
+                            if exercise.type == .barbell, exercise.loadBasis == .totalBar {
                                 let bar = defaultGym?.defaultBar ?? .bar45lb
                                 let solution = authoritativePlateSolution(
-                                        targetLb: p.weightLb,
-                                        fallbackUnit: unitDisplay.primaryUnit,
-                                        bar: bar,
-                                        gym: defaultGym,
-                                        stationDenomination: previewExercise?.stationDenomination
-                                    )
-                                let style: PlateVisualStyle = previewExercise?.movementGroup == "olympic" ? .bumper : .steel
+                                    targetLb: p.weightLb,
+                                    fallbackUnit: unitDisplay.primaryUnit,
+                                    bar: bar,
+                                    gym: defaultGym,
+                                    stationDenomination: exercise.stationDenomination
+                                )
+                                let style: PlateVisualStyle = exercise.movementGroup == "olympic" ? .bumper : .steel
                                 let theme = defaultGym?.plateTheme ?? .custom
                                 BarbellStageView(solution: solution, unit: unitDisplay.primaryUnit, plateStyle: style, plateTheme: theme) {
                                     plateDetail = PreviewPlateDetail(solution: solution, style: style, theme: theme, requestedLb: target.weightLb)
@@ -122,7 +120,7 @@ struct WorkoutPreviewView: View {
                                 Text("\(solution.loadout.perSideLabel) / side")
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
-                            } else if type == .dumbbell {
+                            } else if exercise.type == .dumbbell, exercise.loadBasis == .perImplement {
                                 DumbbellView(weightLb: p.weightLb, unit: unitDisplay.primaryUnit)
                             }
                         }
