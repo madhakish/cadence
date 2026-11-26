@@ -13,10 +13,7 @@ masters. The only pixel operation is a Lanczos resize. The exporter assigns
 the bundled sRGB profile; it does not redraw, crop, recolor or sharpen the art.
 [The manifest](manifest.json) records source/export hashes and profile identity.
 
-Focus is the recommended candidate for small-icon review. **No variant has
-been selected or installed.** Runtime iPhone/Watch catalogs, the Today glyph
-and splash art are unchanged. The five-tab navigation and enlarged centered
-Today mark remain requirements for the later integration.
+The combined candidate installs Focus in the iPhone and Watch catalogs and derives the centered Today glyph from the same master. Foundry supplies LaunchMark to the system screen and SwiftUI splash. Heritage supplies the wood engraving in the equipment renderer. The owner reviews these assignments in [the landing PR](https://github.com/madhakish/cadence/pull/401).
 
 Reproduce with Python 3 and [the pinned Pillow dependency](requirements.txt):
 
@@ -30,21 +27,9 @@ The optional 40/60/120 px previews are scale studies. Actual iOS/Watch masks,
 home-screen appearances and small-size readability still require native
 captures before choosing or installing an icon.
 
-## Implementation order and dependencies
+## Runtime integration
 
-1. Prove the blue-bumper/oak loading stage with static photography and live,
-   solver-driven equipment. Milo owns the renderer API, material contract,
-   registration, compositing and caching under [#374](https://github.com/madhakish/cadence/pull/374).
-   Current local composites remain fixed-hero experiments with a failed
-   held-out registration check and no runtime acceptance.
-2. Carry that visual language into calculator, session and Today after the
-   active feature layouts land. Preserve achieved versus requested load,
-   per-set edits, actual rest/RIR data, gym-tag access and one-handed actions.
-3. Integrate the selected brand treatment with the existing icon/tab/splash
-   work, preserving five tabs and leaving anatomy assets/masks untouched.
-4. Capture actual native output on the exact PR head at ordinary and large
-   accessibility sizes, with themes, safe areas, VoiceOver and Reduce Motion
-   respected. Debug stills and scale boards do not establish runtime quality.
+The live studio projects photographic materials onto the actual rack-selected bar and plates. Its cameras share the same scene for compact workouts, full-bar stages and the exploded inspector. The [material handoff](../astra-2026-11-01/README.md#native-studio-material-exports) lists source regions and outputs. The fixed-camera photographic composite is an earlier experiment.
 
 The calculator places the achieved total first, the inspectable bar directly
 below it, then the per-side breakdown and inventory cells, following the
@@ -67,9 +52,4 @@ the exact source, original native screenshots and focused test results at
 standard and maximum accessibility text sizes. This is limited proof of the
 first hierarchy change; most of the stage remains below the initial viewport.
 
-The calculator layout and the three review exports can ship together. The
-renderer in [#374](https://github.com/madhakish/cadence/pull/374) can use the
-same summary after integration. The owner’s icon selection, the photographic
-stage and the remaining screen work are tracked under
-[#177](https://github.com/madhakish/cadence/issues/177). The session, Watch
-and launch features have landed on `main` through #376, #373 and #379.
+The [native splash frame](proof/integration-4f98f98/launch.png) was captured from the combined app at `4f98f9841d770397f0855453138f37838a5a3205` using the iPhone 18 Pro simulator (iOS 27.2), the synthetic visual-proof fixture and the frozen animated launch test. A local Xcode 27.2 build-for-testing succeeded. The local UI run was interrupted under disk pressure after this frame. The original PNG SHA-256 is `6461c13870e354f977d4942a683da827d866bd7481d738c6de93e4420ec1e2c4`. The landing PR tracks the complete native review and the merge order.
