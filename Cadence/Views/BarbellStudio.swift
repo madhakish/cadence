@@ -600,10 +600,13 @@ enum StudioFaces {
         var colour = [UInt8](repeating: 255, count: n * n * 4)
         var height = [Double](repeating: 0, count: n * n)
         let grainAmount = s.finish == .rubber ? 0.06 : s.finish == .castIron || s.finish == .hammertone ? 0.25 : 0.02
-        // Surface tooth from the September photographs: rubber speckle for
-        // bumpers, sand-cast steel for everything else. Each denomination
-        // turns the photo by its own angle so neighbours never match.
-        let photo = s.finish == .rubber ? StudioTextures.rubberDetail : StudioTextures.steelDetail
+        // Measured surface detail is neutral. The theme owns the paint and
+        // each denomination turns the sample by its own angle.
+        let photo: StudioTextures.PhotoDetail? = switch s.finish {
+        case .rubber: StudioTextures.rubberDetail
+        case .castIron: StudioTextures.castIronDetail
+        default: StudioTextures.steelDetail
+        }
         let photoAlbedo = s.finish == .rubber ? 0.4 : 0.35
         let photoRelief = s.finish == .rubber ? 0.12 : 0.22
         let turn = Double((s.denomination + s.unit).unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) } % 360) * .pi / 180
@@ -713,7 +716,7 @@ enum StudioFaces {
 // MARK: - Platform
 
 /// An 8 × 8 ft Olympic platform: two plywood base layers (plies at the edge),
-/// a 4 ft oak centre with the Vitruvian artwork laser-burned in, and ¾" stall
+/// a 4 ft oak centre with the Astra Heritage engraving burned in, and ¾" stall
 /// mats where the plates land; a dark rubber gym floor around it.
 enum StudioPlatform {
     static let size = 2438.4, centre = 1219.2, layer = 19.05
@@ -1005,8 +1008,7 @@ enum StudioMaterials {
     }()
     static let matTop: SCNMaterial = {
         let m = pbr(.white, metalness: 0, roughness: 0.84)
-        m.diffuse.contents = StudioTextures.decoded("PlatformMat")
-        filtered(m.diffuse)
+        tiled(m.diffuse, StudioTextures.decoded("PlatformMat"), 2, 8)
         tiled(m.normal, StudioTextures.decoded("PlatformMatNormal"), 2, 8)
         m.normal.intensity = 0.5
         m.isDoubleSided = false
@@ -1107,7 +1109,7 @@ enum StudioTextures {
         return ctx.makeImage().map { UIImage(cgImage: $0) } ?? UIImage(cgImage: source)
     }
 
-    /// The oak centre with the Vitruvian artwork laser-burned in: dark
+    /// The oak centre with the Astra Heritage engraving burned in: dark
     /// engraving lines char the wood; the paper ground leaves it untouched.
     /// The artwork asset is read as-is and never modified.
     static let brandedOak: UIImage = {
@@ -1119,7 +1121,7 @@ enum StudioTextures {
         guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: space, bitmapInfo: info) else { return UIImage(cgImage: oak) }
         ctx.draw(oak, in: CGRect(x: 0, y: 0, width: w, height: h))
-        if let art = UIImage(named: "VitruvianFront")?.cgImage {
+        if let art = UIImage(named: "AstraHeritageBurn")?.cgImage {
             // 950 mm across on a 1219.2 mm-wide oak sheet, centred.
             let side = Int(Double(w) * 950 / StudioPlatform.centre)
             var logo = [UInt8](repeating: 0, count: side * side * 4)
@@ -1134,9 +1136,9 @@ enum StudioTextures {
                 for y in 0..<side {
                     for x in 0..<side {
                         let li = (y * side + x) * 4
-                        let lum = 0.2126 * lin(logo[li]) + 0.7152 * lin(logo[li + 1]) + 0.0722 * lin(logo[li + 2])
-                        let t = min(1, max(0, (1 - lum - 0.24) / (0.62 - 0.24)))
-                        let ink = t * t * (3 - 2 * t) * 0.88
+                        // The alpha channel preserves the master’s engraving
+                        // curve. Transparent paper leaves the wood visible.
+                        let ink = Double(logo[li + 3]) / 255 * 0.88
                         guard ink > 0.001 else { continue }
                         let oi = ((oy + y) * w + (ox + x)) * 4
                         pixels[oi] = srgb(lin(pixels[oi]) * (1 - ink) + burn.0 * ink)
@@ -1192,7 +1194,8 @@ enum StudioTextures {
         }
     }
 
-    static let rubberDetail = photoDetail("PlateBumper")
+    static let rubberDetail = photoDetail("AstraBumperDetail") ?? photoDetail("PlateBumper")
+    static let castIronDetail = photoDetail("AstraCastIronDetail") ?? steelDetail
     static let steelDetail = photoDetail("PlateSteel")
 
     static func photoDetail(_ name: String) -> PhotoDetail? {
@@ -1423,7 +1426,7 @@ final class StudioRenderer: @unchecked Sendable {
     /// Bump when the renderer's look changes, so stale disk renders retire.
     /// The directory also carries the build number, so an app update never
     /// shows a render from an older renderer, theme table or texture.
-    static let version = 3
+    static let version = 4
 
     private let queue = DispatchQueue(label: "com.madhakish.cadence.studio", qos: .userInitiated)
     private let cache = NSCache<NSString, UIImage>()
