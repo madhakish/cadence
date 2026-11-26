@@ -49,7 +49,7 @@ assert.deepEqual(T.plateThemeInventory(inventory, "custom"), inventory);
 const p = { value: 20, unit: "kg" };
 const colour = T.plateThemeColour(p, "lbBlackIron", "steel");
 const assertIronBadge = badge => {
-  assert.match(badge.querySelector("image").getAttribute("href"), /cast-iron.png$/);
+  assert.match(badge.querySelector("image").getAttribute("href"), /PhotoFaceIron\.png$/);
   const channels = [...badge.querySelector("feComponentTransfer").children].map(channel =>
     Math.round(Number(channel.getAttribute("tableValues").split(" ")[1]) * 255).toString(16).padStart(2, "0"));
   assert.equal("#" + channels.join(""), colour.fill);
