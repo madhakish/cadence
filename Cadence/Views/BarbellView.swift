@@ -207,7 +207,7 @@ struct BarbellInspectionView: View {
                 let width = exploded ? max(proxy.size.width, CGFloat(minimum) * captionScale) : proxy.size.width
                 ScrollView(.horizontal, showsIndicators: exploded && width > proxy.size.width) {
                     BarbellSceneView(loadout: solution.loadout, plateStyle: plateStyle, plateTheme: plateTheme,
-                                     exploded: exploded, reduceMotion: reduceMotion)
+                                     exploded: exploded)
                     .frame(width: width, height: height)
                     .contentShape(Rectangle())
                     .onTapGesture { toggle() }

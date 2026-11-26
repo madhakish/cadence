@@ -78,6 +78,42 @@ enum RenderLab {
 }
 
 extension RenderLab {
+    /// A flat face can still produce a valid PNG. Probe the exposed middle
+    /// of the actual photographed tread on both the near and far plate.
+    static func checkReferencePlate() -> [String] {
+        let plate = Plate(value: 45, unit: .lb)
+        let loadout = Loadout(bar: .bar45lb, perSide: [PlateCount(plate: plate, count: 1)], collarLb: 0)
+        let scene = PhotographicBar(loadout: loadout, style: .bumper, theme: .lbColourBumpers,
+                                    size: CGSize(width: 1672, height: 941), shot: .hero, progress: 0)
+        var failures: [String] = []
+        for item in scene.projectedPlates {
+            let expected = item.disc.side < 0 ? CGPoint(x: 357, y: 446) : CGPoint(x: 1351, y: 332)
+            if hypot(item.centre.x - expected.x, item.centre.y - expected.y) > 1 {
+                failures.append("135 lb reference hub out of registration at \(item.centre)")
+            }
+            guard let cg = PhotoEquipment.disc(plate: plate, theme: .lbColourBumpers, style: .bumper, aspect: item.aspect)?.cgImage
+            else { failures.append("135 lb product missing"); continue }
+            let depth = PhotoEquipment.axialScale * item.disc.thickness / (2 * item.disc.radius)
+            let bounds = PhotoEquipment.bounds(depth: depth, aspect: item.aspect)
+            let x = Int(((item.aspect / 2 + depth / 2 - bounds.minX) * 512).rounded())
+            let y = Int(((-PhotoEquipment.axisRise * depth / 2 - bounds.minY) * 512).rounded())
+            guard let sample = cg.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)) else {
+                failures.append("135 lb tread lies outside its product art"); continue
+            }
+            var rgba = [UInt8](repeating: 0, count: 4)
+            rgba.withUnsafeMutableBytes { bytes in
+                let bitmap = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+                let context = CGContext(data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: bitmap)
+                context?.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            if rgba[3] < 245 || rgba[2] <= rgba[0] {
+                failures.append("135 lb tread missing its photographed blue rubber at \(x),\(y)")
+            }
+        }
+        return failures
+    }
+
     /// Inspect the same projected rectangles that the compositor draws.
     static func checkFraming() async -> [String] {
         var failures: [String] = []
@@ -151,6 +187,7 @@ struct RenderLabView: View {
         for name in PhotoEquipment.stageNames + PhotoEquipment.componentNames {
             if UIImage(named: name)?.cgImage == nil { failed.append("missing " + name) }
         }
+        failed.append(contentsOf: RenderLab.checkReferencePlate())
         if let diag = UIImage(named: PhotoEquipment.stage(.custom)) {
             timings += "environment \(Int(diag.size.width))x\(Int(diag.size.height))\n"
             try? diag.pngData()?.write(to: dir.appendingPathComponent("00-diag-environment.png"))

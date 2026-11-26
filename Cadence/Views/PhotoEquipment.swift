@@ -8,12 +8,19 @@ enum PhotoEquipment {
     static let componentNames = ["PhotoFaceRubber", "PhotoFaceBlackRubber", "PhotoFaceCoated", "PhotoFaceGloss",
                                  "PhotoFaceIron", "PhotoFaceHammertone", "PhotoFaceMachined", "PhotoHub", "PhotoBrand",
                                  "PhotoEdgeRubber", "PhotoEdgeCoated", "PhotoEdgeIron",
-                                 "PhotoShaft", "PhotoSleeve", "PhotoShoulder", "PhotoCollar", "PhotoEndcap", "PhotoMark45lb", "PhotoMark20kg", "PhotoMark15kg"]
+                                 "PhotoShaft", "PhotoSleeve", "PhotoShoulder", "PhotoCollar", "PhotoEndcap", "PhotoHubWarm", "PhotoLock", "PhotoMark45lb", "PhotoMark20kg", "PhotoMark15kg"]
     // In the reference, a 450 mm circular face is seen as an ellipse.
     static let faceAspect: CGFloat = 0.55
     static let axisRise: CGFloat = 0.115
     static let axialScale: CGFloat = 0.85
-    static let shear: CGFloat = -0.047
+    static let shear: CGFloat = 0.05
+
+    // The release lever extends outside the physical collar bore. Register the
+    // rear aperture against the outboard plate. The front aperture is at 0.119,
+    // 0.525 in the uncropped photographic sprite.
+    static let lockWidthMM: CGFloat = 450 * 0.2574
+    static let lockHeightMM: CGFloat = 450 * 0.2475
+    static let lockRearAnchor = CGPoint(x: 0.781, y: 0.416)
 
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
@@ -66,9 +73,27 @@ enum PhotoEquipment {
             UIColor(rgb: rgb).setFill()
             UIRectFillUsingBlendMode(rect, .sourceIn)
             photo.draw(in: rect, blendMode: .hardLight, alpha: 1)
-            // Discs sit under the same warm overhead light as the oak stage.
-            UIColor(red: 0.20, green: 0.15, blue: 0.11, alpha: 0.22).setFill()
+            // The lighting and reflected oak are in the photographed exposure.
+            // A translucent brown overprint would lift the shadows on blue rubber.
+            if !name.hasPrefix("PhotoEdge") {
+                UIColor.black.withAlphaComponent(0.075).setFill()
+                output.cgContext.setBlendMode(.sourceAtop)
+                output.cgContext.fill(rect)
+            }
+        }
+        return remember(image, key: key)
+    }
+
+    static func hardware(_ name: String, darkened: Bool = false) -> UIImage? {
+        guard let source = UIImage(named: name) else { return nil }
+        guard darkened else { return source }
+        let key = "black-oxide-" + name
+        if let cached = cache.object(forKey: key as NSString) { return cached }
+        let image = UIGraphicsImageRenderer(size: source.size, format: format()).image { output in
+            let rect = CGRect(origin: .zero, size: source.size)
+            source.draw(in: rect)
             output.cgContext.setBlendMode(.sourceAtop)
+            UIColor.black.withAlphaComponent(0.53).setFill()
             output.cgContext.fill(rect)
         }
         return remember(image, key: key)
@@ -102,7 +127,10 @@ enum PhotoEquipment {
         let colour = PlateTheme.colour(plate, theme: theme, style: style)
         let physical = PlateTheme.geometry(plate, theme: theme, style: style)
         let surfaces = surfaces(material.finish, theme: theme)
-        guard let photo = painted(surfaces.face, rgb: colour.fill), let hub = UIImage(named: "PhotoHub") else { return nil }
+        let family = PlateTheme.family(plate, theme: theme, style: style)
+        let bumper = family == "bumper"
+        guard let photo = painted(surfaces.face, rgb: colour.fill),
+              let hub = UIImage(named: bumper ? "PhotoHubWarm" : "PhotoHub") else { return nil }
         let diameter: CGFloat = 512
         let centre = diameter / 2
         let rect = CGRect(x: 0, y: 0, width: diameter, height: diameter)
@@ -114,7 +142,8 @@ enum PhotoEquipment {
                 context.setLineWidth(diameter * 0.022)
                 context.strokeEllipse(in: rect.insetBy(dx: diameter * 0.063, dy: diameter * 0.063))
             }
-            let hubMM = min(150, max(53, physical.diameter * 0.55))
+            let profile = BarbellInspector.plateProfile(family: family, diameter: physical.diameter, thickness: physical.thickness)
+            let hubMM = bumper ? max(65, min(180, physical.diameter * 0.40)) : 2 * profile[1].radius
             let hubSize = diameter * hubMM / physical.diameter
             let insert = CGRect(x: centre - hubSize / 2, y: centre - hubSize / 2, width: hubSize, height: hubSize)
             hub.draw(in: insert)

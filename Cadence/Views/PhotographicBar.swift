@@ -184,7 +184,7 @@ struct PhotographicBar {
     }
 
     private func segment(_ context: CGContext, from start: CGFloat, to end: CGFloat, radius: CGFloat,
-                         image: UIImage, fullStart: CGFloat, fullEnd: CGFloat, dark: Bool = false) {
+                         image: UIImage, fullStart: CGFloat, fullEnd: CGFloat, reversed: Bool = false) {
         // A full segment photograph is mapped only once along its length. When
         // occlusion splits it, clipped intervals retain the exact same knurling.
         let a = pose(fullStart, expandedX: fullStart), b = pose(fullEnd, expandedX: fullEnd)
@@ -194,18 +194,29 @@ struct PhotographicBar {
         guard length > 0.01 else { return }
         let angle = atan2(dy, dx)
         let startFraction = (low.x - a.centre.x) / dx, endFraction = (high.x - a.centre.x) / dx
-        let diameter = radius * (a.scale + b.scale)
-        let local = CGRect(x: 0, y: -diameter / 2, width: length, height: diameter)
+        let maximum = 2 * radius * max(a.scale, b.scale)
         context.saveGState()
         context.translateBy(x: a.centre.x, y: a.centre.y)
         context.rotate(by: angle)
-        context.clip(to: CGRect(x: startFraction * length - 0.3, y: -diameter,
-                                width: (endFraction - startFraction) * length + 0.6, height: 2 * diameter))
-        image.draw(in: local)
-        if dark {
-            context.setBlendMode(.multiply)
-            context.setFillColor(UIColor(white: 0.39, alpha: 1).cgColor)
-            context.fill(local)
+        context.clip(to: CGRect(x: startFraction * length - 0.3, y: -maximum,
+                                width: (endFraction - startFraction) * length + 0.6, height: 2 * maximum))
+        // The far sleeve has the same product with its outer end facing right.
+        // Slice the continuous photograph to taper with perspective, retaining
+        // the polished griplines at their measured positions along the shaft.
+        let slices = max(1, min(12, Int(ceil(length / 24))))
+        for index in 0..<slices {
+            let t = (CGFloat(index) + 0.5) / CGFloat(slices)
+            guard t + 0.5 / CGFloat(slices) >= startFraction, t - 0.5 / CGFloat(slices) <= endFraction else { continue }
+            let diameter = 2 * radius * (a.scale + (b.scale - a.scale) * t)
+            context.saveGState()
+            context.clip(to: CGRect(x: CGFloat(index) * length / CGFloat(slices) - 0.25, y: -maximum,
+                                    width: length / CGFloat(slices) + 0.5, height: 2 * maximum))
+            if reversed {
+                context.translateBy(x: length, y: 0)
+                context.scaleBy(x: -1, y: 1)
+            }
+            image.draw(in: CGRect(x: 0, y: -diameter / 2, width: length, height: diameter))
+            context.restoreGState()
         }
         context.restoreGState()
     }
@@ -219,9 +230,10 @@ struct PhotographicBar {
                         (bar.shoulderEnd, tip, bar.sleeveRadius, "PhotoSleeve")]
         for (a, b, radius, name) in segments {
             let start = max(front, a), end = min(back, b)
-            guard end > start, let image = UIImage(named: name) else { continue }
-            segment(context, from: start, to: end, radius: radius, image: image,
-                    fullStart: a, fullEnd: b, dark: name == "PhotoShaft" && PlateTheme.description(theme).barFinish == .blackOxide)
+            guard end > start else { continue }
+            let black = name == "PhotoShaft" && PlateTheme.description(theme).barFinish == .blackOxide
+            guard let image = PhotoEquipment.hardware(name, darkened: black) else { continue }
+            segment(context, from: start, to: end, radius: radius, image: image, fullStart: a, fullEnd: b, reversed: a > 0)
         }
         // Only the near end looks into the camera. This is the outer Olympic
         // endcap, never a hub/plug repeated on every plate.
@@ -234,15 +246,32 @@ struct PhotographicBar {
     }
 
     private func drawCollar(at x: CGFloat, expandedX: CGFloat, context: CGContext) {
-        guard let collar = UIImage(named: "PhotoCollar") else { return }
         let front = pose(x, expandedX: expandedX)
         let back = pose(x + layout.collar.length, expandedX: expandedX + layout.collar.length)
+        let near = x < 0
+        let rearX = x + (near ? layout.collar.length : 0) + (expandedX - x) * progress
+        let tip = layout.bar.shoulderEnd + layout.bar.sleeveLength
+        if abs(rearX) < tip, let lock = UIImage(named: "PhotoLock") {
+            let anchor = near ? back : front
+            let width = PhotoEquipment.lockWidthMM * anchor.scale
+            let height = PhotoEquipment.lockHeightMM * anchor.scale
+            context.saveGState()
+            context.translateBy(x: anchor.centre.x, y: anchor.centre.y)
+            if !near {
+                context.concatenate(CGAffineTransform(a: -1, b: 2 * PhotoEquipment.axisRise, c: 0, d: 1, tx: 0, ty: 0))
+            }
+            lock.draw(in: CGRect(x: -width * PhotoEquipment.lockRearAnchor.x, y: -height * PhotoEquipment.lockRearAnchor.y, width: width, height: height))
+            context.restoreGState()
+            return
+        }
+        // Once the clamp is clear of the shaft, show the entire open aperture.
+        guard let collar = UIImage(named: "PhotoCollar") else { return }
         let height = layout.collar.radius * 2 * front.scale
         let width = max(height * 0.30, back.centre.x - front.centre.x) + height * 0.40
         context.saveGState()
         context.translateBy(x: front.centre.x, y: front.centre.y)
         context.rotate(by: -atan(PhotoEquipment.axisRise))
-        collar.draw(in: CGRect(x: -height * 0.20, y: -height / 2, width: width, height: height))
+        collar.draw(in: CGRect(x: -width * 0.34, y: -height * 0.54, width: width, height: height))
         context.restoreGState()
     }
 
@@ -324,13 +353,18 @@ struct PhotographicBar {
                 if canvas.intersects(item.bounds), let product = PhotoEquipment.disc(plate: item.disc.plate, theme: theme, style: style, aspect: item.aspect) {
                     product.draw(in: item.bounds)
                 }
-            } else {
-                let loose = progress > 0 ? layer.assembled + (layer.front - layer.assembled) / progress : layer.assembled
-                drawCollar(at: layer.assembled, expandedX: loose, context: context)
+            } else if layer.assembled > 0 {
+                drawCollar(at: layout.collar.right, expandedX: expanded.collar.right, context: context)
             }
             cursor = layer.front
         }
         drawBar(context, from: -tip, to: cursor)
+        if layout.collar.length > 0 {
+            // This is the nearest object. Its photographic aperture reveals the
+            // continuous sleeve underneath while its clasp eclipses the metal.
+            drawCollar(at: layout.collar.left - layout.collar.length,
+                       expandedX: expanded.collar.left - expanded.collar.length, context: context)
+        }
         if progress > 0.85 {
             for item in plates where item.disc.side < 0 { drawCaption(item, context: context) }
         }

@@ -9,7 +9,7 @@ struct BarbellSceneView: View, Animatable {
     var progress: CGFloat
     @ScaledMetric(relativeTo: .subheadline) private var captionSize: CGFloat = 14
 
-    init(loadout: Loadout, plateStyle: PlateVisualStyle, plateTheme: PlateThemeID, exploded: Bool, reduceMotion: Bool) {
+    init(loadout: Loadout, plateStyle: PlateVisualStyle, plateTheme: PlateThemeID, exploded: Bool) {
         self.loadout = loadout
         self.plateStyle = plateStyle
         self.plateTheme = plateTheme
