@@ -61,6 +61,8 @@ if [[ -n "$tracked_generated" ]]; then
   exit 1
 fi
 
+shasum -a 256 -c docs/design-pass/astra-2026-11-01/studio-materials.sha256
+
 bash .github/scripts/test-cancel-stale-pr-runs.sh
 bash .github/scripts/test-classify-ci-paths.sh
 bash .github/scripts/test-changed-paths.sh
