@@ -1,6 +1,6 @@
 # Astra equipment in the PWA
 
-Workout previews, session rows, exercise details and both calculator modes share the SVG projection of the solved rack. The physical disc determines its front radius, depth, side and stack index. The image supplies its surface. A captured set’s load basis controls whether an exercise gets a bar, a dumbbell or a text-only prescription.
+Workout previews, session rows, exercise details and both calculator modes share the SVG projection of the solved rack. The physical disc determines its front radius, depth, side and stack index. The image supplies its surface. The plate edges sample load-independent grain from the 03 rubber, 04 coating, 05 black rubber and 06 iron masters. A captured set’s load basis controls whether an exercise gets a bar, a dumbbell or a text-only prescription.
 
 The inspector switches to the WebGL near sleeve for its assembled and exploded cameras. The stage projects a finite 8 ft platform, catches the bar’s shadow and samples the Astra room for the backdrop and metal reflections. Losing the GPU switches the current pose to the SVG. The service worker includes every image on first install.
 

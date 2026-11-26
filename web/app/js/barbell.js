@@ -2,7 +2,7 @@
 // this module renders their exact solution with core colour/size metadata.
 import * as C from "./core.js";
 import { barbellScene, discAccessibilityLabel, plateFamilyLabel } from "./barbell-scene.js";
-import { artURL, faceFinish, platformPhoto, printedBumper } from "./plate-art.js";
+import { artURL, faceFinish, platformPhoto, printedBumper, rimMaterial } from "./plate-art.js";
 import { plateThemeColour, plateThemeDescription, plateThemeFamily, plateThemeRatios } from "./plate-theme.js";
 import { barbellGL } from "./barbell-gl.js";
 import { barbellLayout, inspectorWidth, barDimensions } from "./barbell-inspector.js";
@@ -145,6 +145,22 @@ function realisticBarbellSVG(solution, style, exploded = false, theme = "custom"
     if (!filters.has(fill)) filters.set(fill, faceFilter(defs, `${id}-fill-${fill.slice(1)}`, fill));
     return filters.get(fill);
   };
+  const rims = new Map();
+  const rimFor = (finish, edge) => {
+    const surface = rimMaterial[finish];
+    if (!surface) return edge;
+    const key = `${finish}-${edge.slice(1)}`;
+    if (!rims.has(key)) {
+      const patternID = `${id}-rim-${key}`;
+      const size = 28;
+      const frame = { x: 0, y: 0, width: size, height: size };
+      const pattern = el("pattern", { id: patternID, patternUnits: "userSpaceOnUse", width: size, height: size });
+      pattern.append(el("rect", { ...frame, fill: edge }), photo(surface[0], frame, { filter: filterFor(edge), opacity: surface[1] }));
+      defs.append(pattern);
+      rims.set(key, `url(#${patternID})`);
+    }
+    return rims.get(key);
+  };
   const root = el("g", { transform: `translate(${scene.width / 2} ${scene.height / 2})` });
   svg.append(photo("room-band.webp", { x: 0, y: 0, width: scene.width, height: scene.height }, {
     class: "barbell-room", preserveAspectRatio: "xMidYMid slice", "aria-hidden": true,
@@ -191,7 +207,7 @@ function realisticBarbellSVG(solution, style, exploded = false, theme = "custom"
     const frame = frameAt(78 / 73);
     const hubRatio = Math.max(25 * .36 / d.radius, plateThemeRatios(d.plate, theme, style).hub);
     const backX = x + d.depth, backY = y + d.depth * scene.axisY / scene.axisX;
-    const rim = el("path", { class: "barbell-plate-rim", fill: colour.edge,
+    const rim = el("path", { class: "barbell-plate-rim", fill: rimFor(finish, colour.edge),
       d: `M ${x} ${y - d.radius} L ${backX} ${backY - d.radius} A ${d.faceRadius} ${d.radius} 0 1 1 ${backX} ${backY + d.radius} L ${x} ${y + d.radius} A ${d.faceRadius} ${d.radius} 0 1 0 ${x} ${y - d.radius} Z` });
     art.append(rim, photo(finish + ".png", frame, { class: "barbell-plate-face", filter: filterFor(colour.fill), "data-center-x": d.x, "data-finish": finish }),
       photo("hub.png", frameAt(hubRatio * 78 / 25), {
