@@ -25,67 +25,25 @@ func authoritativePlateSolution(
     )
 }
 
-/// Plate colours come from the one table in CadenceCore (`PlatePalette`);
-/// this only turns its hex into SwiftUI colours.
-private extension PlateColour {
-    var fillColor: Color { Color(hex: fill) }
-    var edgeColor: Color { Color(hex: edge) }
-    var inkColor: Color { Color(hex: ink) }
-}
-
-/// A readable, face-on denomination key for a plate in the calculator. The
-/// bar graphic stays an honest edge-on load-order diagram; this companion
-/// view owns the large number that an edge-on plate cannot physically carry.
-/// Decorative: every use pairs it with a readable denomination label.
+/// The accompanying row owns the spoken and Dynamic Type denomination.
 struct PlateFaceBadge: View {
-    var plateTheme: PlateThemeID = .custom
+    let plateTheme: PlateThemeID
     let plate: Plate
     let style: PlateVisualStyle
-    var exactDenomination = false
 
-    private var colour: PlateColour { PlateTheme.colour(plate, theme: plateTheme, style: style) }
-
-    // The master shows these five exact pound denominations in colored rubber.
-    // Other equipment keeps its own material, color convention and unit.
-    private var astraBumper: String? {
-        guard plate.unit == .lb,
-              plateTheme == .lbColourBumpers || (plateTheme == .custom && style == .bumper),
-              [55.0, 45, 35, 25, 10].contains(plate.value) else { return nil }
-        return "AstraBumper\(plate.denomination)lb"
+    // Older callers request exact digits explicitly. The photographed key
+    // now preserves them in every presentation.
+    init(plateTheme: PlateThemeID = .custom, plate: Plate, style: PlateVisualStyle,
+         exactDenomination _: Bool = true) {
+        self.plateTheme = plateTheme
+        self.plate = plate
+        self.style = style
     }
 
     var body: some View {
-        Group {
-            if let astraBumper {
-                Image(decorative: astraBumper)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                denominationKey
-            }
-        }
-        .frame(width: 52, height: 52)
-        .accessibilityHidden(true)
-    }
-
-    private var denominationKey: some View {
-        let foreground = colour.inkColor
-        return ZStack {
-            Circle()
-                .fill(colour.fillColor)
-            Circle()
-                .stroke(colour.edgeColor, lineWidth: 2)
-            Circle()
-                .stroke(foreground.opacity(0.34), lineWidth: 1)
-                .padding(7)
-            VStack(spacing: -2) {
-                Text(plate.denomination)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                Text(plate.unit.rawValue)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(foreground)
-        }
+        PlateFaceArtwork(plate: plate, theme: plateTheme, style: style)
+            .frame(width: 52, height: 52)
+            .accessibilityHidden(true)
     }
 }
 

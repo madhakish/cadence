@@ -188,6 +188,12 @@ enum VisualProofSeed {
             if let settings = try? context.fetch(FetchDescriptor<AppSettings>()).first {
                 settings.unitDisplay = .kgPrimary
             }
+        } else if scenario == "astra-custom-faces" {
+            gym.plateTheme = .lbBlackIron
+            gym.plateToggles = [
+                Plate(value: 1.125, unit: .kg), Plate(value: 1.125, unit: .lb),
+                Plate(value: 20, unit: .kg), Plate(value: 45, unit: .lb)
+            ].map { PlateToggle(plate: $0) }
         } else if scenario == "unreachable" {
             gym.plateToggles = Plate.allStandard.map { PlateToggle(plate: $0, enabled: $0.unit == .lb && $0.value == 45) }
             gym.loadingPolicy = .exact

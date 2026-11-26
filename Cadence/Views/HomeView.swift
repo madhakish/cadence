@@ -1206,35 +1206,6 @@ private struct HeroBarImage: View {
     }
 }
 
-/// Edge-on plates for one side, inside to outside, in the plate theme's own
-/// colours and proportions: a loading chart, not another number.
-private struct PlateStackMini: View {
-    let loaded: LoadedBar
-    @ScaledMetric(relativeTo: .body) private var unit: CGFloat = 1
-
-    var body: some View {
-        let plates = loaded.solution.loadout.perSide.flatMap { Array(repeating: $0.plate, count: max(0, $0.count)) }
-        HStack(spacing: 1.5 * unit) {
-            ForEach(Array(plates.enumerated()), id: \.offset) { _, plate in
-                let geometry = PlateTheme.geometry(plate, theme: loaded.theme, style: loaded.style)
-                let colour = PlateTheme.colour(plate, theme: loaded.theme, style: loaded.style)
-                RoundedRectangle(cornerRadius: 1.5 * unit)
-                    .fill(Color(hex: colour.fill))
-                    .overlay { RoundedRectangle(cornerRadius: 1.5 * unit).stroke(Color(hex: colour.edge), lineWidth: 1) }
-                    .frame(width: max(4, geometry.thickness / 5.5) * unit,
-                           height: max(10, geometry.diameter / 450 * 34) * unit)
-            }
-        }
-        // The sleeve the stack sits on runs past the outermost plate.
-        .padding(.leading, 3 * unit).padding(.trailing, 8 * unit)
-        .background {
-            Capsule().fill(Theme.forgedSteel.opacity(0.55)).frame(height: 3 * unit)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Each side: \(loaded.solution.loadout.perSideLabel)")
-    }
-}
-
 /// One lift in the hero: name left, load right in condensed heavy figures.
 /// At accessibility sizes the two stack so neither gets truncated to "Ba…".
 private struct HeroLiftLine<Detail: View>: View {
@@ -1275,10 +1246,14 @@ private struct HeroLiftLine<Detail: View>: View {
             let stack = plates.flatMap { $0.solution.loadout.perSide.isEmpty ? nil : $0 }
             if stacked {
                 figures
-                if let stack { PlateStackMini(loaded: stack) }
+                if let stack {
+                    PlateStackMini(loadout: stack.solution.loadout, theme: stack.theme, style: stack.style)
+                }
             } else {
                 HStack(alignment: .center, spacing: 10) {
-                    if let stack { PlateStackMini(loaded: stack) }
+                    if let stack {
+                        PlateStackMini(loadout: stack.solution.loadout, theme: stack.theme, style: stack.style)
+                    }
                     figures
                 }
             }
