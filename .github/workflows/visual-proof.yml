@@ -165,6 +165,8 @@ jobs:
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test18DP1CalculatorStates
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test20EquipmentContextAndEmptyStates
           -only-testing:CadenceVisualProofUITests/VisualProofUITests/test21EditProgramRowOpensEditor
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test24TodayTabReturnsToLiveWorkout
+          -only-testing:CadenceVisualProofUITests/VisualProofUITests/test25TabBarAtAccessibilityTextSize
       - name: Export edge screenshot attachments
         if: always()
         run: |
