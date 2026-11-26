@@ -1,0 +1,85 @@
+{
+  "sourceCommit": "a6b1f0989704193d808979a6f97210385b97284c",
+  "lastUICommit": "6a23e0fc5885b028d71c91e0bb84ebea4484fa4c",
+  "captureDate": "2026-11-01",
+  "device": {
+    "architecture": "arm64",
+    "deviceId": "48F8CD33-E1C9-4F92-8242-F309CFF5AB01",
+    "deviceName": "iPhone 18 Pro",
+    "modelName": "iPhone 18 Pro",
+    "osBuildNumber": "24B8117",
+    "osVersion": "27.2",
+    "platform": "iOS Simulator"
+  },
+  "windowPoints": [
+    402,
+    874
+  ],
+  "scheme": "CadenceVisualProof",
+  "fixture": "--visual-proof (synthetic training and equipment data)",
+  "operation": "Unmodified xcresult attachment bytes; filenames renamed only",
+  "inspection": "All three original PNGs visually inspected. Standard achieved/deviation, entire AX input and complete AX achieved group are readable. This does not establish full native visual acceptance.",
+  "testSummarySha256": "ad8949f9f8187dec4e3680bad2737960118b47558755d6a06d92d38d59561145",
+  "attachments": [
+    {
+      "file": "accessibility-achieved-geometry.txt",
+      "sourceAttachment": "DDF439B2-2B99-4B75-9584-255E9E33EE3D.txt",
+      "suggestedName": "after-14-calculator-achieved-accessibility-iphone-geometry_0_BA791BC4-1895-45B0-AA89-EF3AB35FD6AD.txt",
+      "sha256": "42346ace38a07542b545d86c133ccf05ebcf87e93de6d6bfb8627354ed98a10a",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568102.718
+    },
+    {
+      "file": "accessibility-achieved.png",
+      "sourceAttachment": "25543D1A-7573-4521-9BB5-1E1768D0D826.png",
+      "suggestedName": "after-14-calculator-achieved-accessibility-iphone_0_B5B139E2-C4C5-4688-859B-F6A707601003.png",
+      "sha256": "22b9c52622d30f8bb471d915aad1de334f8e1f7130cabc443fa209a2da0edb7d",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568102.714,
+      "size": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "accessibility-entry-geometry.txt",
+      "sourceAttachment": "66ECAB72-FB55-42F4-AFD9-9156749AFA61.txt",
+      "suggestedName": "after-14-calculator-target-accessibility-iphone-geometry_0_9419509B-A632-41F5-9190-650A275C1782.txt",
+      "sha256": "42346ace38a07542b545d86c133ccf05ebcf87e93de6d6bfb8627354ed98a10a",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568093.559
+    },
+    {
+      "file": "accessibility-entry.png",
+      "sourceAttachment": "C66FC985-A901-4E80-8C26-79090FAE5E47.png",
+      "suggestedName": "after-14-calculator-target-accessibility-iphone_0_F40694CD-E67D-45AB-98A1-600D48D31627.png",
+      "sha256": "cca940d44927058d174cf7f6a8d77d7401c730b9cbb635c93dd3d5134b696860",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568093.555,
+      "size": [
+        1206,
+        2622
+      ]
+    },
+    {
+      "file": "standard-geometry.txt",
+      "sourceAttachment": "F7AA4267-F311-4705-B306-6816E0E04F1A.txt",
+      "suggestedName": "after-14-calculator-target-standard-iphone-geometry_0_61AE435C-1E2B-4A7C-9361-24A9E3CCC98D.txt",
+      "sha256": "ab7cc9ba578297327eae348d2dad479db205b6efaf9559a15335744680e3e098",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568074.484
+    },
+    {
+      "file": "standard.png",
+      "sourceAttachment": "25A886B7-61AF-4B5A-AC50-01D066C62758.png",
+      "suggestedName": "after-14-calculator-target-standard-iphone_0_C25887C0-267B-4F55-BD7C-678565519FFB.png",
+      "sha256": "2212b879d563f96e4e305006d3111778b45aea18782dad704ca9a41484cc18bf",
+      "test": "VisualProofUITests/test14CalculatorTargetAtAccessibilityTextSize()",
+      "timestamp": 1793568074.479,
+      "size": [
+        1206,
+        2622
+      ]
+    }
+  ]
+}
