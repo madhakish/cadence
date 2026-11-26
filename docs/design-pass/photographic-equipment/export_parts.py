@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 
 HERE = Path(__file__).resolve().parent
@@ -166,6 +166,32 @@ def rubber_face(bumper, original):
     return bitmap(gray, result[..., 3] / 255)
 
 
+def family_face(master, surface, original, plane, regions, pigment_gate=False):
+    # Front faces 04–06 have different paint, chips and grazing highlights.
+    # Keep their unobstructed metal/rubber, and use the clean matching master
+    # behind permanent original markings, collars, the sleeve and the insert.
+    base = np.array(face(master, surface))
+    u, v, radius = grid(FACE_SIZE)
+    rgb = sample(original, *plane.source(u, v))
+    clear = feather(radius - .56, .13) * feather(.96 - radius, .12)
+    if pigment_gate:
+        chroma = rgb[..., 2] - np.maximum(rgb[..., 0], rgb[..., 1])
+        clear *= feather(chroma - 4, 12)
+    for left, right, top, bottom in regions:
+        outside = np.maximum.reduce((left - u, u - right, top - v, v - bottom))
+        clear *= feather(outside, .12)
+    measured = neutral_light(rgb, surface.pigment)
+    def broad_light(gray):
+        patch = Image.fromarray(gray.round().clip(0, 255).astype(np.uint8))
+        return np.array(patch.filter(ImageFilter.GaussianBlur(10)), dtype=float)
+    # Exposure-match the two photos locally. The original pits, scuffs and
+    # grazing highlights pass through at full resolution while its occluded
+    # broad lighting falls away softly into the clean product master.
+    matched = measured + .70 * (broad_light(base[..., 0]) - broad_light(measured))
+    gray = base[..., 0] * (1 - clear) + matched * clear
+    return bitmap(gray, base[..., 3] / 255)
+
+
 def rubber_edge(original):
     # Unwrap the near bumper from the actual image. At each elevation its
     # visible blue tread ends on black gym flooring or warm wood. The front
@@ -208,6 +234,53 @@ def hub(machined):
     mapped = .451 + (radius - 1 / 3) * (1 - .451) / (1 - 1 / 3)
     rgb = radial_sample(machined[..., :3], HUB, u, v, radius, mapped)
     return bitmap(rgb, disc_alpha(radius, 1 / 3))
+
+
+def warm_hub(machined, original):
+    # The black clamp hides most of the left side of the approved insert.
+    # Recover the exposed brushed metal above, below and to its right. The
+    # clean product photo supplies the occluded metal and the entire bore lip.
+    base = np.array(hub(machined))
+    u, v, radius = grid(FACE_SIZE)
+    mapped = .53 + (radius - 1 / 3) * (.975 - .53) / (1 - 1 / 3)
+    scale = mapped / np.maximum(radius, 1e-6)
+    x, y = Plane(358.8, 447, 44.5, 79.5, 6.5).source(u * scale, v * scale)
+    rgb = sample(original, x, y)
+    clear = np.maximum.reduce((feather(404 - y, 9), feather(y - 500, 8), feather(x - 380, 7)))
+    clear *= feather(radius - .40, .12) * feather(1 - radius, .07)
+    return bitmap(base[..., :3] * (1 - clear[..., None]) + rgb * clear[..., None],
+                  base[..., 3] / 255)
+
+
+LOCK_OUTLINE = (
+    (278.5, 430), (279.75, 422.5), (283.25, 415.75), (288.5, 410.25), (293.5, 408.5),
+    (296.25, 409.25), (302.25, 408.5), (308.25, 409.5), (316.25, 407.75), (323.25, 407.5),
+    (327.75, 405.75), (336, 405.25), (341.5, 404.5), (344.75, 405.75), (348.25, 407.75),
+    (352, 408.25), (356.25, 410.75), (361.5, 412.5), (366.5, 414.75), (370.75, 418.75),
+    (374.75, 425.5), (377.75, 434.75), (379.5, 445.25), (380, 453.75), (378.75, 465.25),
+    (376.5, 475), (373.25, 481), (366.5, 485.5), (358.75, 487.25), (356.25, 493),
+    (353.25, 497), (349.25, 498.5), (332, 500), (323.5, 500), (317.25, 501.5),
+    (311, 502), (304.25, 502), (297.5, 499.5), (290, 498), (286, 493.75),
+    (282.25, 487.75), (279, 482.25), (286.5, 482), (292.5, 481.25), (296.25, 479.5),
+    (299.75, 477), (303, 473.25), (306.25, 468), (308, 461.5), (308, 454),
+    (307, 447.5), (305.5, 442.5), (303.75, 437.5), (301.25, 434), (298.25, 431.5),
+    (295, 430), (291, 429.25), (285.25, 429),
+)
+
+
+def closed_lock(original):
+    # Physical outline of the actual closed quick-release in 03. The inward
+    # return path follows the steel just where it enters the near bore. Drawing
+    # this above the live sleeve preserves the original over/under relationship.
+    box = (277, 403, 382, 504)
+    scale = 4
+    mask = Image.new("L", ((box[2] - box[0]) * scale, (box[3] - box[1]) * scale))
+    points = [((x - box[0]) * scale, (y - box[1]) * scale) for x, y in LOCK_OUTLINE]
+    ImageDraw.Draw(mask).polygon(points, fill=255)
+    size = (mask.width // 2, mask.height // 2)
+    rgba = Image.fromarray(original).crop(box).resize(size, Image.Resampling.BICUBIC).convert("RGBA")
+    rgba.putalpha(mask.resize(size, Image.Resampling.LANCZOS))
+    return rgba
 
 
 def ink_cutout(rgb, alpha, background):
@@ -282,10 +355,24 @@ def product_layers(masters):
 
     materials = {surface.master: source(surface.master)
                  for surface in (RUBBER, BLACK, COATED, IRON, HAMMERED, MACHINED)}
-    for name, surface in (("BlackRubber", BLACK), ("Coated", COATED),
-                          ("Gloss", COATED), ("Iron", IRON), ("Hammertone", HAMMERED),
-                          ("Machined", MACHINED)):
+    for name, surface in (("Coated", COATED), ("Hammertone", HAMMERED), ("Machined", MACHINED)):
         yield "PhotoFace" + name, face(materials[surface.master], surface)
+    # Keep source lettering and exact weights in separate transparent layers.
+    lettering = (-.58, .77, -.72, -.22)
+    bottom_weight = (-.50, .51, .41, .84)
+    left_sleeve = (-1.3, .46, -.28, .39)
+    for name, original_file, surface, plane, protected in (
+        ("Gloss", "04-platform-walnut-calibrated.png", COATED, Plane(264, 366, 66, 188, 15),
+         (lettering, left_sleeve, (.46, .90, .00, .47))),
+        ("BlackRubber", "05-platform-white-oak-black.png", BLACK, Plane(266, 484, 95, 220, 20),
+         (lettering, left_sleeve, bottom_weight)),
+        ("Iron", "06-platform-oak-iron.png", IRON, Plane(249, 398, 78, 205, 16),
+         ((-.60, .85, -.75, -.12), (-1.25, .44, -.18, .53), (-.54, .59, .40, .86))),
+    ):
+        with Image.open(ASTRA / original_file) as original:
+            yield "PhotoFace" + name, family_face(materials[surface.master], surface,
+                                                   np.array(original.convert("RGB")), plane, protected,
+                                                   pigment_gate=surface == COATED)
     for name, surface in (("Coated", COATED), ("Iron", IRON)):
         yield "PhotoEdge" + name, edge(materials[surface.master], surface)
     yield "PhotoHub", hub(materials["machined"])
@@ -300,6 +387,8 @@ def product_layers(masters):
     with Image.open(ASTRA / "03-platform-oak-blue.png") as original:
         u, v, radius = grid(FACE_SIZE)
         rgb_source = np.array(original.convert("RGB"))
+        yield "PhotoHubWarm", warm_hub(materials["machined"], rgb_source)
+        yield "PhotoLock", closed_lock(rgb_source)
         yield "PhotoFaceRubber", rubber_face(materials["bumper"], rgb_source)
         yield "PhotoEdgeRubber", rubber_edge(rgb_source)
         yield "PhotoShaft", steel_shaft(rgb_source)
